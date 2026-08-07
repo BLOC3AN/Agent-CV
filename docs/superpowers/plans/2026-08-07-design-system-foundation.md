@@ -2632,14 +2632,17 @@ describe('ReturningHome — bố cục mới', () => {
   })
 
   it('điểm khớp KHÔNG tô màu — TDD §8.2.3 cấm khẳng định ngưỡng tuyệt đối', () => {
-    render(
+    const { container } = render(
       <ReturningHome
         {...base}
         matches={[{ jdTitle: 'X', overall: 44, cvId: 'cv-1', jdId: 'jd-1', when: 'hôm nay' }]}
       />,
     )
-    const score = screen.getByText('44')
-    expect(score.className).not.toMatch(/text-(danger|warn|success)/)
+    // Kiểm bằng data-tone chứ không bằng className: Global Constraints cấm test
+    // bám vào chuỗi class, và một ngày nào đó đổi tên utility sẽ làm test đỏ
+    // mà chẳng có hành vi nào sai. `data-tone` là hợp đồng, class là chi tiết.
+    expect(screen.getByText('44')).toBeInTheDocument()
+    expect(container.querySelector('[data-tone]')).not.toBeInTheDocument()
   })
 })
 ```
