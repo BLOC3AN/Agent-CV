@@ -144,7 +144,10 @@ describe('TDD A3 — đề xuất của AI KHÔNG BAO GIỜ optimistic', () => {
     })
 
     await useEditor.getState().applyAccepted('p', [0, 2]) // bỏ op giữa
-    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as { ops: PatchOp[] }
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as {
+      ops: PatchOp[]
+      author: string
+    }
     expect(body.ops).toHaveLength(2)
     expect(body.ops.map((o) => o.path)).toEqual(['/basics/headline', '/skills/-'])
     expect(body.author).toBe('ai')

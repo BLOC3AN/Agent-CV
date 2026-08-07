@@ -1,5 +1,11 @@
-import { applyPatch, compare, type Operation } from 'fast-json-patch'
+// Import MẶC ĐỊNH rồi tách, không dùng named import: `fast-json-patch@3` là
+// CommonJS, và Node ESM không suy ra được named export từ nó —
+// "does not provide an export named 'applyPatch'" ở runtime. Vitest che lỗi
+// này bằng lớp interop của nó, nên chỉ khi chạy thật mới lộ ra.
+import jsonpatch, { type Operation } from 'fast-json-patch'
 import { ProfileSchema, type Profile, type PatchOp } from '@hr/schema'
+
+const { applyPatch, compare } = jsonpatch
 
 /**
  * Áp JSON Patch lên Profile — TDD §8.3, UC-24, UC-53.

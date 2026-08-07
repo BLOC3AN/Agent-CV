@@ -20,6 +20,9 @@ npx next build > /tmp/next-build.log 2>&1 || { tail -30 /tmp/next-build.log; exi
 
 set -a; . "$ROOT/.env"; set +a
 export APP_URL="http://localhost:$PORT"
+# next start chạy trong apps/web nên cwd khác worker — ép tuyệt đối để hai bên
+# trỏ cùng một thư mục file upload
+export STORAGE_ROOT="${STORAGE_ROOT:-$ROOT/var/storage}"
 
 echo "→ khởi động"
 setsid npx next start -p "$PORT" > /tmp/next.log 2>&1 < /dev/null &

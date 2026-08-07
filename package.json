@@ -12,8 +12,8 @@
     "node": ">=20.10"
   },
   "scripts": {
-    "build": "tsc --build",
-    "typecheck": "tsc --build --force",
+    "build": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --project unit",
     "test:unit": "vitest run --project unit",
     "test:int": "vitest run --project integration",
@@ -37,7 +37,9 @@
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "bullmq": "^6.0.8",
     "fast-json-patch": "^3.1.1",
+    "ioredis": "^6.0.0",
     "next": "^15.5.22",
     "pg": "^8.22.0",
     "react": "^19.2.8",

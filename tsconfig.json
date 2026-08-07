@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"],
+    "baseUrl": ".",
+    // Các package dùng `main: ./src/index.ts` — import thẳng nguồn, không có
+    // bước build trung gian. Path map để tsc phân giải giống hệt vitest và
+    // webpack, nếu không mỗi công cụ sẽ thấy một cây phụ thuộc khác nhau.
+    "paths": {
+      "@hr/schema": ["./packages/schema/src/index.ts"],
+      "@hr/ai": ["./packages/ai/src/index.ts"],
+      "@hr/db": ["./packages/db/src/index.ts"],
+      "@hr/pdf": ["./packages/pdf/src/index.ts"],
+      "@hr/worker": ["./services/worker/src/index.ts"],
+      "@hr/worker/queues": ["./services/worker/src/queues.ts"],
+      "@hr/worker/storage": ["./services/worker/src/storage.ts"],
+      "@hr/templates": ["./packages/templates/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*", "packages/*/test/**/*", "services/worker/src/**/*", "services/worker/test/**/*", "eval/**/*", "db/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/.next", "apps/web"]
+}

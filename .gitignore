@@ -32,6 +32,17 @@ eval/golden/*.json
 # Ghi chú đánh giá thủ công có thể chứa trích đoạn CV
 eval/manual-log.md
 
+# ── File upload của user — CHỨA CV THẬT, tuyệt đối không commit (TDD §15) ──
 storage/
+var/
+# Thư mục tạm của test e2e
+.tmp/
+
+# Python bytecode của services/pdfkit
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
 *.log
 .DS_Store

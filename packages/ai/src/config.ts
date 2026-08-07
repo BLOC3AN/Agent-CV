@@ -27,6 +27,13 @@ const RouteSchema = z
     primary: z.string(),
     fallback: z.string().nullable().default(null),
     required_local: z.boolean().default(false),
+    /**
+     * Tắt hẳn một task khi model của nó không dùng được. Khác `fallback: null`
+     * ở chỗ: fallback null nghĩa là "hỏng thì thôi", còn `enabled: false` nghĩa
+     * là "đừng gọi ngay từ đầu" — worker rẽ nhánh khác thay vì gọi rồi chờ
+     * timeout. Dùng cho `ocr_cv_page` khi :5012 chết (TDD §2.6).
+     */
+    enabled: z.boolean().default(true),
     schema: z.string().optional(),
     on_schema_fail: z.string().optional(),
     max_retries: z.number().int().optional(),

@@ -134,6 +134,19 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 
 ### 3.2 PII (quan trọng nhất)
 
+> Các case TC-PII-1x bổ sung sau khi đo lớp che PII trên 6 CV thật (TDD §15.2.1).
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-PII-10 | SĐT đủ 6 cách viết | U | **P0** | `+84 xxx`, `(+84) xxx`, `+84xxx`, `0xxx`, có khoảng trắng, có dấu chấm — tất cả bị che |
+| TC-PII-11 | Tên có âm tiết một chữ cái | U | **P0** | "Y THUY LINH TRAN" bị che; bản đầu để lọt hoàn toàn |
+| TC-PII-12 | Không nhầm tiêu đề mục thành tên | U | P0 | "WORK EXPERIENCE", "HỌC VẤN" không bị coi là tên |
+| TC-PII-13 | Tên chứa âm tiết trùng từ khoá tiêu đề | U | P0 | "Lê Công Minh" vẫn được che |
+| TC-PII-14 | Không che nhầm mã trong URL | U | **P0** | `Q15ABCDEF0GH` giữ nguyên — che thừa cắt mất nội dung model cần |
+| TC-PII-15 | Không che nhầm `Q4`/`P3`/`H2` | U | P0 | Chỉ dạng có dấu chấm (`Q.7`) mới coi là địa chỉ |
+| TC-PII-16 | Một bản đồ che cho cả CV | U | **P0** | Mục không chứa dòng tên vẫn che được tên |
+
+
 | TC | Mô tả | Loại | Mức | Kỳ vọng |
 |---|---|---|---|---|
 | TC-SEC-01 | PII không rời khỏi hệ thống | I | **P0** | Import `CV-10`, chặn payload gửi tới `:5011`. **Không** chứa SĐT/email/địa chỉ/ngày sinh |
@@ -289,6 +302,24 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-72-02 | Idempotency | I | P0 | Gửi 2 lần cùng input → 1 job, không xử lý lại |
 | TC-72-03 | Job quá 5 phút | I | P1 | → `failed`, báo user, cho thử lại |
 | TC-72-04 | Đóng tab, job vẫn chạy | E | P1 | Đóng tab → mở lại thấy kết quả |
+| TC-72-05 | Job THẤT BẠI được thử lại | I | **P0** | Tải lại cùng file sau khi job hỏng → job hồi sinh về `queued`, không mắc kẹt với lỗi cũ |
+| TC-72-06 | Job đang chờ KHÔNG bị đẩy hai lần | I | P0 | Enqueue lại job `queued`/`running` → không thêm vào hàng đợi, không chạy hai lượt |
+| TC-72-07 | Huỷ khi còn xếp hàng | I | P0 | `DELETE /api/jobs/:id` → worker nhặt lên vẫn bỏ qua, không gọi model |
+| TC-72-08 | Lỗi không đáng thử lại thì dừng ngay | U | P0 | `SCHEMA_INVALID`/`NO_TEXT_LAYER` → chốt `failed`, BullMQ không retry |
+| TC-72-09 | Lỗi hạ tầng thì thử lại | U | P0 | `TIMEOUT`/`ECONNREFUSED` còn lượt → giữ `running`, ném lại cho BullMQ |
+| TC-72-10 | Job kẹt được dọn | I | P1 | `running` quá 30 phút → `failed` với mã `STALE` |
+| TC-72-11 | Mã lỗi máy đọc được | I | **P0** | `GET /api/jobs/:id` trả `error.code` tách khỏi `error.message` (BR-71.1) |
+| TC-72-12 | SSE báo tiến độ và kết thúc | E | P0 | `status` → `done`/`failed`; đóng tab thì dừng poll |
+
+### 9.1 Cấu hình dễ sai (đã từng gây sự cố)
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-CFG-01 | `STORAGE_ROOT` tương đối bị từ chối | U | **P0** | web và worker có cwd khác nhau → đường dẫn tương đối cho hai thư mục khác, worker báo `FILE_MISSING` với mọi file |
+| TC-CFG-02 | Redis `maxmemory-policy` | I | P0 | Phải là `noeviction`; `allkeys-lru` xoá âm thầm trạng thái job |
+| TC-CFG-03 | Tên queue không chứa `:` | U | P0 | BullMQ v5 ném ngay ở constructor |
+| TC-CFG-04 | `prefix` của Worker khớp Queue | I | P0 | Lệch prefix → job nằm im, không lỗi, không ai biết |
+| TC-CFG-05 | Chống path traversal ở storage | U | **P0** | `../`, khoá tuyệt đối → `BAD_KEY`, không viết lại âm thầm |
 
 ---
 

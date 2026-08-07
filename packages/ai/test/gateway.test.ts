@@ -97,6 +97,7 @@ describe('TC-SEC-03 — required_local KHÔNG BAO GIỜ fallback cloud', () => {
       primary: 'local.reasoner',
       fallback: 'anthropic.cheap', // ← cấu hình sai, cố tình
       required_local: true,
+      enabled: true,
     }
     const gw = new Gateway({ config: cfg, registry: new ProviderRegistry(cfg) })
     expect(() => gw.resolveRoute('redact_pii')).toThrow(/rò rỉ PII/)

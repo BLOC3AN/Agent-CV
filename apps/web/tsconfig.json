@@ -30,6 +30,12 @@
       ],
       "@hr/pdf": [
         "../../packages/pdf/src/index.ts"
+      ],
+      "@hr/worker/queues": [
+        "../../services/worker/src/queues.ts"
+      ],
+      "@hr/worker/storage": [
+        "../../services/worker/src/storage.ts"
       ]
     },
     "lib": [

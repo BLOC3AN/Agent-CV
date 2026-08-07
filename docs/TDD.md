@@ -124,6 +124,42 @@ Không có GPU cục bộ → **mọi inference đều qua Tailscale**. Độ tr
 | C5 | Không GPU cục bộ | Không có fallback tại chỗ |
 | C6 | `generalist` ctx chỉ 4096 | Không dùng làm fallback cho task context dài |
 | C7 | `embedder` API không chuẩn OpenAI | Adapter riêng |
+| C8 | **Payload lớn có thể GIẾT tiến trình model, không chỉ lỗi** | §2.6 — trần kích thước bắt buộc |
+
+### 2.6 Trần kích thước payload — ràng buộc học được từ sự cố
+
+> Ghi ngày 2026-08-07, sau khi làm sập `local.ocr`.
+
+GPU RTX 3060 12GB đang gánh 4 model với `--n-gpu-layers 99`. VRAM gần đầy
+thường trực. Một request ảnh 417KB (trang A4 ở 150dpi) gửi cho LightOnOCR gây:
+
+```
+cudaMalloc failed: out of memory  (xin 522 MiB)
+GGML_ASSERT(...) failed → SIGSEGV → container Exited (139)
+```
+
+**Không phải lỗi trả về — mà là tiến trình chết.** Và vì driver NVIDIA đang
+mismatch (kernel `580.159.03` vs userspace `580.173.02`), container **không
+khởi động lại được**:
+
+```
+nvidia-container-cli: initialization error: nvml error: driver/library version mismatch
+```
+
+Đây chính là rủi ro **R1 (§16)** hiện thực hoá. Khôi phục cần gỡ
+`nvidia-driver-550` + reboot — mà máy chạy 109 container khác.
+
+**Quy tắc bắt buộc từ nay:**
+
+| # | Quy tắc |
+|---|---|
+| P1 | Mọi payload ảnh phải có **trần byte** khai báo trước khi gửi |
+| P2 | Dò khả năng của model phải **tăng dần từ nhỏ**, không thử cỡ lớn trước |
+| P3 | Model đa phương thức mặc định coi là **mong manh** — retry một lần rồi bỏ, không dồn |
+| P4 | Trên GPU dùng chung, **không chạy song song** hai request ảnh |
+
+Trần đề xuất cho đường ảnh khi `local.ocr` hoạt động trở lại: **≤120KB PNG mỗi
+trang** (tương đương ~72dpi cho A4), tăng dần và đo lại nếu cần nét hơn.
 
 ---
 
@@ -834,9 +870,39 @@ Mất dòng tên = mất field quan trọng nhất. Và **so sánh độ dài kh
 Chạy cả hai engine là rẻ (đều cục bộ, không tốn LLM), nên luôn chạy cả hai và
 so sánh thay vì tin một engine.
 
+**Nhánh khi đường ảnh KHÔNG khả dụng** (hiện tại — `local.ocr` chết, §2.6):
+
+| `quality` | Có OCR | Không có OCR (hiện tại) |
+|---|---|---|
+| `good` | dùng text | dùng text — **không đổi** |
+| `suspect` | đi đường ảnh | dùng text, **kèm cảnh báo** ở màn hình rà soát |
+| `none` | đi đường ảnh | **dừng có kiểm soát** → mời user nhập tay |
+
+Nguyên tắc: thiếu OCR làm *giảm chất lượng*, không được làm *sập luồng*. Job kết
+thúc `status='failed'` với `error_code='NO_TEXT_LAYER'` — mã máy đọc được để FE
+hiện đúng lời mời nhập tay chứ không phải màn hình lỗi trắng (BR-71.1).
+
+Khi `local.ocr` sống lại, chỉ cần bật `routing.ocr_cv_page.enabled: true` trong
+`config.yml`; nhánh trong worker đã viết sẵn và có test.
+
 **Ảnh hưởng:** `services/pdfkit` phải expose `quality: 'good' | 'suspect' |
 'none'` cùng với text, để worker quyết định nhánh. Trường này cũng đi vào
 `jobs.result` để màn hình rà soát (UC-22) biết mà cảnh báo user.
+
+**Phát hiện font phải đọc RESOURCE DICTIONARY, không suy ra từ API text.**
+Đo trên CV-02 (có Type3):
+
+| PyMuPDF | `get_text("dict")` → spans → font | Kết quả |
+|---|---|---|
+| 1.27.2 | `['Type3 (1394 0 R)', …]` | phát hiện đúng, chọn poppler |
+| 1.25.1 | `[]` | **bỏ sót**, quality tụt xuống chỉ còn "nhiều cột" |
+
+Cổng chất lượng suy giảm âm thầm theo phiên bản thư viện là điều không chấp
+nhận được — nó vẫn trả kết quả, chỉ là kết quả sai. `page.get_fonts()` đọc thẳng
+resource dict của PDF nên ổn định qua các phiên bản. Hiện thực gộp cả hai nguồn
+(font chỉ dùng để *đánh giá rủi ro*, thừa còn hơn thiếu) và pin
+`PyMuPDF==1.27.2`. Test hồi quy khẳng định `fonts` không bao giờ rỗng khi có
+text layer.
 
 ### 8.1.2 Parse THEO MỤC, không parse cả CV một lượt
 
@@ -1389,6 +1455,34 @@ R6. llm_calls KHÔNG lưu nội dung prompt/response — chỉ lưu metric.
     Cần debug thì bật sampling có kiểm soát, TTL ngắn.
 ```
 
+### 15.2.1 Che PII phải được ĐO trên CV thật, không chỉ có test
+
+> Bổ sung sau khi chạy lớp che PII lên 6 CV thật (M2-3).
+
+Bộ regex ban đầu qua hết test tự viết nhưng **để lọt PII trên 2/6 CV thật**.
+Ví dụ dưới đây là dữ liệu TỔNG HỢP giữ nguyên hình dạng — không phải PII thật
+(chính quy tắc R8 bên dưới cấm ghi PII thật vào tài liệu được commit):
+
+| Trường | Bỏ sót | Nguyên nhân |
+|---|---|---|
+| `PHONE` | `(+84) 912345678`, `+84 987654321` | regex đòi chữ số mạng đứng NGAY sau mã nước; ngoặc hoặc dấu cách xen vào là trượt |
+| `NAME` | `Y THUY LINH TRAN` | `[\p{L}']+` đòi âm tiết ≥2 chữ; tên Việt có âm tiết một chữ ("Y", "Á", "Ý") |
+
+Và **che nhầm** trên 1/6:
+
+| Trường | Che nhầm | Hậu quả |
+|---|---|---|
+| `LOCATION` | `Q15` trong `Q15ABCDEF0GH` (mã theo dõi LinkedIn) | nuốt luôn 40 ký tự URL kế bên → mất nội dung thật gửi model |
+
+**Quy tắc bổ sung:**
+
+| # | Quy tắc |
+|---|---|
+| R7 | Mỗi lần sửa regex PII, phải chạy lại trên **toàn bộ** `eval/cv/*.pdf` và đối chiếu bằng mắt |
+| R8 | Fixture test dùng dữ liệu **tổng hợp cùng hình dạng**, không bao giờ commit PII thật |
+| R9 | **Che thừa cũng là lỗi**, ngang với bỏ sót — nó cắt mất nội dung model cần |
+| R10 | Viết tắt mơ hồ (`Q4`, `P3`, `H2`) mặc định KHÔNG coi là địa chỉ; chỉ dạng có dấu chấm (`Q.7`) mới tính |
+
 ### 15.3 Đường mạng
 
 Model server chỉ tiếp cận được qua Tailscale. Không expose ra Internet. Ứng dụng deploy trên máy dev → cũng cần Tailscale hoặc VPN khi triển khai thật.
@@ -1399,7 +1493,7 @@ Model server chỉ tiếp cận được qua Tailscale. Không expose ra Interne
 
 | # | Rủi ro | Mức | Xử lý |
 |---|---|---|---|
-| R1 | **Model server chết vĩnh viễn** (driver mismatch, ai đó restart) | 🔴 | Ma trận degrade §5.5 · circuit breaker · thông báo rõ cho user · kế hoạch dự phòng: thuê GPU theo giờ hoặc bật cloud sớm |
+| R1 | **Model server chết vĩnh viễn** (driver mismatch, ai đó restart) | 🔴 **ĐÃ XẢY RA** | `local.ocr` (:5012) chết 2026-08-07 do payload ảnh quá lớn, **không khởi động lại được** vì driver mismatch. 5/6 model còn sống. Đường OCR hoãn tới khi có cửa sổ reboot. Xem §2.6 |
 | R2 | **Throughput không đủ khi có traffic** | 🔴 | Waitlist ngay từ đầu · hàng đợi minh bạch · cache · kế hoạch bật cloud (§14.2) |
 | R3 | **Không có nguồn KB thật** | 🔴 | Seed mẫu để mời HR phản biện (§10.6). Không có HR thật thì sản phẩm mất moat |
 | R4 | Context 16384 không đủ cho CV dài | 🟠 | §6.4 nén → chia nhỏ task → báo user. Không cắt âm thầm |

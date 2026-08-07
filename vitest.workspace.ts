@@ -10,6 +10,9 @@ const alias = {
   '@hr/templates': path.resolve(root, 'packages/templates/src/index.ts'),
   '@hr/db': path.resolve(root, 'packages/db/src/index.ts'),
   '@hr/pdf': path.resolve(root, 'packages/pdf/src/index.ts'),
+  '@hr/worker/queues': path.resolve(root, 'services/worker/src/queues.ts'),
+  '@hr/worker/storage': path.resolve(root, 'services/worker/src/storage.ts'),
+  '@hr/worker': path.resolve(root, 'services/worker/src/index.ts'),
   '@': path.resolve(root, 'apps/web'),
 }
 
@@ -25,6 +28,7 @@ export default defineWorkspace([
         'packages/**/test/**/*.test.tsx',
         'apps/**/test/**/*.test.ts',
         'apps/**/test/**/*.test.tsx',
+        'services/**/test/**/*.test.ts',
       ],
       exclude: ['**/*.int.test.ts'],
       environment: 'node',
@@ -37,7 +41,11 @@ export default defineWorkspace([
     test: {
       name: 'integration',
       // Integration test chạm model server thật (TC-INT-01..05)
-      include: ['eval/**/*.test.ts', 'packages/**/test/**/*.int.test.ts'],
+      include: [
+        'eval/**/*.test.ts',
+        'packages/**/test/**/*.int.test.ts',
+        'services/**/test/**/*.int.test.ts',
+      ],
       environment: 'node',
       testTimeout: 120_000,
       hookTimeout: 60_000,

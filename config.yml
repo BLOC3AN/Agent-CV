@@ -123,6 +123,13 @@ providers:
       ocr:
         container: lightonocr_llamacpp
         port: 5012
+        status: DOWN                     # ⚠️ chết 2026-08-07, xem TDD §2.6
+        down_since: "2026-08-07"
+        down_reason: >
+          Payload ảnh 417KB làm cudaMalloc thất bại → SIGSEGV. Không khởi động
+          lại được vì driver NVIDIA mismatch (kernel 580.159.03 vs userspace
+          580.173.02). Cần gỡ nvidia-driver-550 + reboot.
+        max_image_bytes: 122880           # trần 120KB khi hoạt động lại (P1)
         model_id: "LightOnOCR-2-1B-q8_0.gguf"
         params: 5.96e8
         quant: q8_0
@@ -225,8 +232,11 @@ routing:
     fallback: null
   ocr_cv_page:
     primary: local.ocr
-    fallback: local.reasoner             # Qwen3.5-4B multimodal
-    when_funded: local.ocr               # OCR local đủ tốt, không cần trả tiền
+    # KHÔNG fallback sang reasoner: nó là model CHỦ LỰC, và chính payload ảnh
+    # lớn đã giết local.ocr. Mất reasoner là mất toàn bộ hệ thống (TDD §2.6 P3).
+    fallback: null
+    enabled: false                       # ⚠️ hoãn tới khi :5012 hoạt động lại
+    when_funded: local.ocr
   parse_cv_to_profile:
     primary: local.reasoner
     # KHÔNG dùng generalist làm fallback: ctx của nó chỉ 4096, mà task này cần
