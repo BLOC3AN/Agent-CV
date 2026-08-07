@@ -30,6 +30,27 @@ export const GroundingSchema = z.object({
   ref: z.string().min(1),
 })
 
+/**
+ * Giá trị mới của một op.
+ *
+ * ── Vì sao KHÔNG dùng `z.unknown()` ──
+ * `z.unknown()` biến thành `{}` trong JSON Schema và KHÔNG BAO GIỜ vào danh
+ * sách `required`. llama.cpp dựng grammar từ đó, nên grammar tự nói với model
+ * rằng "value" là tuỳ chọn — và model 4B bỏ đi thật. Người dùng nhận đúng lỗi
+ * `op "replace" thiếu "value"` sau khi đã tick và bấm Áp dụng.
+ *
+ * Liệt kê tường minh các kiểu JSON làm `value` thành BẮT BUỘC trong grammar.
+ * `null` nằm trong danh sách để `remove` có thứ hợp lệ để điền.
+ */
+export const PatchValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(z.unknown()),
+  z.record(z.unknown()),
+])
+
 export const PatchOpSchema = z.object({
   op: z.enum(['add', 'remove', 'replace', 'move']),
   path: JsonPointerSchema,
@@ -45,6 +66,23 @@ export type PatchOp = z.infer<typeof PatchOpSchema>
 
 export const PatchProposalSchema = z.object({
   ops: z.array(PatchOpSchema).min(1).max(20),
+  summary: z.string(),
+})
+
+/**
+ * Dạng op mà MODEL phải trả về — khác dạng lưu trữ ở đúng một điểm: `value`
+ * bắt buộc.
+ *
+ * Tách riêng vì hai schema phục vụ hai việc khác nhau. Bản lưu trữ phải cho
+ * `value` vắng mặt (op `remove` không có giá trị mới, RFC 6902). Bản gửi model
+ * thì không được, vì "được phép vắng" trong grammar nghĩa là model SẼ bỏ.
+ */
+export const WirePatchOpSchema = PatchOpSchema.extend({
+  value: PatchValueSchema,
+})
+
+export const WirePatchProposalSchema = z.object({
+  ops: z.array(WirePatchOpSchema).min(1).max(20),
   summary: z.string(),
 })
 

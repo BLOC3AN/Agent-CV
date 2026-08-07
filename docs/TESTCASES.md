@@ -32,9 +32,25 @@ TC-DEG-<số>           suy giảm dịch vụ
 | | |
 |---|---|
 | `U` | Unit — vitest, không cần hạ tầng |
+| `UI` | Giao diện — vitest + happy-dom + Testing Library, render component thật |
 | `I` | Integration — cần Postgres/Redis, có thể mock LLM |
 | `E` | E2E — Playwright, chạy thật |
 | `M` | Manual — cần người đánh giá (chất lượng nội dung) |
+
+**Lệnh chạy**
+
+```
+npm run test        unit + UI
+npm run test:ui     chỉ giao diện
+npm run test:int    integration (cần Postgres, Redis, pdfkit, model server)
+```
+
+> **Khoảng trống đã biết.** Lớp `E` (Playwright) CHƯA được dựng. Mọi ca ghi `E`
+> trong tài liệu này hiện chỉ là đặc tả, chưa có bộ chạy. Hệ quả thực tế: mọi
+> lỗi giao diện tới thời điểm M5 đều do NGƯỜI DÙNG phát hiện, không phải do
+> test — ví dụ op `replace` thiếu `value` chạy thẳng lên modal và chỉ vỡ khi
+> bấm Áp dụng. Lớp `UI` được thêm sau đó để bịt phần lớn khoảng trống này mà
+> không cần trình duyệt thật.
 
 **Nguyên tắc:** mọi test case ở đây phải **chạy được khi model server không khả dụng** — hoặc bằng mock, hoặc test đó chính là test degrade.
 
@@ -321,9 +337,43 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-53-28 | Duyệt một phần | I | P0 | Tick 2/3 op → `partial`, chỉ 2 op vào hồ sơ |
 | TC-53-29 | Duyệt lại lần hai bị chặn | I | **P0** | 409 — không cho áp chồng |
 | TC-53-30 | Bỏ qua tất cả | I | P0 | `rejected`, hồ sơ không đổi |
+| TC-53-31 | Chặn `replace`/`add` THIẾU giá trị | U | **P0** | Schema cho qua vì `remove` không có `value` → op hỏng lên tới modal, user tick, bấm Áp dụng rồi mới vỡ ở tầng DB |
+| TC-53-34 | `"value"` nằm trong `required` của GRAMMAR | I | **P0** | `z.unknown()` ra `{}` và không bao giờ vào `required` → grammar tự cho model bỏ `value`. Đo thật: 2/2 op thiếu, 0/2 đường dẫn dùng được (TDD §5.4.3) |
+| TC-53-35 | `null` cũng tính là THIẾU với `add`/`replace` | U | P0 | Model bị ép điền `value` sẽ điền `null` khi bí; `null` ghi vào hồ sơ làm vỡ `ProfileSchema` |
+| TC-53-32 | Chặn `move` thiếu/sai đường dẫn nguồn | U | P0 | `from` bắt buộc và phải tồn tại |
+| TC-53-33 | Giá trị RỖNG khác THIẾU giá trị | U | P0 | Xoá nội dung một dòng là thao tác hợp lệ |
+| TC-53-40 | Modal tick sẵn đúng op | UI | **P0** | Nguồn kiểm chứng được → tick; `inference` → KHÔNG tick |
+| TC-53-41 | Chỉ gửi op user đã tick | UI | **P0** | Bỏ tick op giữa → `accept: [0,2]` |
+| TC-53-42 | Nút Áp dụng vô hiệu khi bỏ tick hết | UI | P0 | UC-53 4a |
+| TC-53-43 | Hiện diff TRƯỚC → SAU và LÝ DO | UI | P0 | Không có hai thứ này thì user không quyết được |
+| TC-53-44 | Op bị loại hiện kèm lý do | UI | P0 | Im lặng bỏ đi làm user tưởng trợ lý không nghĩ tới |
+| TC-53-45 | Lỗi server hiện cho user | UI | P0 | `role="alert"`, không im lặng |
+| TC-53-46 | Modal có `role="dialog"` + nhãn | UI | P1 | Trình đọc màn hình |
 | TC-51-10 | PII không lọt vào prompt chat | U | **P0** | Tên/email/SĐT không xuất hiện trong bất kỳ lượt gọi nào |
+| TC-51-11 | Báo BƯỚC đang chạy, không chỉ "đang suy nghĩ" | UI | **P0** | SSE bắn `step`; một lượt gọi model 2-3 lần, im lặng 30s khiến user tưởng treo và bấm lại |
+| TC-51-12 | Thông điệp lỗi nói rõ làm gì tiếp | U | P0 | "Thử lại sau ít phút" là vô dụng khi nguyên nhân là yêu cầu mơ hồ — thử lại y hệt sẽ hỏng y hệt |
 | TC-52-10 | Thiếu thông tin → HỎI, không bịa | U | **P0** | Không gọi `propose_patch` khi chưa có câu trả lời |
 | TC-52-11 | "Tôi không có số liệu" | E | P0 | Luôn có lối thoát; ép điền sẽ dẫn tới bịa số |
+
+### 7.1.2 UC-56 — Hỏi trợ lý (M5)
+
+Cả nhóm này sinh ra từ một lỗi thật: người dùng gõ *"Tôi có insight nào bạn giúp
+tôi lọc ra với"*, hệ thống phân loại đúng thành `ask_question`, rồi trả về chuỗi
+rỗng và tầng API điền vào *"Mình chưa rõ bạn muốn sửa gì"*.
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-56-01 | `ask_question` KHÔNG rơi vào "chưa rõ bạn muốn sửa gì" | U | **P0** | BR-56.1. Đã hỏng thật: hiểu đúng rồi vứt đi |
+| TC-56-02 | `explain` cũng được trả lời | U | **P0** | Cùng đường với `ask_question` |
+| TC-56-03 | Lượt hỏi KHÔNG sinh patch | U | **P0** | `kind:'reply'`, không có `proposalId`, hồ sơ không đổi (BR-56.4) |
+| TC-56-04 | Trả lời kèm việc làm tiếp được | U | P0 | ≤3 mục, mỗi mục gõ lại được vào ô chat |
+| TC-56-05 | Có đối chiếu JD → dùng làm ngữ cảnh | U | **P0** | Điểm số + gap đi vào prompt; thiếu thì trả lời chỉ còn chung chung |
+| TC-56-06 | Chưa đối chiếu JD → vẫn trả lời | U | P0 | UC-56 3a — nói rõ dán JD vào sẽ chính xác hơn |
+| TC-56-07 | PII không lọt vào prompt | U | **P0** | BR-56.5 |
+| TC-56-08 | Model hỏng → thông điệp nêu nguyên nhân | U | P0 | Không dùng câu chung chung (UC-71) |
+| TC-56-09 | Grammar có hiệu lực cho `answer_question` | I | **P0** | Cùng khoảng mù đã làm hỏng ba task khác |
+| TC-56-10 | UI hiện việc làm tiếp được dưới dạng NÚT | UI | P0 | Bấm là gửi lượt mới; in ra chữ thường thì người dùng phải gõ lại |
+| TC-56-11 | Trả lời thật từ model có nêu bằng chứng | I | P0 | BR-56.2 — đo trên hồ sơ thật |
 
 ### 7.2 Ngân sách context
 

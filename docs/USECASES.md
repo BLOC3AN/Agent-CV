@@ -495,6 +495,38 @@ Trước UC này, mọi CV trỏ chung một hồ sơ: sửa một chỗ là m�
 
 ---
 
+## UC-56 · Hỏi trợ lý về CV `P0` ⭐
+
+| | |
+|---|---|
+| **Tác nhân** | UC, LLM |
+| **Mục đích** | Trả lời câu hỏi về CV thay vì bắt người dùng phải phát biểu dưới dạng một lệnh sửa |
+
+Không phải lượt chat nào cũng là yêu cầu sửa. *"Tôi có insight nào không?"*,
+*"CV của tôi yếu chỗ nào?"*, *"vì sao điểm khớp chỉ 62?"* là những câu hỏi hợp
+lệ và là **giá trị cốt lõi** của sản phẩm — cố vấn, không phải máy sửa văn bản.
+
+**Luồng chính**
+1. UC gõ một câu HỎI vào khung chat.
+2. SYS gọi `plan_agent_step` → `intent` là `ask_question` hoặc `explain`.
+3. SYS gom ngữ cảnh: Profile đã che PII + kết quả đối chiếu JD gần nhất (nếu có) + chunk KB liên quan.
+4. SYS gọi `answer_question` → trả về câu trả lời + tối đa 3 việc làm tiếp được.
+5. UI hiện câu trả lời, kèm các việc đó dưới dạng nút bấm được — bấm vào là gửi thành một lượt chat mới, quay lại UC-51.
+
+**Luồng thay thế**
+- 3a. **Chưa đối chiếu JD nào** → vẫn trả lời dựa trên riêng Profile, và nói rõ rằng dán một tin tuyển dụng vào sẽ cho nhận xét chính xác hơn nhiều.
+- 4a. Model hỏng/quá tải → hiện thông điệp nêu đúng nguyên nhân và việc làm tiếp được (UC-71), **không** dùng câu chung chung.
+- 5a. UC bấm một trong các gợi ý → gửi như một lượt chat bình thường.
+
+**Quy tắc**
+- BR-56.1 **Câu hỏi đã được phân loại là câu hỏi thì KHÔNG BAO GIỜ được trả lời bằng "chưa rõ bạn muốn sửa gì".** Hệ thống hiểu đúng rồi vứt đi, rồi trách ngược người dùng — tệ hơn cả không phân loại. Đây là lỗi đã xảy ra thật.
+- BR-56.2 Trả lời phải NÊU BẰNG CHỨNG từ hồ sơ hoặc kết quả đối chiếu. Cấm nhận xét chung chung kiểu "CV của bạn khá tốt".
+- BR-56.3 Không bịa số — cùng ràng buộc như BR-52.1.
+- BR-56.4 Lượt hỏi **không sinh patch** và **không đụng vào hồ sơ**.
+- BR-56.5 PII bị loại khỏi prompt trước khi gửi model (như BR-51.2).
+
+---
+
 # UC-6x — Knowledge Base
 
 ## UC-61 · Nạp nguồn tri thức `P1`

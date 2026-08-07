@@ -1,7 +1,7 @@
 import {
   AgentPlanSchema,
   ClarifyRequestSchema,
-  PatchProposalSchema,
+  WirePatchProposalSchema,
   type AgentPlan,
   type ClarifyRequest,
   type Language,
@@ -237,6 +237,7 @@ export interface ProposePatchInput {
 const PATCH_VI = `Bạn đề xuất thay đổi cho CV dưới dạng JSON Patch (RFC 6902). Trả về DUY NHẤT một object JSON.
 
 Mỗi phần tử "ops" gồm: "op", "path", "value", "rationale", "grounding", "kbRefs".
+"value" LUÔN BẮT BUỘC — với op "remove" thì điền null.
 
 "grounding.type" — nguồn của thay đổi, chọn MỘT:
 - user_message  : dựa trên câu người dùng vừa trả lời. "ref" = messageId.
@@ -260,6 +261,7 @@ QUY TẮC CỨNG:
 const PATCH_EN = `You propose CV changes as JSON Patch (RFC 6902). Return ONLY a JSON object.
 
 Each "ops" element has: "op", "path", "value", "rationale", "grounding", "kbRefs".
+"value" is ALWAYS required — use null for "remove".
 
 "grounding.type" — pick ONE:
 - user_message  : based on what the user just answered. "ref" = messageId.
@@ -281,7 +283,7 @@ HARD RULES:
 
 export const proposePatchTask = defineTask<ProposePatchInput, PatchProposal>({
   name: 'propose_patch',
-  schema: PatchProposalSchema,
+  schema: WirePatchProposalSchema,
   budget: { total: 11_000, reserveForOutput: 3_000 },
   onSchemaFail: 'retry_then_fail',
   maxRetries: 2,

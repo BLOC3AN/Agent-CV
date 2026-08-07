@@ -238,6 +238,53 @@ export class MatchRepo {
     return rows[0]!.id
   }
 
+  /**
+   * Kết quả đối chiếu gần nhất của một hồ sơ — ngữ cảnh cho trợ lý khi user HỎI
+   * (UC-56, BR-56.2).
+   *
+   * Không có nó thì `answer_question` chỉ nói được những điều chung chung, đúng
+   * thứ BR-56.2 cấm. Chỉ lấy của CHÍNH hồ sơ này: mỗi bản CV theo JD là một hồ
+   * sơ nhân bản riêng (D12), nên trộn kết quả giữa các bản sẽ khiến trợ lý nhận
+   * xét về một tin tuyển dụng khác với cái người dùng đang xem.
+   */
+  async latestForProfile(profileId: string): Promise<{
+    jdTitle: string | null
+    overall: number
+    breakdown: Record<string, number>
+    matchedCount: number
+    gaps: { requirement: string; severity: string; reason: string }[]
+    missingAtsKeywords: string[]
+  } | null> {
+    const { rows } = await this.pool.query<{
+      jd_title: string | null
+      score: { overall: number; breakdown: Record<string, number>; missingAtsKeywords?: string[] }
+      matched_count: string
+      gaps: { requirement: string; severity: string; reason: string }[]
+    }>(
+      `SELECT j.title AS jd_title,
+              m.score,
+              jsonb_array_length(m.matched) AS matched_count,
+              m.gaps
+         FROM match_analyses m
+         JOIN cv_documents c ON c.id = m.cv_id
+         LEFT JOIN job_descriptions j ON j.id = m.jd_id
+        WHERE c.profile_id = $1
+        ORDER BY m.created_at DESC
+        LIMIT 1`,
+      [profileId],
+    )
+    const r = rows[0]
+    if (!r) return null
+    return {
+      jdTitle: r.jd_title,
+      overall: r.score.overall,
+      breakdown: r.score.breakdown,
+      matchedCount: Number(r.matched_count),
+      gaps: r.gaps ?? [],
+      missingAtsKeywords: r.score.missingAtsKeywords ?? [],
+    }
+  }
+
   /** Bản sửa mới nhất của hồ sơ — dùng làm khoá cache. */
   async latestRevision(profileId: string): Promise<string | null> {
     const { rows } = await this.pool.query<{ id: string }>(

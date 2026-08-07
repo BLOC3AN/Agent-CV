@@ -408,6 +408,57 @@ thì chỉ có thể do grammar.
 ở đâu, hành vi sai. Với mọi thành phần bên ngoài, câu hỏi phải là *"làm sao tôi
 BIẾT nó đang thật sự làm việc đó"*, không phải *"nó có báo lỗi không"*.
 
+### 5.4.3 `z.unknown()` biến field BẮT BUỘC thành tuỳ chọn trong grammar
+
+> Phát hiện từ test tích hợp chạy trên model thật, sau khi đã sửa §5.4.2. M5.
+
+`PatchOpSchema.value` khai báo `z.unknown().optional()` — hợp lý ở tầng dữ liệu,
+vì op `remove` không có giá trị mới (RFC 6902). Nhưng qua `zodToJsonSchema`:
+
+| Khai báo Zod | JSON Schema | Trong `required`? |
+|---|---|---|
+| `z.unknown().optional()` | `{}` | **không** |
+| `z.unknown()` (không optional) | `{}` | **không** |
+| `z.any()` | `{}` | **không** |
+| `z.union([z.string(), z.number(), …])` | `{"anyOf":[…]}` | **có** |
+
+`z.unknown()` ở mọi dạng đều ra `{}` và **không bao giờ** vào `required` —
+Zod coi `unknown` là optional tự thân. Grammar dựng từ đó tự nói với model rằng
+`"value"` được phép vắng mặt. Model 4B bỏ đi thật.
+
+**Đo trên model thật:** `propose_patch` sinh 2 op, **cả 2 đều thiếu `value`**,
+đường dẫn hợp lệ **0/2**. Người dùng gặp đúng lỗi này ở giao diện:
+
+```
+Patch thất bại: Không op nào áp dụng được.
+Chi tiết: /work/0/endDate: op "replace" thiếu "value"
+```
+
+Điều đáng chú ý: lỗi đó KHÔNG phải model kém. Grammar đã **cho phép** nó, và
+model làm đúng thứ grammar cho phép.
+
+**Cách sửa: `WirePatchOpSchema`** — tách dạng gửi model khỏi dạng lưu trữ, khác
+đúng một điểm là `value` liệt kê tường minh các kiểu JSON (kể cả `null`) nên
+thành bắt buộc trong grammar. Prompt nói rõ: op `remove` điền `null`.
+
+| Schema | Dùng cho | `value` |
+|---|---|---|
+| `PatchOpSchema` | lưu trữ, validate lúc áp dụng | tuỳ chọn — `remove` không cần |
+| `WirePatchOpSchema` | output của model | **bắt buộc** |
+
+`validateOps` đồng thời coi `null` là THIẾU với `add`/`replace`: model bị ép
+phải điền gì đó sẽ điền `null` khi bí, và `null` ghi vào hồ sơ làm vỡ
+`ProfileSchema` ở tầng dưới.
+
+**Kết quả đo lại:** đường dẫn hợp lệ **2/2**, `runChatTurn` đầu-cuối trả `patch`
+thay vì `error`. Qua HTTP thật: 10 op dùng được, 1 op bị loại kèm lý do đọc được.
+
+**Bài học.** Cùng dạng với §5.4.2 và cùng chỗ mù: schema là thứ **sinh ra**
+grammar, nên mọi chỗ lỏng trong schema là một chỗ lỏng trong hành vi model. Khi
+một field bắt buộc về nghiệp vụ, nó phải bắt buộc trong **JSON Schema đã dịch**,
+không chỉ trong ý định của người viết. Kiểm bằng cách in ra `required` — đã có
+test cho việc đó trong `grammar.int.test.ts`.
+
 ### 5.4.1 Constrained decoding — BẮT BUỘC cho mọi task có schema
 
 > Bổ sung sau khi hiện thực M0. Đây là phát hiện làm thay đổi thiết kế.
@@ -1284,6 +1335,89 @@ ra trông như do chính người dùng cung cấp.
 
 Test đo đúng tính chất cần đúng: không phải "model không bao giờ bịa" (model 4B
 sẽ bịa), mà **"số bịa ra không bao giờ tới tay người dùng dưới dạng có nguồn"**.
+
+### 8.3.3 Kiểm op phải xong TRƯỚC khi hiện lên màn hình
+
+`PatchOpSchema` khai `value: z.unknown().optional()` — bắt buộc không được vì
+`remove` vốn không có `value`. Nên schema cho qua một op `replace` thiếu
+`value`, nó chạy thẳng lên modal, người dùng tick, bấm Áp dụng, rồi mới vỡ ở
+tầng DB:
+
+```
+Patch thất bại: /work/0/highlights/0: op "replace" thiếu "value"
+```
+
+`applyProfilePatch` CÓ kiểm — nhưng ở cuối đường ống, sau khi người dùng đã ra
+quyết định. Quy tắc: **mọi kiểm tra khiến op không dùng được phải chạy ở
+`validateOps`**, trước khi op có cơ hội hiện ra. Tầng DB là lưới an toàn cuối,
+không phải nơi phát hiện.
+
+### 8.3.4 Chat phải báo TỪNG BƯỚC
+
+Một lượt chat gọi model 2-3 lần, mỗi lần ~5-10 giây. Bản đầu trả một JSON duy
+nhất sau khi xong hết, và giao diện chỉ hiện "Đang suy nghĩ…".
+
+Người dùng ngồi im 30-60 giây không có tín hiệu nào, không biết hệ thống còn
+sống hay đã treo. Nhiều người sẽ bấm lại — và bấm lại là thêm một lượt vào
+hàng đợi vốn đã chậm.
+
+`/api/chat` nay trả SSE, bắn `step` ngay khi bắt đầu mỗi bước:
+
+```
+Đang hiểu yêu cầu của bạn   →  Đang soạn câu hỏi làm rõ
+                            →  Đang soạn đề xuất chỉnh sửa
+                            →  Đang kiểm tra đề xuất
+```
+
+Đọc SSE viết tay chứ không dùng `EventSource`: `EventSource` chỉ làm được GET,
+mà lượt chat cần gửi hồ sơ và câu trả lời qua body.
+
+**Thông điệp lỗi cũng phải nói rõ.** *"Bạn thử lại sau ít phút nhé"* là câu vô
+dụng khi nguyên nhân là yêu cầu mơ hồ hoặc ngữ cảnh quá dài — thử lại y hệt sẽ
+hỏng y hệt. Mỗi mã lỗi nay dẫn tới một hành động cụ thể.
+
+### 8.3.5 Câu HỎI phải được trả lời, không bị đá về
+
+> Phát hiện từ người dùng. M5. UC-56.
+
+`plan_agent_step` phân loại được `ask_question` và `explain`. Bản đầu không làm
+gì với chúng:
+
+```ts
+if (intent === 'ask_question' || intent === 'explain') {
+  return { kind: 'reply', text: '', intent }   // ← chuỗi RỖNG
+}
+```
+
+Tầng API thấy `text` rỗng nên điền vào câu mặc định:
+
+> *"Mình chưa rõ bạn muốn sửa gì. Bạn nói cụ thể hơn giúp nhé."*
+
+Người dùng gõ *"Tôi có insight nào bạn giúp tôi lọc ra với"*, hệ thống **phân
+loại đúng** là câu hỏi, rồi vứt đi và trả lời rằng họ nói không rõ. Hiểu đúng
+rồi trách ngược — tệ hơn cả không phân loại, vì người dùng không có cách nào
+đoán ra mình phải nói khác đi thế nào.
+
+Và đây không phải trường hợp biên: *"CV của tôi yếu chỗ nào?"* chính là **giá
+trị cốt lõi** của sản phẩm. Cố vấn, không phải máy sửa văn bản.
+
+**Task `answer_question`** nhận: hồ sơ đã che PII + **kết quả đối chiếu JD gần
+nhất** + chunk KB. Kết quả đối chiếu là mấu chốt — thiếu nó thì câu trả lời chỉ
+còn nhận xét chung chung, đúng thứ BR-56.2 cấm.
+
+Trả về hai phần:
+
+| Trường | Vì sao |
+|---|---|
+| `answer` | ≤6 câu, phải NÊU BẰNG CHỨNG từ hồ sơ |
+| `nextSteps` | ≤3 việc **gõ lại được vào ô chat**, hiện thành NÚT |
+
+`nextSteps` không phải trang trí. Nhận xét mà không kèm việc làm được chỉ khiến
+người ta lo thêm; in ra dạng chữ thì họ phải tự gõ lại y hệt câu đó.
+
+Prompt cấm nhắc tên field JSON (`proj`, `exp`, `/work/0`). Đo lần đầu, model
+viết *"mục 'Dự án' (proj) hoàn toàn trống rỗng"* — `proj` là khoá rút gọn của
+`stripPII`, người dùng không nhìn thấy JSON nên chữ đó vô nghĩa với họ.
 
 ### 8.4 F4 — Export PDF
 

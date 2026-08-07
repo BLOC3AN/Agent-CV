@@ -299,6 +299,15 @@ routing:
     when_funded: anthropic.write
 
   # ---- Nội bộ, user không đọc ---------------------------------------------
+  answer_question:                       # trả lời câu hỏi về CV (UC-56)
+    primary: local.reasoner
+    fallback: null                       # generalist ctx 4096 không đủ cho hồ sơ + đối chiếu
+    required_local: true                 # prompt chứa hồ sơ → không ra cloud
+    schema: AnswerSchema
+    on_schema_fail: retry_then_fail
+    max_retries: 2
+    when_funded: local.reasoner
+
   plan_agent_step:
     primary: local.reasoner
     fallback: null

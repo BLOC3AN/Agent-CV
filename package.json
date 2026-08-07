@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --project unit",
+    "test": "vitest run --project unit --project ui",
     "test:unit": "vitest run --project unit",
     "test:int": "vitest run --project integration",
     "test:watch": "vitest --project unit",
@@ -24,13 +24,18 @@
     "db:reset": "docker compose down -v postgres && docker compose up -d postgres && sleep 8 && npm run db:migrate",
     "dev:restart": "bash scripts/dev-restart.sh",
     "build:web": "cd apps/web && next build",
-    "kb:ingest": "tsx scripts/kb-ingest.ts"
+    "kb:ingest": "tsx scripts/kb-ingest.ts",
+    "test:ui": "vitest run --project ui"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.20.4",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "happy-dom": "^20.11.1",
     "playwright": "^1.62.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

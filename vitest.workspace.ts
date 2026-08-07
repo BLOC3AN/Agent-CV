@@ -33,8 +33,23 @@ export default defineWorkspace([
         'apps/**/test/**/*.test.tsx',
         'services/**/test/**/*.test.ts',
       ],
-      exclude: ['**/*.int.test.ts'],
+      // Loại test GIAO DIỆN: chúng khớp `*.test.tsx` nên sẽ chạy CẢ ở đây,
+      // trong môi trường `node` không có DOM, và đỏ vì `document is not defined`.
+      exclude: ['**/*.int.test.ts', '**/*.ui.test.tsx'],
       environment: 'node',
+      testTimeout: 15_000,
+    },
+  },
+  {
+    // Test GIAO DIỆN — cần DOM. Tách project riêng vì `environment: 'happy-dom'`
+    // làm mọi test khác chậm hơn mà không được lợi gì.
+    resolve: { alias },
+    esbuild: { jsx: 'automatic' },
+    test: {
+      name: 'ui',
+      include: ['apps/web/test/**/*.ui.test.tsx'],
+      environment: 'happy-dom',
+      setupFiles: ['apps/web/test/setup.ts'],
       testTimeout: 15_000,
     },
   },

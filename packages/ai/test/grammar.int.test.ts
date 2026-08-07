@@ -4,6 +4,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema'
 import { loadConfig, modelBaseUrl } from '../src/config.js'
 import { stripGrammarHostile } from '../src/gateway.js'
 import { planAgentStepTask, insightMiningTask, proposePatchTask } from '../src/tasks/agent.js'
+import { answerQuestionTask } from '../src/tasks/answer.js'
 import { gapAnalysisTask } from '../src/tasks/gap-analysis.js'
 import { parseJDTask } from '../src/tasks/parse-jd.js'
 import { makeSectionTask } from '../src/tasks/parse-section.js'
@@ -71,6 +72,7 @@ const TASKS = [
   ['plan_agent_step', planAgentStepTask, ['intent', 'targetPath', 'needsInfo']],
   ['insight_mining', insightMiningTask, ['reason', 'targetPath', 'questions']],
   ['propose_patch', proposePatchTask, ['ops', 'summary']],
+  ['answer_question', answerQuestionTask, ['answer', 'nextSteps', 'kbRefs']],
   ['gap_analysis', gapAnalysisTask, ['advices', 'summary']],
   ['parse_jd', parseJDTask, ['title', 'language', 'roleFamily', 'seniority']],
   ['parse_cv_to_profile', makeSectionTask('work'), ['items']],
@@ -131,6 +133,31 @@ describe('stripGrammarHostile', () => {
     const input = { properties: { a: { pattern: '^x$' } } }
     stripGrammarHostile(input)
     expect(input.properties.a.pattern).toBe('^x$')
+  })
+})
+
+describe('grammar BẮT BUỘC "value" cho op sinh nội dung', () => {
+  /**
+   * TC-53-31 ở tầng GRAMMAR.
+   *
+   * `z.unknown()` biến thành `{}` trong JSON Schema và không bao giờ vào
+   * `required`. Grammar sinh ra từ đó tự nói với model rằng "value" là tuỳ
+   * chọn — model 4B bỏ đi thật, và người dùng nhận `op "replace" thiếu
+   * "value"` sau khi đã tick và bấm Áp dụng. Đo trên model thật: 2/2 op thiếu.
+   */
+  it('"value" nằm trong `required` của op', () => {
+    const j = stripGrammarHostile(
+      zodToJsonSchema(proposePatchTask.schema as z.ZodTypeAny, {
+        target: 'jsonSchema7',
+        $refStrategy: 'none',
+      }),
+    ) as {
+      properties: { ops: { items: { required: string[]; properties: { value: object } } } }
+    }
+    const item = j.properties.ops.items
+    expect(item.required).toContain('value')
+    // `{}` rỗng nghĩa là "kiểu gì cũng được" — grammar không ép được gì cả
+    expect(Object.keys(item.properties.value).length).toBeGreaterThan(0)
   })
 })
 
