@@ -1,0 +1,37 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+coverage/
+.vitest-cache/
+
+# Build output
+.next/
+out/
+.turbo/
+playwright-report/
+test-results/
+
+# Dữ liệu thật — CV/JD chứa PII, KHÔNG commit (TDD §15)
+# LƯU Ý: gitignore KHÔNG hỗ trợ comment cuối dòng. Comment phải ở dòng riêng,
+# nếu không phần "# ..." bị tính là một phần của pattern và rule mất tác dụng.
+eval/cv/*.pdf
+eval/cv/*.png
+eval/cv/*.docx
+# ánh xạ mã ẩn danh → tên thật
+eval/cv/.filemap.txt
+eval/jd/*.txt
+# nhãn golden dẫn xuất từ CV thật cũng chứa PII
+eval/golden/*.json
+!eval/**/.gitkeep
+!eval/**/README.md
+# INVENTORY.md chỉ mô tả cấu trúc, KHÔNG chứa PII
+!eval/cv/INVENTORY.md
+
+# Ghi chú đánh giá thủ công có thể chứa trích đoạn CV
+eval/manual-log.md
+
+storage/
+*.log
+.DS_Store

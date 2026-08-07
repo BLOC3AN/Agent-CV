@@ -1,0 +1,438 @@
+# ============================================================================
+# HR-Agent — Model & Infrastructure Configuration
+# ----------------------------------------------------------------------------
+# Khảo sát thực tế trên staging-master (100.68.50.41) ngày 2026-08-06.
+# Nguyên tắc: GIAI ĐOẠN 1 chạy 100% local (zero LLM cost).
+#             Cloud provider được khai báo sẵn nhưng enabled: false.
+#             Sau gọi vốn → bật cloud bằng cách đổi `enabled` + `routing`,
+#             KHÔNG sửa code nghiệp vụ.
+# ============================================================================
+
+meta:
+  version: 2
+  surveyed_at: "2026-08-06"
+  cost_mode: local_only          # local_only | hybrid | cloud_preferred
+
+# ============================================================================
+# HẠ TẦNG
+# ============================================================================
+infrastructure:
+  host:
+    name: staging-master
+    address: 100.68.50.41        # Tailscale CGNAT — không public
+    os: "Ubuntu 22.04.5 LTS"
+    kernel: "5.15.0-181-generic"
+
+  cpu:
+    model: "Intel Xeon E5-2680 v4 @ 2.40GHz"
+    sockets: 2
+    cores: 28
+    threads: 56
+    load_avg_observed: [5.47, 4.39, 3.77]   # còn dư địa CPU
+
+  memory:
+    total_gb: 62
+    used_gb: 39                  # ⚠️ đã dùng bởi 109 container khác
+    available_gb: 21
+    swap_gb: 0                   # ⚠️ KHÔNG có swap → OOM là kill thẳng
+
+  gpu:
+    model: "NVIDIA GeForce RTX 3060"
+    vram_gb: 12
+    pci: "0000:84:00.0"
+    uuid: "GPU-706bfc8e-8af9-b82a-05c9-783e1756669f"
+    kernel_module: "580.159.03"
+    userspace_lib: "580.173.02"  # ⚠️ MISMATCH — xem risks.gpu_driver_mismatch
+    nvidia_smi_working: false
+    docker_nvidia_runtime: true
+    cdi_configured: true
+
+  storage:
+    root: { device: "/dev/mapper/ubuntu--vg-ubuntu--lv", size_gb: 914, free_gb: 370 }
+    reclaimable_gb: 210          # docker build cache 176GB + images 34.6GB
+    secondary_nvme: { size_gb: 238, mounted: false, note: "phân vùng Windows, chưa dùng" }
+
+  shared_workload:
+    warning: |
+      Máy này KHÔNG dành riêng cho AI. Đang chạy 109 container của hệ
+      MES/WMS/QMS (mom-platform, s-factory-wms, ricoh-wms, kong...).
+      Mọi thay đổi tài nguyên phải cân nhắc ảnh hưởng tới các hệ đó.
+    containers_running: 109
+    docker_version: "29.1.3"
+    compose_version: "v5.1.0"
+
+# ============================================================================
+# PROVIDERS
+# ============================================================================
+providers:
+
+  # --------------------------------------------------------------------------
+  # LOCAL — đang chạy, đã đo thực tế
+  # --------------------------------------------------------------------------
+  local:
+    enabled: true
+    base_url: "http://100.68.50.41"
+    api_style: openai            # llama.cpp server → /v1/chat/completions
+    engine: "ghcr.io/ggml-org/llama.cpp:server-cuda"
+
+    models:
+
+      # ---- Model chủ lực: reasoning + generation tiếng Việt ----------------
+      reasoner:
+        container: qwen35_4b_llamacpp
+        port: 5011
+        model_id: "Qwen3.5-4B-Q8_0.gguf"
+        params: 4.21e9
+        quant: Q8_0
+        n_embd: 2560
+        vocab_size: 248320
+        ctx_size_runtime: 16384
+        ctx_size_train: 262144   # còn rất nhiều dư địa để nâng
+        n_gpu_layers: 99
+        multimodal: true         # có mmproj-Qwen3.5-4B-F16.gguf → nhận ảnh
+        flash_attn: true
+        kv_cache_quant: q8_0
+        measured:
+          vi_generation_quality: good     # câu tự nhiên, đúng ngữ pháp, giọng chuyên nghiệp
+          throughput_tok_s: ~35
+          latency_ms_21tok: 610
+        role: >
+          Bộ não chính giai đoạn 1: gap analysis, chat editing, viết lại bullet,
+          sinh summary, planning, nén hội thoại, đọc ảnh trang CV.
+
+      # ---- Model phụ: 8B nén 1-bit ----------------------------------------
+      generalist:
+        container: bonsai_llamacpp
+        port: 5010
+        model_id: "prism-ml/Bonsai-8B-gguf"
+        model_file: "Bonsai-8B-Q1_0.gguf"
+        params: 8.19e9
+        quant: Q1_0              # nén 1-bit — nhiều tham số, độ chính xác thấp hơn
+        n_embd: 4096
+        ctx_size_runtime: 4096   # ⚠️ NGẮN — không đủ cho Profile+JD+KB
+        ctx_size_train: 65536
+        n_gpu_layers: 99
+        measured:
+          vi_generation_quality: good
+          latency_ms_24tok: 581
+        role: >
+          Dự phòng cho `reasoner` khi quá tải. Task ngắn, độc lập.
+          KHÔNG dùng cho task cần context dài (ctx chỉ 4096).
+
+      # ---- OCR / đọc tài liệu ---------------------------------------------
+      ocr:
+        container: lightonocr_llamacpp
+        port: 5012
+        model_id: "LightOnOCR-2-1B-q8_0.gguf"
+        params: 5.96e8
+        quant: q8_0
+        ctx_size_runtime: 8192
+        n_gpu_layers: 99
+        multimodal: true         # BẮT BUỘC input ảnh, gọi text-only sẽ echo lại prompt
+        measured:
+          text_only_call: "echoes prompt — must send image"
+        role: >
+          Đọc CV dạng scan / PDF không có text layer / CV 2 cột phức tạp.
+          Đây là mảnh ghép giúp toàn bộ luồng parse CV chạy được offline.
+
+      # ---- Classifier siêu nhẹ --------------------------------------------
+      classifier:
+        container: slm-entitie-relationships
+        port: 5013
+        model_id: "qwen2.5-0.5b-instruct-Q8_0.gguf"
+        params: 4.94e8
+        quant: Q8_0
+        ctx_size_runtime: 2048   # ⚠️ rất ngắn
+        n_gpu_layers: 10         # offload một phần
+        measured:
+          vi_generation_quality: weak    # logic lệch — chỉ dùng phân loại
+          latency_ms: 978
+        role: >
+          Phân loại nhãn ngắn, tag, gate rẻ. TUYỆT ĐỐI không sinh text
+          hiển thị cho user.
+
+      # ---- Embedding (dense + sparse) -------------------------------------
+      embedder:
+        container: neura-embedding-service
+        port: 8003
+        api_style: custom        # KHÔNG phải OpenAI-compatible
+        endpoints:
+          health: "GET  /health"
+          embed: "POST /embed"           # body: {"text": "..."}  (số ít!)
+          embed_batch: "POST /embed-batch"
+          model_info: "GET  /model-info"
+        model_id: "gpahal/bge-m3-onnx-int8"
+        dimensions: 1024
+        hybrid: true             # trả cả dense_vector + sparse lexical weights
+        role: "Semantic layer cho matching engine + tuyển chọn KB"
+
+      # ---- Reranker (cross-encoder) ---------------------------------------
+      reranker:
+        container: rerank_model
+        port: 5014
+        api_style: openai
+        endpoint: "POST /v1/rerank"      # {"query","documents","top_n"}
+        model_id: "bge-reranker-v2-m3-q5_k_m.gguf"
+        ctx_size_runtime: 8192
+        n_gpu_layers: 12
+        note: "relevance_score là logit, có thể âm — so sánh tương đối, đừng lấy ngưỡng tuyệt đối"
+        role: "Sắp xếp lại kết quả matching / KB trước khi đưa vào prompt"
+
+  # --------------------------------------------------------------------------
+  # CLOUD — code hỗ trợ sẵn, TẮT ở giai đoạn 1
+  # Bật sau gọi vốn: enabled: true + đổi routing.*.primary
+  # --------------------------------------------------------------------------
+  anthropic:
+    enabled: false
+    api_key_env: ANTHROPIC_API_KEY
+    models:
+      deep:
+        model_id: "claude-opus-5"        # $5 / $25 per MTok — reasoning sâu nhất
+        context: 1000000
+        thinking: adaptive
+        effort: high
+      write:
+        model_id: "claude-sonnet-5"      # $3 / $15 (ưu đãi $2/$10 đến 2026-08-31)
+        context: 1000000
+        thinking: adaptive
+        effort: medium
+      cheap:
+        model_id: "claude-haiku-4-5"     # $1 / $5
+        context: 200000
+    features:
+      prompt_caching: true               # đặt breakpoint sau Profile+JD, trước KB+câu hỏi
+      structured_output: true            # output_config.format — dùng thay mọi regex bóc JSON
+      streaming: true
+    guardrails:
+      never_send_raw_pii: true           # phải qua redact_pii (local) trước
+
+# ============================================================================
+# ĐỊNH TUYẾN TASK
+# `primary` = giai đoạn 1 (local). `when_funded` = tuyến sau khi bật cloud.
+# ============================================================================
+routing:
+
+  # ---- Bảo mật: PHẢI local, không bao giờ fallback ra ngoài ----------------
+  redact_pii:
+    primary: local.reasoner
+    fallback: null
+    required_local: true                 # local chết → task FAIL, không đẩy cloud
+    when_funded: local.reasoner          # vẫn giữ local vĩnh viễn
+
+  # ---- Ingest / parse CV ---------------------------------------------------
+  detect_pdf_text_layer:
+    primary: deterministic               # pdfplumber/PyMuPDF, không cần LLM
+    fallback: null
+  ocr_cv_page:
+    primary: local.ocr
+    fallback: local.reasoner             # Qwen3.5-4B multimodal
+    when_funded: local.ocr               # OCR local đủ tốt, không cần trả tiền
+  parse_cv_to_profile:
+    primary: local.reasoner
+    # KHÔNG dùng generalist làm fallback: ctx của nó chỉ 4096, mà task này cần
+    # ~7500 (system 1200 + CV 3000 + Profile JSON 3500). Nó chắc chắn fail —
+    # escalate sang đó chỉ tốn thêm 100 giây rồi vẫn hỏng.
+    fallback: null
+    schema: ProfileSchema
+    on_schema_fail: retry_then_fail
+    max_retries: 2
+    timeout_ms: 180000                   # sinh ~3500 token ở 35 tok/s ≈ 100s
+    when_funded: anthropic.write         # nâng chất lượng khi có tiền
+  classify_cv_block:
+    primary: local.classifier
+    fallback: local.reasoner
+
+  # ---- JD & Matching -------------------------------------------------------
+  parse_jd:
+    primary: local.reasoner
+    fallback: local.generalist
+    schema: JDRequirementsSchema
+    on_schema_fail: retry_then_escalate
+    when_funded: anthropic.cheap
+  normalize_skill:
+    primary: dictionary                  # từ điển taxonomy lo ~80%
+    fallback: local.classifier
+  embed_text:
+    primary: local.embedder
+    fallback: null
+    required_local: true                 # volume quá cao, không bao giờ đẩy cloud
+  rerank:
+    primary: local.reranker
+    fallback: null
+  score_match:
+    primary: deterministic               # điểm số tính bằng CODE, không bằng LLM
+    fallback: null
+
+  # ---- Giá trị lõi ---------------------------------------------------------
+  gap_analysis:
+    primary: local.reasoner
+    fallback: local.generalist
+    when_funded: anthropic.deep
+  insight_mining:                        # đào sâu trải nghiệm, đặt câu hỏi làm rõ
+    primary: local.reasoner
+    fallback: null
+    when_funded: anthropic.deep
+  rewrite_bullet:
+    primary: local.reasoner
+    fallback: local.generalist
+    when_funded: anthropic.write
+  generate_summary:
+    primary: local.reasoner
+    fallback: local.generalist
+    when_funded: anthropic.write
+  propose_patch:                         # sinh JSON Patch cho CV
+    primary: local.reasoner
+    fallback: null
+    schema: PatchProposalSchema
+    on_schema_fail: retry_then_fail      # KHÔNG apply patch không hợp lệ
+    max_retries: 3
+    when_funded: anthropic.write
+
+  # ---- Nội bộ, user không đọc ---------------------------------------------
+  plan_agent_step:
+    primary: local.reasoner
+    fallback: null
+    schema: AgentPlanSchema              # schema NHỎ (≤3 field) cho model 4B
+  compact_chat:
+    primary: local.reasoner
+    fallback: local.generalist
+  session_title:
+    primary: local.classifier
+    fallback: local.reasoner
+
+# ============================================================================
+# CHÍNH SÁCH VẬN HÀNH
+# ============================================================================
+policies:
+  defaults:
+    timeout_ms: 30000
+    connect_timeout_ms: 3000
+    retries: 2
+    backoff: exponential
+
+  per_model_limits:
+    # 1 GPU 3060 dùng chung cho 5 model → đừng để queue vỡ
+    local.reasoner:   { max_concurrency: 3, queue_size: 20, timeout_ms: 60000 }
+    local.generalist: { max_concurrency: 2, queue_size: 10, timeout_ms: 45000 }
+    local.ocr:        { max_concurrency: 2, queue_size: 30, timeout_ms: 60000 }
+    local.classifier: { max_concurrency: 6, queue_size: 50, timeout_ms: 10000 }
+    local.embedder:   { max_concurrency: 8, queue_size: 200, timeout_ms: 15000, batch_size: 32 }
+    local.reranker:   { max_concurrency: 4, queue_size: 50, timeout_ms: 15000 }
+
+  circuit_breaker:
+    failure_threshold: 5
+    cooldown_seconds: 60
+    half_open_probes: 1
+
+  health_check:
+    interval_seconds: 30
+    endpoint_openai: "/v1/models"
+    endpoint_custom: "/health"
+    unhealthy_after_failures: 3
+
+  schema_validation:
+    enabled: true
+    library: zod
+    log_failures: true
+    escalate_rate_alert_threshold: 0.15  # >15% escalate → model/prompt có vấn đề
+
+  cost_guard:
+    # Chỉ có hiệu lực khi cloud bật
+    max_cloud_tokens_per_user_per_day: 200000
+    max_cloud_usd_per_day: 20
+    on_exceed: fallback_to_local
+
+# ============================================================================
+# KNOWLEDGE BASE (kinh nghiệm HR)
+# Giai đoạn 1: KHÔNG dùng vector search. Chọn bằng SQL filter, nhét thẳng context.
+# Chỉ bật retrieval khi KB vượt ngưỡng token. Interface không đổi.
+# ============================================================================
+knowledge_base:
+  strategy: context_injection            # context_injection | hybrid_retrieval
+  auto_switch_threshold_tokens: 8000     # KB đã lọc vượt ngưỡng → tự chuyển hybrid_retrieval
+
+  content_types:
+    rubric:    { storage: structured, retrieval: sql_filter, embed: false }
+    guideline: { storage: text,       retrieval: sql_filter, embed: true }
+    exemplar:  { storage: text,       retrieval: sql_filter, embed: true }
+    red_flag:  { storage: structured, retrieval: sql_filter, embed: false }
+
+  filters: [industry, role_family, seniority, section, language]
+
+  hybrid_retrieval:                      # cấu hình sẵn, kích hoạt khi vượt ngưỡng
+    dense: local.embedder
+    sparse: local.embedder                # bge-m3 trả sẵn lexical weights
+    fusion: rrf
+    rerank: local.reranker
+    top_k_before_rerank: 30
+    top_k_after_rerank: 6
+
+  guardrails:
+    require_citation: true               # mọi lời khuyên phải có kbRefs
+    uncited_advice_label: "gợi ý chung của AI"
+    kb_precedence_over_model_prior: true
+    treat_kb_as_data_not_instruction: true   # chống prompt injection từ file HR upload
+    curator_approval_required: true          # chunk chỉ active sau khi duyệt
+
+# ============================================================================
+# QUAN SÁT & ĐO LƯỜNG
+# ============================================================================
+observability:
+  log_per_call: [task, provider, model, latency_ms, prompt_tokens,
+                 completion_tokens, schema_valid, escalated, error]
+  metrics:
+    - local_escalate_rate_by_task
+    - p50_p95_latency_by_model
+    - gpu_queue_depth
+    - schema_failure_rate
+    - cloud_cost_usd_daily        # = 0 ở giai đoạn 1
+  eval:
+    dataset_path: "eval/"
+    cv_samples_target: 50
+    jd_samples_target: 20
+    gate:
+      description: "Điều kiện để đổi tuyến một task"
+      field_accuracy_min: 0.95           # so với baseline
+      schema_valid_rate_min: 0.90
+      escalate_rate_max: 0.10
+
+# ============================================================================
+# RỦI RO ĐANG MỞ — cần xử lý, xem docs
+# ============================================================================
+risks:
+  gpu_driver_mismatch:
+    severity: critical
+    detail: |
+      Kernel module 580.159.03 ≠ libnvidia-compute-580 580.173.02.
+      nvidia-smi FAIL. Đồng thời cài cả nvidia-driver-550 lẫn 580.
+      → Các llama-server hiện tại chạy từ 47 ngày trước nên vẫn giữ CUDA
+        context hợp lệ (đo được ~35 tok/s, chắc chắn đang trên GPU).
+      → NHƯNG: KHÔNG ĐƯỢC RESTART chúng cho tới khi fix driver + reboot,
+        vì process CUDA mới nhiều khả năng không init được.
+    action: "gỡ nvidia-driver-550, giữ 580, reboot có lịch (109 container!)"
+    blocks: ["nâng ctx_size", "thêm model", "đo VRAM"]
+
+  memory_pressure:
+    severity: high
+    detail: "62GB tổng, 39GB đã dùng, còn 21GB, KHÔNG có swap → OOM kill thẳng"
+    action: "docker builder prune (giải phóng ~176GB disk); giám sát RAM trước khi thêm service"
+
+  vram_unknown:
+    severity: medium
+    detail: "4 model đặt --n-gpu-layers 99 trên 1 card 12GB. Không đo được vì nvidia-smi hỏng."
+    action: "đo lại ngay sau khi fix driver; có thể phải giảm gpu-layers của generalist"
+
+  ctx_too_small:
+    severity: medium
+    detail: "reasoner đang 16384 (train hỗ trợ 262144). Profile+JD+KB+chat có thể vượt."
+    action: "nâng lên 32768 — nhưng BỊ CHẶN bởi gpu_driver_mismatch"
+
+  shared_host:
+    severity: medium
+    detail: "dùng chung với 109 container MES/WMS. Không HA, không isolation."
+    action: "circuit breaker + timeout ngắn; tách máy riêng khi có ngân sách"
+
+  weak_credentials:
+    severity: high
+    detail: "user 'neurosus' mật khẩu '1', truy cập được qua Tailscale."
+    action: "đổi mật khẩu mạnh, chuyển sang SSH key, tắt PasswordAuthentication"

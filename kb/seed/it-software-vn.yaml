@@ -1,0 +1,507 @@
+# ============================================================================
+# KNOWLEDGE BASE SEED — IT/Software, thị trường Việt Nam, Fresher & Junior
+# ----------------------------------------------------------------------------
+# ⚠️  TRẠNG THÁI: draft — KHÔNG được đưa lên production.
+#
+#     Nội dung dưới đây do AI soạn từ kiến thức chung về tuyển dụng, CHƯA qua
+#     kiểm chứng bởi HR hành nghề. Mục đích của file này KHÔNG phải là tri thức
+#     để dùng ngay, mà là MỘT KHUNG ĐỂ HR PHẢN BIỆN.
+#
+#     Quy trình dự kiến:
+#       1. Gửi file này cho HR mục tiêu   ← review nhanh hơn viết từ đầu nhiều
+#       2. HR sửa/bác bỏ/bổ sung
+#       3. Điền author_name, author_title  → status: active
+#       4. Từ đó lời khuyên của sản phẩm mới có nguồn dẫn thật
+#plu
+#     Cho tới bước 4, selector KHÔNG được lấy chunk nào từ file này.
+# ============================================================================
+
+source:
+  id: seed-it-software-vn-001
+  title: "Hướng dẫn viết CV cho Fresher/Junior ngành phần mềm — thị trường Việt Nam"
+  author_name: null            # ← điền tên HR sau khi review
+  author_title: null           # ← ví dụ: "Talent Acquisition Lead, 8 năm, FPT Software"
+  language: vi
+  status: draft                # draft | pending_review | active | archived
+  version: 0
+  reviewed_at: null
+  scope:
+    industry: [it_software]
+    role_family: [backend_developer, frontend_developer, fullstack_developer,
+                  mobile_developer, data_analyst, qa_tester, business_analyst]
+    seniority: [fresher, junior]
+
+# ============================================================================
+# PHẦN 1 — RUBRIC (dữ liệu có cấu trúc, đi thẳng vào scoring engine)
+# Không embed, không qua LLM. Đây là phần định lượng.
+# ============================================================================
+rubrics:
+
+  - industry: it_software
+    role_family: backend_developer
+    seniority: fresher
+    criteria:
+
+      - id: project_count
+        label:
+          vi: "Số dự án cá nhân / đồ án"
+          en: "Personal or academic projects"
+        type: count
+        path: "$.projects"
+        min: 2
+        weight: 0.20
+        advice_when_below:
+          vi: "Fresher chưa có kinh nghiệm đi làm thì dự án là bằng chứng năng lực duy nhất. Cần ít nhất 2 dự án có mô tả rõ tech stack và vai trò của bạn trong đó."
+          en: "For freshers with no work experience, projects are the only evidence of capability. Include at least 2 projects with clear tech stack and your specific role."
+
+      - id: quantified_bullets
+        label:
+          vi: "Tỉ lệ bullet có số liệu"
+          en: "Share of bullets containing metrics"
+        type: ratio
+        path: "$..highlights[*]"
+        matcher: contains_number
+        min: 0.30
+        weight: 0.25
+        advice_when_below:
+          vi: "Ít nhất 30% gạch đầu dòng nên có con số: số user, số bản ghi, thời gian giảm, % cải thiện, quy mô team. Không có số thì nhà tuyển dụng không phân biệt được bạn với ứng viên khác."
+          en: "At least 30% of bullets should carry a number: users served, records processed, time reduced, % improved, team size. Without numbers, recruiters cannot differentiate you."
+
+      - id: action_verb_start
+        label:
+          vi: "Bullet bắt đầu bằng động từ hành động"
+          en: "Bullets starting with an action verb"
+        type: ratio
+        path: "$..highlights[*]"
+        matcher: starts_with_action_verb
+        min: 0.80
+        weight: 0.15
+        advice_when_below:
+          vi: "Bắt đầu bằng động từ mạnh (Xây dựng, Tối ưu, Triển khai, Thiết kế) thay vì 'Chịu trách nhiệm...', 'Tham gia...', 'Được giao...'."
+          en: "Start with strong verbs (Built, Optimized, Deployed, Designed) instead of 'Responsible for...', 'Participated in...', 'Was assigned...'."
+
+      - id: tech_stack_depth
+        label:
+          vi: "Chiều sâu một tech stack"
+          en: "Depth in one tech stack"
+        type: custom
+        rule: "có ≥1 dự án dùng cùng nhóm công nghệ với ≥3 bullet mô tả"
+        weight: 0.15
+        advice_when_below:
+          vi: "Biết rộng mà nông là điểm yếu lớn nhất của CV fresher. Chọn 1 stack và cho thấy bạn đi sâu — thà 1 dự án kể kỹ còn hơn 5 dự án mỗi cái 1 dòng."
+          en: "Broad-but-shallow is the most common fresher weakness. Pick one stack and show depth — one project told well beats five one-liners."
+
+      - id: cv_length
+        label:
+          vi: "Độ dài CV"
+          en: "CV length"
+        type: page_count
+        max: 1
+        weight: 0.10
+        advice_when_above:
+          vi: "Fresher nên gói gọn trong 1 trang. CV 2-3 trang cho người chưa đi làm thường là dấu hiệu chưa biết chắt lọc."
+          en: "Freshers should fit on 1 page. A 2-3 page CV with no work history usually signals poor prioritization."
+
+      - id: contact_completeness
+        label:
+          vi: "Thông tin liên hệ đầy đủ"
+          en: "Contact completeness"
+        type: required_fields
+        fields: ["basics.email", "basics.phone"]
+        recommended: ["basics.links[?(@.label=='GitHub')]"]
+        weight: 0.15
+        advice_when_below:
+          vi: "Với ngành phần mềm, thiếu link GitHub là mất một kênh chứng minh năng lực gần như miễn phí."
+          en: "In software, a missing GitHub link forfeits an almost-free channel to prove capability."
+
+    weights_note:
+      vi: "Tổng trọng số = 1.0. Điểm rubric chiếm 30% điểm tổng; 70% còn lại từ độ khớp JD."
+      en: "Weights sum to 1.0. Rubric contributes 30% of the overall score; JD fit contributes 70%."
+
+  # -- Junior: kỳ vọng khác fresher --------------------------------------------
+  - industry: it_software
+    role_family: backend_developer
+    seniority: junior
+    criteria:
+      - id: work_experience
+        label: { vi: "Kinh nghiệm đi làm", en: "Professional experience" }
+        type: count
+        path: "$.work"
+        min: 1
+        weight: 0.30
+        advice_when_below:
+          vi: "Vị trí Junior thường yêu cầu ≥6 tháng kinh nghiệm thật (kể cả thực tập có sản phẩm chạy production)."
+          en: "Junior roles typically expect ≥6 months of real experience, including internships that shipped to production."
+
+      - id: quantified_bullets
+        label: { vi: "Tỉ lệ bullet có số liệu", en: "Share of quantified bullets" }
+        type: ratio
+        path: "$..highlights[*]"
+        matcher: contains_number
+        min: 0.50            # cao hơn fresher
+        weight: 0.30
+        advice_when_below:
+          vi: "Junior đã đi làm thì phải có số liệu thật từ công việc: throughput, latency, số ticket, quy mô dữ liệu."
+          en: "As a junior you should have real numbers from work: throughput, latency, tickets closed, data volume."
+
+      - id: ownership_signal
+        label: { vi: "Dấu hiệu làm chủ công việc", en: "Ownership signals" }
+        type: custom
+        rule: "có bullet thể hiện tự đề xuất / dẫn dắt / chịu trách nhiệm end-to-end"
+        weight: 0.20
+        advice_when_below:
+          vi: "Nhà tuyển dụng tìm dấu hiệu bạn không chỉ làm theo yêu cầu. Nêu một việc bạn tự phát hiện vấn đề và đề xuất giải pháp."
+          en: "Recruiters look for signals beyond following instructions. Mention something you spotted and proposed yourself."
+
+      - id: cv_length
+        label: { vi: "Độ dài CV", en: "CV length" }
+        type: page_count
+        max: 2
+        weight: 0.20
+
+# ============================================================================
+# PHẦN 2 — GUIDELINE (văn xuôi, đưa vào prompt, có trích dẫn)
+# ============================================================================
+guidelines:
+
+  - id: g_bullet_formula
+    section: [work, projects, activities]
+    role_family: [all]
+    seniority: [fresher, junior]
+    priority: 90
+    text:
+      vi: |
+        Công thức bullet hiệu quả: ĐỘNG TỪ + VIỆC LÀM + CÔNG NGHỆ + KẾT QUẢ ĐO ĐƯỢC.
+        Ví dụ: "Tối ưu truy vấn PostgreSQL của module báo cáo, giảm thời gian phản hồi
+        từ 4.2s xuống 0.9s cho tập dữ liệu 200 nghìn bản ghi."
+        Thiếu kết quả đo được thì bullet chỉ mô tả nhiệm vụ, không chứng minh năng lực.
+      en: |
+        Effective bullet formula: VERB + WHAT + TECH + MEASURABLE RESULT.
+        Example: "Optimized PostgreSQL queries in the reporting module, cutting response
+        time from 4.2s to 0.9s across a 200k-record dataset."
+        Without a measurable result, a bullet describes a duty rather than proving capability.
+
+  - id: g_no_metric_fallback
+    section: [projects]
+    role_family: [all]
+    seniority: [fresher]
+    priority: 85
+    text:
+      vi: |
+        Khi thật sự không có số liệu (đồ án môn học, dự án nhỏ), thay bằng ĐỘ PHỨC TẠP
+        hoặc PHẠM VI: số bảng trong CSDL, số màn hình, số API endpoint, số thành viên
+        và vai trò của bạn, thời gian hoàn thành. Tuyệt đối không bịa số.
+      en: |
+        When numbers genuinely don't exist (coursework, small projects), substitute
+        COMPLEXITY or SCOPE: number of DB tables, screens, API endpoints, team size and
+        your role, time to completion. Never invent numbers.
+
+  - id: g_project_over_coursework
+    section: [projects, education]
+    role_family: [all]
+    seniority: [fresher]
+    priority: 80
+    text:
+      vi: |
+        Một dự án cá nhân tự chọn đề tài có sức nặng hơn đồ án môn học, vì nó cho thấy
+        động lực tự thân. Nếu có cả hai, đặt dự án cá nhân lên trước. Nếu đồ án môn học
+        được triển khai thật (có người dùng ngoài lớp), hãy nói rõ điều đó.
+      en: |
+        A self-initiated project carries more weight than coursework because it signals
+        intrinsic motivation. If you have both, list personal projects first. If coursework
+        was actually deployed with real users beyond the class, say so explicitly.
+
+  - id: g_skill_honesty
+    section: [skills]
+    role_family: [all]
+    seniority: [fresher, junior]
+    priority: 85
+    text:
+      vi: |
+        Chỉ liệt kê công nghệ bạn dám bị hỏi sâu trong phỏng vấn. Danh sách 25 công nghệ
+        cho một fresher là dấu hiệu cảnh báo, không phải điểm cộng — người phỏng vấn sẽ
+        chọn đúng cái bạn yếu nhất để hỏi. Nếu muốn phân nhóm, dùng "Thành thạo /
+        Đã sử dụng / Đang học" thay vì thanh phần trăm.
+      en: |
+        Only list technologies you're willing to be grilled on. A 25-item stack for a
+        fresher is a red flag, not a strength — interviewers will probe your weakest entry.
+        If grouping, use "Proficient / Used / Learning" rather than percentage bars.
+
+  - id: g_no_percentage_bars
+    section: [skills]
+    role_family: [all]
+    seniority: [fresher, junior]
+    priority: 60
+    text:
+      vi: |
+        Tránh thanh phần trăm hoặc chấm sao cho kỹ năng. "React 80%" không có nghĩa gì
+        với người đọc và không so sánh được giữa các ứng viên. Ngoài ra ATS không đọc được
+        đồ họa, nên thông tin đó mất hoàn toàn khi qua hệ thống lọc tự động.
+      en: |
+        Avoid percentage bars or star ratings for skills. "React 80%" is meaningless to a
+        reader and not comparable across candidates. ATS cannot read graphics either, so
+        the information is lost entirely in automated screening.
+
+  - id: g_gpa_rule
+    section: [education]
+    role_family: [all]
+    seniority: [fresher]
+    priority: 70
+    text:
+      vi: |
+        Ghi GPA khi ≥3.0/4.0 (hoặc ≥7.5/10). Dưới ngưỡng đó thì bỏ qua và dồn không gian
+        cho dự án — không ghi GPA không phải là nói dối. Nếu GPA thấp nhưng có lý do rõ
+        (vừa học vừa làm, tham gia dự án thực tế), thể hiện điều đó qua phần kinh nghiệm
+        chứ đừng giải thích trong CV.
+      en: |
+        Include GPA when ≥3.0/4.0 (or ≥7.5/10). Below that, omit it and use the space for
+        projects — omitting GPA is not dishonesty. If your GPA is low for a clear reason
+        (working while studying, real project involvement), let the experience section
+        show it rather than explaining in the CV.
+
+  - id: g_tailor_to_jd
+    section: [all]
+    role_family: [all]
+    seniority: [fresher, junior]
+    priority: 95
+    text:
+      vi: |
+        CV gửi cho mỗi JD nên khác nhau. Không phải viết lại, mà là SẮP XẾP LẠI THỨ TỰ
+        và điều chỉnh từ khóa: dự án liên quan nhất lên đầu, kỹ năng JD yêu cầu lên trước,
+        dùng đúng thuật ngữ JD dùng (nếu JD ghi "RESTful API" thì đừng chỉ ghi "API").
+        Đây là việc tốn 10 phút nhưng thay đổi tỉ lệ được gọi phỏng vấn rõ rệt.
+      en: |
+        Your CV should differ per JD. Not rewritten — REORDERED and re-keyworded: most
+        relevant project first, JD-required skills first, mirroring the JD's exact terms
+        (if the JD says "RESTful API", don't just write "API"). This takes 10 minutes and
+        measurably changes callback rates.
+
+  - id: g_ats_format
+    section: [all]
+    role_family: [all]
+    seniority: [fresher, junior]
+    priority: 88
+    text:
+      vi: |
+        Khi nộp qua hệ thống tuyển dụng trực tuyến, dùng bản 1 cột, không bảng, không
+        icon, không đặt thông tin quan trọng trong header/footer, và xuất PDF dạng text
+        (không phải ảnh). CV 2 cột đẹp cho người đọc nhưng nhiều hệ ATS đọc sai thứ tự
+        hoặc trộn lẫn nội dung hai cột. Giữ hai bản: một để nộp hệ thống, một để gửi email.
+      en: |
+        For online application systems, use a single-column layout: no tables, no icons,
+        nothing important in headers/footers, and export a text-based PDF (not an image).
+        Two-column CVs look good to humans but many ATS parse them out of order or
+        interleave the columns. Keep two versions: one for systems, one for email.
+
+  - id: g_summary_when
+    section: [basics]
+    role_family: [all]
+    seniority: [fresher, junior]
+    priority: 65
+    text:
+      vi: |
+        Phần giới thiệu bản thân chỉ đáng giữ nếu nó nói được điều mà phần còn lại của CV
+        không nói. 3-4 dòng, nêu: bạn là ai, thế mạnh cụ thể, và bạn đang tìm gì.
+        Bỏ hẳn nếu nội dung chỉ là "chăm chỉ, ham học hỏi, có tinh thần trách nhiệm" —
+        những từ đó không phân biệt được ai với ai.
+      en: |
+        A summary is worth keeping only if it says something the rest of the CV doesn't.
+        3-4 lines: who you are, a specific strength, what you're looking for.
+        Drop it entirely if it reads "hardworking, eager to learn, responsible" — those
+        words distinguish nobody from anybody.
+
+  - id: g_english_cv_vn
+    section: [all]
+    role_family: [all]
+    seniority: [fresher, junior]
+    priority: 75
+    text:
+      vi: |
+        Nộp công ty outsourcing/product có khách nước ngoài, hoặc JD viết bằng tiếng Anh
+        → nộp CV tiếng Anh. Nộp công ty Việt, JD tiếng Việt → CV tiếng Việt. Nếu không
+        chắc, tiếng Anh thường an toàn hơn trong ngành phần mềm tại Việt Nam. Quan trọng:
+        đừng dịch máy — một CV tiếng Anh sai ngữ pháp gây hại hơn CV tiếng Việt tốt.
+      en: |
+        For outsourcing/product companies with foreign clients, or JDs written in English
+        → submit an English CV. For Vietnamese companies with Vietnamese JDs → Vietnamese.
+        When unsure, English is usually safer in Vietnam's software industry. Critically:
+        don't machine-translate — a grammatically broken English CV hurts more than a
+        good Vietnamese one.
+
+# ============================================================================
+# PHẦN 3 — EXEMPLAR (cặp trước/sau, dùng làm few-shot)
+# ============================================================================
+exemplars:
+
+  - id: ex_project_ecommerce
+    section: projects
+    role_family: [fullstack_developer, backend_developer]
+    language: vi
+    before: "Làm đồ án website bán hàng bằng ReactJS và NodeJS."
+    after: |
+      Xây dựng website thương mại điện tử (React + Node.js + PostgreSQL) cho đồ án tốt
+      nghiệp, gồm 12 màn hình và 28 API endpoint, quản lý hơn 500 sản phẩm.
+      Tối ưu lazy loading và cache phía server, giảm thời gian tải trang chủ từ 3.2s
+      xuống 0.8s. Nhóm 4 người, phụ trách toàn bộ phần backend và thiết kế CSDL.
+    explanation: |
+      Bản gốc mô tả nhiệm vụ. Bản sửa bổ sung: (1) quy mô cụ thể — 12 màn hình,
+      28 endpoint, 500 sản phẩm; (2) kết quả đo được — 3.2s → 0.8s; (3) vai trò rõ ràng
+      trong nhóm. Toàn bộ số liệu phải do ứng viên cung cấp, hệ thống KHÔNG được tự sinh.
+
+  - id: ex_internship_qa
+    section: work
+    role_family: [qa_tester]
+    language: vi
+    before: "Thực tập tại công ty ABC, tham gia kiểm thử phần mềm."
+    after: |
+      Thực tập QA tại Công ty ABC (3 tháng), viết và duy trì 120 test case thủ công cho
+      module thanh toán; phát hiện 18 lỗi trong đó 4 lỗi mức nghiêm trọng trước khi phát
+      hành. Tự đề xuất chuyển 30 test case lặp lại sang tự động hóa bằng Selenium,
+      rút thời gian hồi quy mỗi lần phát hành từ 4 giờ xuống 40 phút.
+    explanation: |
+      Ba thay đổi: (1) định lượng khối lượng công việc — 120 test case, 18 lỗi;
+      (2) nêu tác động — 4 lỗi nghiêm trọng chặn trước khi release; (3) thể hiện dấu hiệu
+      làm chủ ("tự đề xuất") — thứ nhà tuyển dụng tìm ở junior.
+
+  - id: ex_summary_generic
+    section: basics
+    role_family: [all]
+    language: vi
+    before: |
+      Là một người chăm chỉ, ham học hỏi, có tinh thần trách nhiệm cao và khả năng làm
+      việc nhóm tốt. Mong muốn được làm việc trong môi trường năng động để phát triển
+      bản thân.
+    after: |
+      Sinh viên năm cuối ngành Kỹ thuật phần mềm, tập trung vào backend Node.js và
+      PostgreSQL. Đã tự xây dựng và vận hành 2 API phục vụ dự án thật với hơn 1.000 người
+      dùng. Đang tìm vị trí Backend Fresher tại đội ngũ có quy trình code review chặt chẽ.
+    explanation: |
+      Bản gốc gồm toàn từ mà mọi ứng viên đều viết được — không phân biệt được ai.
+      Bản sửa nêu: chuyên môn cụ thể, bằng chứng có số liệu, và mong muốn rõ ràng cho
+      thấy ứng viên đã tìm hiểu về nơi ứng tuyển.
+
+  - id: ex_bullet_en
+    section: projects
+    role_family: [backend_developer]
+    language: en
+    before: "Worked on a chat application using WebSocket."
+    after: |
+      Built a real-time chat service (Node.js + Socket.IO + Redis) supporting 200
+      concurrent connections in load testing; implemented message persistence and
+      reconnection handling, reducing dropped messages from 6% to under 0.5%.
+    explanation: |
+      Adds scale (200 concurrent), specific technical decisions (persistence,
+      reconnection), and a measured outcome (6% → 0.5%).
+
+# ============================================================================
+# PHẦN 4 — RED FLAG (danh mục lỗi, dùng cho rule + cảnh báo)
+# ============================================================================
+red_flags:
+
+  - id: rf_unprofessional_email
+    severity: high
+    detector: "regex trên basics.email"
+    rule: "email chứa biệt danh, năm sinh kiểu 'cutegirl99', 'boydeptrai'"
+    message:
+      vi: "Đổi sang email dạng họtên@gmail.com. Đây là chi tiết nhỏ nhưng gây ấn tượng xấu ngay dòng đầu tiên."
+      en: "Switch to firstname.lastname@gmail.com. A small detail, but it creates a bad impression on the very first line."
+
+  - id: rf_photo_when_unnecessary
+    severity: low
+    detector: "có basics.photo"
+    rule: "CV nộp công ty nước ngoài / có yếu tố quốc tế"
+    message:
+      vi: "Nhiều công ty nước ngoài không khuyến khích ảnh trong CV để tránh thiên kiến. Công ty Việt thì ảnh vẫn phổ biến và chấp nhận được."
+      en: "Many international companies discourage photos to avoid bias. In Vietnamese companies, photos remain common and acceptable."
+
+  - id: rf_length_fresher
+    severity: medium
+    detector: "page_count > 1 AND seniority == fresher"
+    message:
+      vi: "CV fresher dài quá 1 trang thường là do liệt kê đủ mọi thứ thay vì chọn lọc. Giữ lại 2-3 dự án mạnh nhất."
+      en: "A fresher CV over 1 page usually means listing everything instead of curating. Keep your 2-3 strongest projects."
+
+  - id: rf_no_github
+    severity: medium
+    detector: "không có link GitHub AND role_family thuộc nhóm lập trình"
+    message:
+      vi: "Ngành phần mềm mà không có GitHub là bỏ lỡ kênh chứng minh năng lực rẻ nhất. Kể cả repo nhỏ có README tử tế cũng có giá trị."
+      en: "No GitHub in software forfeits the cheapest way to prove capability. Even a small repo with a decent README helps."
+
+  - id: rf_responsibility_language
+    severity: medium
+    detector: "bullet bắt đầu bằng 'Chịu trách nhiệm' / 'Tham gia' / 'Được giao' / 'Responsible for'"
+    message:
+      vi: "Cụm 'Chịu trách nhiệm/Tham gia' mô tả vị trí chứ không mô tả điều bạn đã làm được. Đổi sang động từ hành động kèm kết quả."
+      en: "'Responsible for / Participated in' describes a position, not an accomplishment. Switch to an action verb plus outcome."
+
+  - id: rf_skill_inflation
+    severity: high
+    detector: "count(skills) > 20 AND seniority == fresher"
+    message:
+      vi: "Hơn 20 kỹ năng cho một fresher làm người phỏng vấn nghi ngờ độ sâu. Rút xuống còn những gì bạn dám bị hỏi kỹ."
+      en: "Over 20 skills for a fresher makes interviewers doubt your depth. Trim to what you can defend under questioning."
+
+  - id: rf_date_gap_unexplained
+    severity: low
+    detector: "khoảng trống >6 tháng giữa các mốc thời gian"
+    message:
+      vi: "Khoảng trống thời gian không giải thích thường bị hỏi trong phỏng vấn. Nếu bạn tự học, làm freelance, hoặc làm dự án riêng, hãy ghi vào."
+      en: "Unexplained time gaps usually come up in interviews. If you were self-studying, freelancing, or building something, put it in."
+
+# ============================================================================
+# PHẦN 5 — CÂU HỎI LÀM RÕ (dùng cho insight mining, F5 §8.3)
+# Đây là danh mục câu hỏi AI được phép hỏi khi phát hiện bullet thiếu số liệu.
+# Mục đích: LẤY FACT TỪ USER, không để model tự bịa.
+# ============================================================================
+clarifying_questions:
+
+  - trigger: "bullet dự án không có số liệu"
+    questions:
+      vi:
+        - "Dự án này có bao nhiêu người tham gia, và bạn phụ trách phần nào?"
+        - "Có con số nào đo được không — số người dùng, số bản ghi, số màn hình, số API?"
+        - "Có cải thiện gì đo được không — thời gian chạy, dung lượng, tỉ lệ lỗi?"
+        - "Dự án đã chạy thật hay dừng ở mức demo/đồ án?"
+      en:
+        - "How many people worked on this, and which part did you own?"
+        - "Any measurable numbers — users, records, screens, API endpoints?"
+        - "Any measurable improvement — runtime, size, error rate?"
+        - "Did this ship to real users, or stop at demo/coursework stage?"
+
+  - trigger: "bullet kinh nghiệm làm việc không có tác động"
+    questions:
+      vi:
+        - "Việc bạn làm đã thay đổi điều gì cho đội/sản phẩm?"
+        - "Trước khi bạn làm thì tình trạng ra sao, sau đó thì sao?"
+        - "Có ai dùng kết quả công việc của bạn không, và bao nhiêu người?"
+      en:
+        - "What changed for the team or product because of your work?"
+        - "What was the situation before, and after?"
+        - "Who used the output of your work, and how many of them?"
+
+  - trigger: "kỹ năng liệt kê nhưng không xuất hiện ở dự án nào"
+    questions:
+      vi:
+        - "Bạn dùng {skill} trong bối cảnh nào? Có dự án nào thể hiện được không?"
+        - "Mức độ của bạn với {skill} là đã làm dự án thật, hay mới học qua khóa học?"
+      en:
+        - "In what context did you use {skill}? Any project that shows it?"
+        - "Is your {skill} from real projects, or from coursework so far?"
+
+# ============================================================================
+# GHI CHÚ CHO NGƯỜI REVIEW (HR)
+# ============================================================================
+review_notes:
+  cần_xác_minh:
+    - "Ngưỡng 30% bullet có số liệu cho fresher — có thực tế không, hay nên thấp/cao hơn?"
+    - "Ngưỡng GPA 3.0/4.0 — thị trường VN có kỳ vọng khác không?"
+    - "Quy tắc ảnh trong CV — thực tế các công ty VN hiện nay thế nào?"
+    - "CV fresher 1 trang — có quá khắt khe không với ngành phần mềm?"
+    - "Số kỹ năng tối đa 20 — con số này dựa vào đâu?"
+  còn_thiếu:
+    - "Rubric cho frontend / mobile / data / BA — hiện chỉ có backend"
+    - "Khác biệt kỳ vọng giữa công ty outsourcing và công ty product"
+    - "Kỳ vọng riêng của các công ty lớn tại VN (FPT, VNG, Viettel, MoMo...)"
+    - "Cách xử lý ứng viên trái ngành chuyển sang IT"
+    - "Vai trò thực tế của chứng chỉ (AWS, Azure) với fresher tại VN"

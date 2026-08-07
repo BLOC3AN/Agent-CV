@@ -1,0 +1,60 @@
+@import 'tailwindcss';
+
+/* CSS của template — dùng chung cho preview và trang /print (TDD §3.3) */
+@import '@hr/templates/styles.css';
+
+/*
+ * Font có dấu tiếng Việt đầy đủ. Nhúng cục bộ chứ không gọi Google Fonts:
+ * trang /print chạy trong Playwright, có thể không có mạng ra ngoài, và font
+ * thiếu là lỗi chết người với CV tiếng Việt (BR-32.3).
+ */
+:root {
+  --font-ui: 'Be Vietnam Pro', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+body {
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Sửa inline (FRONTEND.md §9.4) ───────────────────────────────────────── */
+[data-editable] {
+  border-radius: 2px;
+  outline: none;
+  transition: background-color 120ms;
+}
+@media screen {
+  [data-editable]:hover {
+    background-color: rgb(59 130 246 / 8%);
+    box-shadow: 0 0 0 2px rgb(59 130 246 / 8%);
+  }
+  [data-editable]:focus {
+    background-color: rgb(59 130 246 / 12%);
+    box-shadow: 0 0 0 2px rgb(59 130 246 / 45%);
+  }
+  /* Nội dung do AI sinh, người dùng CHƯA xác nhận — dấu ⚪ ở FRONTEND.md §3.3 */
+  [data-unverified='true']::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: #9ca3af;
+    vertical-align: super;
+  }
+}
+
+/* Trang /print: không hiện dấu hiệu editor nào */
+@media print {
+  [data-editable] {
+    background: none !important;
+    box-shadow: none !important;
+  }
+  [data-unverified]::after {
+    display: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
