@@ -234,11 +234,54 @@ function wouldBreakProfile(profile: Profile, op: PatchOp): string | null {
   }
 
   const parsed = ProfileSchema.safeParse(next)
-  if (parsed.success) return null
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
+    const where = issue?.path.join('/')
+    return where ? `Giá trị không đúng dạng ở "${where}"` : 'Giá trị không đúng dạng'
+  }
 
-  const issue = parsed.error.issues[0]
-  const where = issue?.path.join('/')
-  return where ? `Giá trị không đúng dạng ở "${where}"` : 'Giá trị không đúng dạng'
+  // Parse THÀNH CÔNG vẫn chưa đủ: Zod LƯỢC BỎ khoá lạ chứ không báo lỗi.
+  //
+  // Đo thật: model đề xuất `add /summary` (hồ sơ chưa có phần giới thiệu nên
+  // nó đoán chỗ). `pathExists` cho qua vì `add` được phép tạo field mới,
+  // `safeParse` cũng cho qua vì Zod chỉ lặng lẽ vứt `summary` đi. Op được áp,
+  // hệ thống báo "đã áp dụng 1 thay đổi", và nội dung BIẾN MẤT — người dùng
+  // nhìn CV không thấy gì, còn log thì nói là xong.
+  //
+  // Mất dữ liệu mà báo thành công là kiểu hỏng tệ nhất: không ai đi tìm.
+  if (op.op === 'add' || op.op === 'replace' || op.op === 'move') {
+    const landed = op.path.endsWith('/-')
+      ? lastElementPath(parsed.data, op.path)
+      : op.path
+    if (landed === null || valueAt(parsed.data, landed) === undefined) {
+      const field = op.path.split('/').filter(Boolean).join('/')
+      return `Hồ sơ không có chỗ "${field}" — nội dung sẽ bị mất`
+    }
+  }
+
+  return null
+}
+
+/**
+ * Làm sạch mọi chuỗi mà NGƯỜI DÙNG sẽ đọc trong một đề xuất.
+ *
+ * `summary` hiện thành tin nhắn của trợ lý, `rationale` hiện dưới từng op
+ * trong modal duyệt — cả hai đều là chữ model viết, và cả hai đều đã lộ con
+ * trỏ ra màn hình. Cùng lý do với `reason` của câu hỏi làm rõ.
+ */
+function cleanProposal(proposal: PatchProposal): PatchProposal {
+  return {
+    summary: humanizePointers(proposal.summary),
+    ops: proposal.ops.map((o) => ({ ...o, rationale: humanizePointers(o.rationale) })),
+  }
+}
+
+/** `/work/-` → `/work/2` sau khi đã thêm; `null` nếu chỗ đó không phải mảng. */
+function lastElementPath(profile: Profile, pointer: string): string | null {
+  const base = pointer.slice(0, -2)
+  const arr = valueAt(profile, base)
+  if (!Array.isArray(arr) || arr.length === 0) return null
+  return `${base}/${arr.length - 1}`
 }
 
 /** Con số kèm đơn vị — thứ nhà tuyển dụng đọc là thành tích. */
@@ -496,7 +539,7 @@ export async function runChatTurn(
       if (second.valid.length > 0) {
         return {
           kind: 'patch',
-          proposal: { ops: second.valid, summary: retry.data.summary },
+          proposal: cleanProposal({ ops: second.valid, summary: retry.data.summary }),
           rejected: second.rejected,
           intent,
         }
@@ -546,7 +589,7 @@ export async function runChatTurn(
 
   return {
     kind: 'patch',
-    proposal: { ops: valid, summary: res.data.summary },
+    proposal: cleanProposal({ ops: valid, summary: res.data.summary }),
     rejected,
     intent,
   }

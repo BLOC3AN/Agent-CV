@@ -1044,3 +1044,88 @@ describe('không op nào dùng được → nói cho model biết SAI Ở ĐÂU 
     expect(r.kind).toBe('error')
   })
 })
+
+describe('TC-53-45b op bị Zod LƯỢC BỎ phải bị loại, không được báo là đã áp dụng', () => {
+  it('CHẶN `add /summary` — hồ sơ không có field đó ở gốc', () => {
+    // Đã xảy ra thật: op này được duyệt, hệ thống báo "đã áp dụng 1 thay đổi",
+    // và nội dung biến mất. Zod lược khoá lạ chứ không báo lỗi, nên safeParse
+    // vẫn thành công.
+    const { valid, rejected } = validateOps(
+      [op({ op: 'add', path: '/summary', value: 'AI Engineer chuyên sâu về Edge AIoT' })],
+      profile(),
+      MSG_IDS,
+    )
+    expect(valid).toHaveLength(0)
+    expect(rejected[0]!.reason).toMatch(/không có chỗ|sẽ bị mất/)
+  })
+
+  it('CHO QUA `add /basics/summary` — đúng chỗ thì vẫn thêm được', () => {
+    const { valid, rejected } = validateOps(
+      [op({ op: 'add', path: '/basics/summary', value: 'AI Engineer chuyên sâu về Edge AIoT' })],
+      profile(),
+      MSG_IDS,
+    )
+    expect(rejected).toHaveLength(0)
+    expect(valid).toHaveLength(1)
+  })
+
+  it('CHẶN field lạ bên trong một mục', () => {
+    const { valid } = validateOps(
+      [op({ op: 'add', path: '/work/0/salary', value: '20 triệu' })],
+      profile(),
+      MSG_IDS,
+    )
+    expect(valid).toHaveLength(0)
+  })
+
+  it('`add` vào cuối mảng vẫn qua — kiểm đúng phần tử VỪA thêm', () => {
+    const { valid, rejected } = validateOps(
+      [op({ op: 'add', path: '/activities/-', value: { name: 'CLB Tin học', highlights: ['a'] } })],
+      profile(),
+      MSG_IDS,
+    )
+    expect(rejected).toHaveLength(0)
+    expect(valid).toHaveLength(1)
+  })
+
+  it('lý do loại NÊU TÊN chỗ sai để model tự sửa ở lượt hai', () => {
+    const { rejected } = validateOps(
+      [op({ op: 'add', path: '/summary', value: 'x' })],
+      profile(),
+      MSG_IDS,
+    )
+    expect(rejected[0]!.reason).toContain('summary')
+  })
+})
+
+describe('mọi chuỗi HIỂN THỊ của đề xuất đều sạch con trỏ', () => {
+  it('`summary` và `rationale` không lộ đường dẫn JSON', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'add_content', targetPath: '/basics', needsInfo: [] },
+      propose_patch: {
+        // Model đã viết đúng kiểu này ra màn hình thật
+        ops: [
+          op({
+            op: 'add',
+            path: '/basics/summary',
+            value: 'AI Engineer',
+            rationale: 'Thêm phần giới thiệu vào /basics/summary cho hồ sơ đầy đủ hơn',
+          }),
+        ],
+        summary: 'Đã thêm nội dung vào /basics/summary',
+      },
+    })
+    const r = await runChatTurn(deps(g), {
+      message: 'Viết giúp tôi phần giới thiệu',
+      profile: profile(),
+      history: [],
+    })
+
+    expect(r.kind).toBe('patch')
+    if (r.kind !== 'patch') return
+    expect(r.proposal.summary).not.toMatch(/\/basics|\/summary/)
+    expect(r.proposal.ops[0]!.rationale).not.toMatch(/\/basics|\/summary/)
+    // `path` là dữ liệu cho máy, KHÔNG phải chữ cho người — giữ nguyên
+    expect(r.proposal.ops[0]!.path).toBe('/basics/summary')
+  })
+})

@@ -338,6 +338,8 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-53-42b | Không op nào dùng được → nói lỗi cho model rồi thử lại MỘT lần | U | P0 | Mỗi lượt gọi là 5-10 giây người dùng ngồi chờ |
 | TC-53-43b | Người dùng ĐÃ trả lời thì không hỏi lại | U | P0 | Vừa điền form xong mà nhận thêm form nữa thì công họ bỏ ra thành vô ích |
 | TC-53-44b | `value` object có hình dạng ĐÓNG trong grammar | I | **P0** | `additionalProperties: {}` cho model viết `{"$ref": …}`; ba cách sửa bằng prompt đều thất bại 100% (TDD §8.3.10) |
+| TC-53-45b | Op bị Zod LƯỢC BỎ phải bị loại | U | **P0** | `add /summary` được duyệt, báo "đã áp dụng 1 thay đổi", nội dung biến mất. Mất dữ liệu mà báo thành công thì không ai đi tìm (TDD §8.3.11) |
+| TC-53-46b | `summary`/`rationale` không lộ con trỏ | U | P0 | Hai chuỗi này hiện thẳng cho người đọc, cùng lý do với `reason` |
 | TC-51-13 | `recentMessages` trả tin nhắn MỚI nhất | I | **P0** | `ORDER BY created_at LIMIT n` lấy n tin CŨ nhất. Phiên ngắn hơn `limit` thì hai cách giống nhau → chạy đúng cho tới khi phiên dài ra (TDD §8.3.8) |
 | TC-51-14 | Câu VỪA GÕ luôn có trong ngữ cảnh | I | **P0** | Thiếu nó thì `messageIds` thiếu id câu hiện tại → mọi dẫn nguồn tới nó bị coi là bịa |
 | TC-53-23 | `replace` lên field chưa tồn tại bị chặn | U | P0 | RFC 6902 đòi đường dẫn có sẵn |

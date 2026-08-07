@@ -277,6 +277,9 @@ QUY TẮC CỨNG:
   được là tham chiếu như {"$ref": "/activities/0/name"} — hồ sơ không có kiểu
   dữ liệu đó, và op sẽ bị loại.
 - Không thêm field mà hồ sơ không có (ví dụ "period", "duration").
+- Phần giới thiệu bản thân nằm ở "/basics/summary", KHÔNG phải "/summary".
+  Chức danh nằm ở "/basics/headline". Field nào hồ sơ chưa có thì vẫn dùng
+  đúng đường dẫn đó để thêm.
 - Tối đa 20 op. Ưu tiên ít mà đúng.
 - Viết lại nội dung bằng TIẾNG VIỆT tự nhiên, giữ nguyên tên riêng và tên công nghệ.
 
@@ -304,6 +307,7 @@ HARD RULES:
   COMPLETE object using the exact field names of existing elements.
 - "value" must be REAL DATA — never a reference like {"$ref": "/activities/0/name"}.
 - Never add fields the profile does not have (e.g. "period", "duration").
+- The personal summary lives at "/basics/summary", never "/summary".
 - 20 ops maximum. Fewer and correct beats many and sloppy.
 
 "summary" — one sentence on what you proposed.`

@@ -1589,6 +1589,49 @@ rất dễ đọc nhầm. Dấu hiệu phân biệt: **lỗi lặp lại 100% v�
 prompt đổi thế nào** — khi đó đừng viết lại prompt lần thứ tư, hãy đi xem
 grammar đang cho phép cái gì. Prompt là lời khuyên, grammar là luật.
 
+### 8.3.11 Zod LƯỢC BỎ khoá lạ — "đã áp dụng" mà nội dung biến mất
+
+> Phát hiện từ người dùng: *"logs nói trợ lý đã thêm /summary rồi mà sao tôi
+> chưa thấy nó trên UI"*. M5.
+
+Hồ sơ chưa có phần giới thiệu, nên model đoán chỗ và đề xuất:
+
+```
+add /summary  "AI Engineer chuyên sâu về Edge AIoT và MLOps…"
+```
+
+Ba tầng đều cho qua:
+
+| Tầng | Vì sao cho qua |
+|---|---|
+| `pathExists` | `add` được phép tạo field mới |
+| `ProfileSchema.safeParse` | Zod **lược bỏ** khoá lạ chứ không báo lỗi |
+| Áp dụng | ghi thành công, trả `applied: 1` |
+
+Người dùng bấm duyệt, hệ thống báo *"Đã áp dụng 1 thay đổi"*, hồ sơ lưu xong —
+và `summary` **không có trong đó**. CV trống, log nói là xong.
+
+Đây là kiểu hỏng tệ nhất trong cả nhóm §8.3: mất dữ liệu mà báo thành công thì
+không ai đi tìm. Bốn lỗi trước ít nhất còn hiện ra một câu lỗi.
+
+**`safeParse` thành công vẫn chưa đủ.** `wouldBreakProfile` nay kiểm thêm: sau
+khi parse, giá trị có CÒN ở đúng chỗ vừa ghi không.
+
+```
+add /summary        → "Hồ sơ không có chỗ summary — nội dung sẽ bị mất"  (loại)
+add /basics/summary → qua
+add /activities/-   → qua, kiểm đúng phần tử VỪA thêm
+```
+
+Lý do loại nêu tên chỗ sai, nên lượt sửa (§8.3.7) đưa được nó cho model. Prompt
+cũng nói thẳng phần giới thiệu nằm ở `/basics/summary`.
+
+**Bài học.** `safeParse().success` trả lời câu hỏi *"kết quả có hợp lệ không"*,
+KHÔNG phải *"thay đổi của tôi có nằm trong đó không"*. Với schema lược khoá lạ
+— mặc định của Zod — hai câu đó khác nhau, và chỉ câu thứ hai mới là thứ cần
+biết. Cùng dạng với §5.4.2/§5.4.3: hỏi sai câu thì luôn nhận được câu trả lời
+đáng tin mà vô nghĩa.
+
 ### 8.4 F4 — Export PDF
 
 ```
