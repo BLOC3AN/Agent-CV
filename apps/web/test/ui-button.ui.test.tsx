@@ -60,4 +60,31 @@ describe('Button', () => {
       'aria-describedby',
     )
   })
+
+  it('mặc định type là "button"', () => {
+    render(<Button>Bấm tôi</Button>)
+    expect(screen.getByRole('button', { name: 'Bấm tôi' })).toHaveAttribute('type', 'button')
+  })
+
+  it('nút bên trong form không submit form khi bấm (mặc định type="button")', async () => {
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault())
+    render(
+      <form onSubmit={onSubmit}>
+        <Button>Không submit</Button>
+      </form>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Không submit' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('truyền type="submit" tường minh thì vẫn submit form', async () => {
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault())
+    render(
+      <form onSubmit={onSubmit}>
+        <Button type="submit">Gửi form</Button>
+      </form>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Gửi form' }))
+    expect(onSubmit).toHaveBeenCalledOnce()
+  })
 })

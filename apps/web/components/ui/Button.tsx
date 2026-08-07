@@ -14,6 +14,12 @@ import { devWarn } from './devWarn'
  * FRONTEND §8.1: model server không có SLA, nên nút cần AI sẽ có lúc phải tắt.
  * Tắt mà không nói lý do thì người dùng tưởng mình thao tác sai. Prop này là
  * khuyến nghị (spec D7) — thiếu thì cảnh báo ở dev, không chặn.
+ *
+ * ── type mặc định ──
+ * HTML mặc định `<button>` thành `type="submit"`, bẫy lớn cho primitive. Nhúng
+ * nút vào form rồi quên truyền `type="button"` sẽ submit form ngoài ý. Mặc định
+ * ở đây là `type="button"` (ít gây hại), nhưng gọi có thể ghi đè bằng
+ * `type="submit"` hay `type="reset"`.
  */
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -42,6 +48,7 @@ const SIZE: Record<ButtonSize, string> = {
 export function Button({
   variant = 'primary',
   size = 'md',
+  type = 'button',
   disabled,
   disabledReason,
   className = '',
@@ -60,6 +67,7 @@ export function Button({
     <>
       <button
         {...rest}
+        type={type}
         disabled={disabled}
         aria-describedby={showReason ? reasonId : undefined}
         className={[
