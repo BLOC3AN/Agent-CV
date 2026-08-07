@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Card } from '@/components/ui'
 
 /**
  * Home lần đầu — bộ định tuyến ý định. UC-01, PRODUCT §4.
@@ -52,12 +53,12 @@ export function IntentRouter() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-16 sm:py-24">
       <h1 className="text-4xl font-bold tracking-tight">Tạo một CV thật sự hợp với bạn</h1>
-      <p className="mt-4 text-lg text-neutral-600 dark:text-neutral-300">
+      <p className="mt-4 text-lg text-ink-muted">
         Bắt đầu từ chỗ bạn đang đứng. Trợ lý sẽ giúp bạn dựng, soát lại và cải
         thiện CV — dựa trên kinh nghiệm của HR thật, có trích dẫn nguồn.
       </p>
 
-      <h2 className="mt-12 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mt-12 text-sm font-semibold uppercase tracking-wide text-ink-muted">
         Bạn cần giúp gì?
       </h2>
 
@@ -68,7 +69,7 @@ export function IntentRouter() {
       </div>
 
       {/* Nói thẳng trạng thái thay vì để người thử bấm vào ngõ cụt */}
-      <p className="mt-10 text-sm text-neutral-500">
+      <p className="mt-10 text-sm text-ink-muted">
         Bản đang phát triển. Đăng nhập chưa mở — mọi thứ đang chạy trên một tài
         khoản thử.
       </p>
@@ -77,38 +78,39 @@ export function IntentRouter() {
 }
 
 function EntryCard({ entry }: { entry: Entry }) {
-  const cls = [
-    'flex flex-col rounded-xl border p-5 text-left transition',
-    entry.featured
-      ? 'border-sky-400 bg-sky-50/60 hover:border-sky-500 dark:border-sky-700 dark:bg-sky-950/20'
-      : 'border-neutral-200 hover:border-neutral-400 dark:border-neutral-700 dark:hover:border-neutral-500',
-    entry.soon ? 'opacity-70' : '',
-  ].join(' ')
-
-  const body = (
-    <>
-      <span className="font-medium">{entry.title}</span>
-      <span className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{entry.desc}</span>
+  // Featured mượn màu thương hiệu để nổi bật lối vào cho nhóm hoang mang nhất
+  // — đây vẫn là brand emphasis, không phải chữ ký AI (Card variant="ai" dành
+  // riêng cho nội dung do máy đề xuất, spec §5.1).
+  const cardContent = (
+    <Card
+      variant="raised"
+      className={[
+        'h-full transition-colors',
+        entry.featured ? 'border-brand bg-brand-subtle hover:border-brand-hover' : 'hover:border-brand',
+        entry.soon ? 'opacity-70' : '',
+      ].join(' ')}
+    >
+      <p className="text-[15px] font-semibold text-ink">{entry.title}</p>
+      <p className="mt-1 text-[13px] text-ink-muted">{entry.desc}</p>
       {entry.soon && (
-        <span className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-500">
+        <p className="mt-2 text-[13px] font-medium text-warn">
           Sắp có — hiện tại bạn hãy tải CV lên giúp nhé
-        </span>
+        </p>
       )}
-    </>
+    </Card>
   )
 
   // Lối vào chưa dựng xong thì KHÔNG phải là link. Một nút dẫn tới 404 còn tệ
   // hơn không có nút: người bấm vào sẽ nghĩ cả hệ thống hỏng (BR-01.3).
   if (entry.soon) {
-    return (
-      <div className={cls} aria-disabled="true">
-        {body}
-      </div>
-    )
+    return <div aria-disabled="true">{cardContent}</div>
   }
   return (
-    <Link href={entry.href} className={cls}>
-      {body}
+    <Link
+      href={entry.href}
+      className="block focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+    >
+      {cardContent}
     </Link>
   )
 }

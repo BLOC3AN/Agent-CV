@@ -22,13 +22,15 @@ export function Card({
   variant = 'default',
   className = '',
   children,
+  ...rest
 }: {
   variant?: CardVariant
   className?: string
   children: ReactNode
-}) {
+} & Record<`data-${string}`, string | undefined>) {
   return (
     <div
+      {...rest}
       data-variant={variant}
       className={`relative overflow-hidden rounded-lg p-4 ${VARIANT[variant]} ${className}`}
     >

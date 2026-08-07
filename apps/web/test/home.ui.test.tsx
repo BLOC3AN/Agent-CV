@@ -252,3 +252,54 @@ describe('ReturningHome — bố cục mới', () => {
     expect(container.querySelector('[data-tone]')).not.toBeInTheDocument()
   })
 })
+
+describe('IntentRouter và ResumeHome — dùng chung ngôn ngữ thị giác', () => {
+  it('IntentRouter: mỗi lối vào là một thẻ, không phải danh sách link trần', () => {
+    const { container } = render(<IntentRouter />)
+    expect(container.querySelectorAll('[data-variant]').length).toBeGreaterThanOrEqual(
+      ENTRIES.length,
+    )
+  })
+
+  it('IntentRouter: vẫn đủ số lối vào như trước', () => {
+    render(<IntentRouter />)
+    for (const e of ENTRIES) {
+      expect(screen.getByRole('link', { name: new RegExp(e.title) })).toBeInTheDocument()
+    }
+  })
+
+  it('ResumeHome: job đang chạy → thẻ có nút tiếp tục', () => {
+    render(
+      <ResumeHome
+        job={{
+          id: 'job-1',
+          kind: 'parse_cv',
+          status: 'done',
+          createdAt: new Date(),
+          filename: 'cv.pdf',
+          reviewed: false,
+        }}
+      />,
+    )
+    expect(screen.getByRole('link', { name: /Tiếp tục/ })).toHaveAttribute(
+      'href',
+      '/import/job-1/review',
+    )
+  })
+
+  it('ResumeHome: job HỎNG dùng tông danger, không phải tông thường', () => {
+    const { container } = render(
+      <ResumeHome
+        job={{
+          id: 'job-2',
+          kind: 'parse_cv',
+          status: 'failed',
+          createdAt: new Date(),
+          filename: 'cv.pdf',
+          reviewed: undefined,
+        }}
+      />,
+    )
+    expect(container.querySelector('[data-tone="danger"]')).toBeInTheDocument()
+  })
+})
