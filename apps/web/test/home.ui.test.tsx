@@ -74,8 +74,10 @@ describe('Home quay lại (UC-02)', () => {
         greeting="Chào buổi chiều, Hải"
         completeness={profileCompleteness(profile)}
         cv={{ id: 'cv1', title: 'CV Computer Vision Engineer', updatedAt: '2 giờ trước' }}
+        profile={profile}
         nextStep={nextStepFor(profileCompleteness(profile), { cvId: 'cv1', hasAnalysis: false })}
         matches={[]}
+        aiAvailable={true}
         {...over}
       />,
     )
@@ -83,7 +85,10 @@ describe('Home quay lại (UC-02)', () => {
   it('TC-01-02 KHÔNG bắt onboarding lại', () => {
     renderReturning(full())
     expect(screen.queryByText(/Bạn cần giúp gì/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/Tiếp tục chỗ đang dở/i)).toBeInTheDocument()
+    // Điều test này canh giữ là "có lối đi tiếp thẳng vào CV đang dở", không
+    // phải một chuỗi tiêu đề cụ thể — tiêu đề đổi mà lối đi vẫn còn thì test
+    // không được đỏ oan.
+    expect(screen.getByRole('link', { name: /Tiếp tục chỉnh CV/ })).toBeInTheDocument()
   })
 
   it('TC-02-03 bấm vào phần trăm xem được nó GỒM NHỮNG GÌ', async () => {
@@ -92,7 +97,7 @@ describe('Home quay lại (UC-02)', () => {
     renderReturning(p())
 
     expect(screen.queryByText('Học vấn')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Hồ sơ đã đầy đủ/ }))
+    await user.click(screen.getByRole('button', { name: /Gồm những gì/ }))
 
     expect(screen.getByText('Học vấn')).toBeInTheDocument()
     expect(screen.getByText('Kỹ năng')).toBeInTheDocument()
@@ -102,7 +107,7 @@ describe('Home quay lại (UC-02)', () => {
   it('TC-02-04 phần CHƯA xong hiện kèm việc cần làm', async () => {
     const user = userEvent.setup()
     renderReturning(p())
-    await user.click(screen.getByRole('button', { name: /Hồ sơ đã đầy đủ/ }))
+    await user.click(screen.getByRole('button', { name: /Gồm những gì/ }))
     expect(screen.getByText(/Viết vài dòng giới thiệu/)).toBeInTheDocument()
   })
 
@@ -122,8 +127,10 @@ describe('Home quay lại (UC-02)', () => {
         greeting="Chào"
         completeness={profileCompleteness(full())}
         cv={null}
+        profile={null}
         nextStep={null}
         matches={[]}
+        aiAvailable={true}
       />,
     )
     expect(screen.getByText(/đang ổn/)).toBeInTheDocument()
@@ -136,7 +143,9 @@ describe('Home quay lại (UC-02)', () => {
     })
     const a = screen.getByRole('link', { name: /Bosch CV Engineer/ })
     expect(a).toHaveAttribute('href', '/analyze/cv9')
-    expect(screen.getByText('81%')).toBeInTheDocument()
+    // Không còn dấu `%` — điểm khớp không tô màu/định dạng như một ngưỡng
+    // tuyệt đối (TDD §8.2.3), chỉ còn con số trần.
+    expect(screen.getByText('81')).toBeInTheDocument()
   })
 })
 
@@ -164,5 +173,82 @@ describe('Home tiếp tục việc dở dang (UC-03)', () => {
   it('luôn có lối thoát sang cách khác', () => {
     render(<ResumeHome job={job()} />)
     expect(screen.getByRole('link', { name: /file khác/ })).toBeInTheDocument()
+  })
+})
+
+describe('ReturningHome — bố cục mới', () => {
+  const base = {
+    greeting: 'Chào buổi tối, Hải',
+    completeness: profileCompleteness(p()),
+    cv: { id: 'cv-1', title: 'LE THANH HAI', updatedAt: '6 giờ trước' },
+    profile: p(),
+    nextStep: null,
+    matches: [],
+    aiAvailable: true,
+  }
+
+  it('hiện bản CV thu nhỏ — sản phẩm xoay quanh tài liệu, phải thấy nó', () => {
+    const { container } = render(<ReturningHome {...base} />)
+    expect(container.querySelector('[data-variant="thumbnail"]')).toBeInTheDocument()
+  })
+
+  it('không có hồ sơ thì không cố vẽ thumbnail', () => {
+    const { container } = render(<ReturningHome {...base} profile={null} />)
+    expect(container.querySelector('[data-variant="thumbnail"]')).not.toBeInTheDocument()
+  })
+
+  it('gợi ý của trợ lý đi qua AiPanel — mang chữ ký AI', () => {
+    const { container } = render(
+      <ReturningHome
+        {...base}
+        nextStep={{ text: 'Thêm số liệu vào các gạch đầu dòng', cta: 'Cùng tôi sửa', href: '/builder/cv-1' }}
+      />,
+    )
+    expect(container.querySelector('[data-variant="ai"]')).toBeInTheDocument()
+  })
+
+  it('trợ lý chết: khối vẫn còn và nói việc gì vẫn làm được', () => {
+    render(
+      <ReturningHome
+        {...base}
+        aiAvailable={false}
+        nextStep={{ text: 'Thêm số liệu', cta: 'Cùng tôi sửa', href: '/builder/cv-1' }}
+      />,
+    )
+    expect(screen.getByText(/tạm ngưng/)).toBeInTheDocument()
+    expect(screen.getByText(/vẫn sửa CV, đổi mẫu và tải file/)).toBeInTheDocument()
+  })
+
+  it('trợ lý chết: nút "Tiếp tục chỉnh CV" VẪN bấm được — nó không cần AI', () => {
+    render(<ReturningHome {...base} aiAvailable={false} />)
+    expect(screen.getByRole('link', { name: /Tiếp tục chỉnh CV/ })).toBeInTheDocument()
+  })
+
+  it('mỗi dòng đối chiếu có mốc thời gian để phân biệt', () => {
+    render(
+      <ReturningHome
+        {...base}
+        matches={[
+          { jdTitle: 'Junior Full-stack Developer', overall: 44, cvId: 'cv-1', jdId: 'jd-1', when: 'hôm nay' },
+          { jdTitle: 'Backend Developer', overall: 72, cvId: 'cv-1', jdId: 'jd-2', when: '3 ngày trước' },
+        ]}
+      />,
+    )
+    expect(screen.getByText('hôm nay')).toBeInTheDocument()
+    expect(screen.getByText('3 ngày trước')).toBeInTheDocument()
+  })
+
+  it('điểm khớp KHÔNG tô màu — TDD §8.2.3 cấm khẳng định ngưỡng tuyệt đối', () => {
+    const { container } = render(
+      <ReturningHome
+        {...base}
+        matches={[{ jdTitle: 'X', overall: 44, cvId: 'cv-1', jdId: 'jd-1', when: 'hôm nay' }]}
+      />,
+    )
+    // Kiểm bằng data-tone chứ không bằng className: Global Constraints cấm test
+    // bám vào chuỗi class, và một ngày nào đó đổi tên utility sẽ làm test đỏ
+    // mà chẳng có hành vi nào sai. `data-tone` là hợp đồng, class là chi tiết.
+    expect(screen.getByText('44')).toBeInTheDocument()
+    expect(container.querySelector('[data-tone]')).not.toBeInTheDocument()
   })
 })

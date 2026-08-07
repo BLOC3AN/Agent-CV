@@ -2,6 +2,7 @@ import { getPool, JobRepo } from '@hr/db'
 import { profileCompleteness } from '@hr/matching'
 import { ProfileSchema } from '@hr/schema'
 import { decideHome, dedupeMatches, nextStepFor, type HomeJob } from '@/lib/home-state'
+import { aiAvailable } from '@/lib/health'
 import { IntentRouter } from '@/components/home/IntentRouter'
 import { ResumeHome } from '@/components/home/ResumeHome'
 import { ReturningHome, type RecentCv, type RecentMatch } from '@/components/home/ReturningHome'
@@ -27,6 +28,7 @@ interface HomeData {
   matches: RecentMatch[]
   hasAnalysis: boolean
   email: string
+  aiAvailable: boolean
 }
 
 /** Chào theo giờ trong ngày — giờ máy chủ, đủ dùng ở giai đoạn này. */
@@ -67,7 +69,7 @@ async function load(): Promise<HomeData | null> {
   const pool = getPool()
   const jobs = await new JobRepo(pool).listByUser(userId, 10).catch(() => [])
 
-  const [cvRows, profRows, matchRows] = await Promise.all([
+  const [cvRows, profRows, matchRows, aiOk] = await Promise.all([
     pool
       .query<{ id: string; title: string | null; updated_at: Date; data: unknown }>(
         `SELECT c.id, c.title, c.updated_at, p.data
@@ -103,6 +105,10 @@ async function load(): Promise<HomeData | null> {
         [userId],
       )
       .catch(() => ({ rows: [] })),
+    // `aiAvailable()` đã tự có timeout 1.5s và tự lạc quan khi lỗi (lib/health.ts);
+    // `.catch()` ở đây chỉ là lớp phòng thủ thứ hai, cùng kiểu với các query
+    // phía trên — một lỗi bất ngờ ở đây không được phép làm vỡ Home.
+    aiAvailable().catch(() => true),
   ])
 
   const cvRow = cvRows.rows[0]
@@ -132,6 +138,7 @@ async function load(): Promise<HomeData | null> {
     ).slice(0, 3),
     hasAnalysis: matchRows.rows.length > 0,
     email: user.email,
+    aiAvailable: aiOk,
   }
 }
 
@@ -157,11 +164,13 @@ export default async function Home() {
       greeting={greet(displayName(data.email))}
       completeness={profileCompleteness(parsed.data)}
       cv={data.cv}
+      profile={parsed.data}
       nextStep={nextStepFor(profileCompleteness(parsed.data), {
         cvId: data.cv?.id ?? null,
         hasAnalysis: data.hasAnalysis,
       })}
       matches={data.matches}
+      aiAvailable={data.aiAvailable}
     />
   )
 }

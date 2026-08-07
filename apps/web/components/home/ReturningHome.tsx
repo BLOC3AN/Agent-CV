@@ -1,9 +1,12 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import type { Completeness } from '@hr/matching'
+import type { Profile } from '@hr/schema'
 import type { NextStep } from '@/lib/home-state'
+import { Card, Section, Meter } from '@/components/ui'
+import { CvThumbnail } from '@/components/cv/CvThumbnail'
+import { AiPanel } from '@/components/ai/AiPanel'
 
 /**
  * Home quay lại — bảng việc cần làm. UC-02, PRODUCT §6.
@@ -11,21 +14,27 @@ import type { NextStep } from '@/lib/home-state'
  * Câu hỏi ở đây KHÁC Home lần đầu: không phải "bạn cần giúp gì" mà "bạn nên
  * làm gì tiếp". Hỏi lại người quay lại lần thứ năm rằng họ đã có CV chưa là
  * hỏi một câu mà hệ thống đã biết câu trả lời.
+ *
+ * ── Ba mức trọng số, không phải bốn khối bằng nhau ──
+ * Bản trước có bốn khối cùng viền, cùng bo góc, cùng cỡ nhãn — mắt không có
+ * điểm vào. Giờ: thẻ CV là CHÍNH (nền nổi, có thumbnail), gợi ý trợ lý là
+ * THỨ HAI (nền teal), danh sách đối chiếu là PHỤ (dòng trần, không viền).
  */
 
 export interface RecentCv {
   id: string
   title: string
   updatedAt: string
+  headline?: string
 }
 
 export interface RecentMatch {
   jdTitle: string
   overall: number
   cvId: string
-  // `jdId`/`when` phục vụ khử trùng lặp và mốc thời gian ở page.tsx — giao
-  // diện hiển thị hai field này sẽ được dựng lại ở Task 12.
   jdId: string | null
+  /** Mốc tương đối: "hôm nay", "3 ngày trước" — thiếu nó thì hai lần đối
+   *  chiếu cùng một JD trông giống hệt nhau */
   when: string
 }
 
@@ -33,136 +42,122 @@ interface Props {
   greeting: string
   completeness: Completeness
   cv: RecentCv | null
+  profile: Profile | null
   nextStep: NextStep | null
   matches: RecentMatch[]
+  aiAvailable: boolean
 }
 
-export function ReturningHome({ greeting, completeness, cv, nextStep, matches }: Props) {
+export function ReturningHome({
+  greeting,
+  completeness,
+  cv,
+  profile,
+  nextStep,
+  matches,
+  aiAvailable,
+}: Props) {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-2xl font-semibold">{greeting}</h1>
-
-      <CompletenessBar completeness={completeness} />
+    <main className="mx-auto max-w-3xl px-6 py-10">
+      <h1 className="text-[24px] font-semibold text-ink">{greeting}</h1>
 
       {cv && (
-        <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
-            Tiếp tục chỗ đang dở
-          </h2>
-          <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 p-4 dark:border-neutral-700">
+        <Card variant="raised" className="mt-6 p-5">
+          <div className="flex flex-wrap items-start gap-5">
+            {profile && <CvThumbnail profile={profile} width={132} />}
+
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{cv.title}</p>
-              <p className="text-sm text-neutral-500">Sửa {cv.updatedAt}</p>
+              <p className="truncate text-[18px] font-semibold text-ink">{cv.title}</p>
+              {cv.headline && (
+                <p className="truncate text-[13px] text-ink-muted">{cv.headline}</p>
+              )}
+              <p className="mt-0.5 text-[13px] text-ink-subtle">Sửa {cv.updatedAt}</p>
+
+              <Meter
+                className="mt-4"
+                value={completeness.percent}
+                label="Hồ sơ đã đầy đủ"
+                parts={completeness.parts}
+              />
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href={`/builder/${cv.id}`}
+                  className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-[15px] font-medium text-white transition-colors hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                >
+                  Tiếp tục chỉnh CV
+                </Link>
+                <Link
+                  href={`/cv/${cv.id}`}
+                  className="inline-flex items-center rounded-md border border-border-strong bg-surface px-4 py-2 text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                >
+                  Xem CV
+                </Link>
+              </div>
             </div>
-            <Link
-              href={`/builder/${cv.id}`}
-              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
-            >
-              Tiếp tục
-            </Link>
           </div>
-        </section>
+        </Card>
       )}
 
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
-          Việc nên làm tiếp
-        </h2>
+      <div className="mt-6">
         {nextStep ? (
-          <div className="mt-2 rounded-xl border border-neutral-200 p-4 dark:border-neutral-700">
-            <p className="text-sm">{nextStep.text}</p>
-            <Link
-              href={nextStep.href}
-              className="mt-3 inline-block rounded-lg border border-sky-600 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-950/30"
-            >
-              {nextStep.cta}
-            </Link>
-          </div>
+          <AiPanel
+            available={aiAvailable}
+            actions={
+              <Link
+                href={nextStep.href}
+                className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-[13px] font-medium text-white hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                {nextStep.cta}
+              </Link>
+            }
+          >
+            {nextStep.text}
+          </AiPanel>
         ) : (
           /*
            * KHÔNG bịa việc để lấp chỗ trống (BR-02.3). Một việc bịa ra làm
            * người dùng mất tin vào mọi thứ phía trên nó.
            */
-          <p className="mt-2 text-sm text-neutral-500">
+          <p className="text-[13px] text-ink-muted">
             CV của bạn đang ổn — chưa có việc nào cần làm gấp.
           </p>
         )}
-      </section>
+      </div>
 
       {matches.length > 0 && (
-        <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
-            Đối chiếu gần đây
-          </h2>
-          <ul className="mt-2 divide-y divide-neutral-200 rounded-xl border border-neutral-200 dark:divide-neutral-700 dark:border-neutral-700">
+        <Section
+          title="Đối chiếu gần đây"
+          action={
+            <Link href="/cv" className="text-[12px] text-brand hover:text-brand-hover">
+              Xem tất cả
+            </Link>
+          }
+        >
+          <ul className="divide-y divide-border">
             {matches.map((m, i) => (
-              <li key={i}>
+              <li key={m.jdId ?? `x-${i}`}>
                 <Link
                   href={`/analyze/${m.cvId}`}
-                  className="flex items-center justify-between px-4 py-3 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                  className="flex items-center gap-3 py-3 text-[15px] hover:text-brand"
                 >
-                  <span className="truncate">{m.jdTitle}</span>
-                  <span className="ml-3 shrink-0 font-medium tabular-nums">{m.overall}%</span>
+                  <span className="min-w-0 flex-1 truncate text-ink">{m.jdTitle}</span>
+                  <span className="shrink-0 text-[12px] text-ink-subtle">{m.when}</span>
+                  {/*
+                   * KHÔNG tô màu con số — TDD §8.2.3: đo thực tế cho 41 và 41
+                   * là ĐÚNG; thứ có nghĩa là thứ tự tương đối, không phải vạch
+                   * ngưỡng. Tô đỏ 44% là đưa ra một phán quyết mà hệ thống
+                   * chưa đủ cơ sở.
+                   */}
+                  <span className="w-8 shrink-0 text-right font-medium tabular-nums text-ink">
+                    {m.overall}
+                  </span>
                 </Link>
               </li>
             ))}
           </ul>
-        </section>
+        </Section>
       )}
     </main>
-  )
-}
-
-/**
- * Mức đầy đủ hồ sơ — BR-02.1.
- *
- * Bấm vào con số phải xem được nó gồm những gì. Đây là chỗ dễ bịa nhất trong
- * cả sản phẩm, và một con số bịa ở màn hình đầu tiên làm hỏng niềm tin vào mọi
- * thứ phía sau. Không phần trăm nào mà người dùng không tra được nguồn.
- */
-function CompletenessBar({ completeness }: { completeness: Completeness }) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <section className="mt-6">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="w-full rounded-xl border border-neutral-200 p-4 text-left hover:border-neutral-400 dark:border-neutral-700"
-      >
-        <div className="flex items-baseline justify-between">
-          <span className="text-sm text-neutral-600 dark:text-neutral-300">
-            Hồ sơ đã đầy đủ <strong className="tabular-nums">{completeness.percent}%</strong>
-          </span>
-          <span className="text-xs text-neutral-500">{open ? 'Ẩn chi tiết' : 'Gồm những gì?'}</span>
-        </div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
-          <div
-            className="h-full rounded-full bg-sky-600 transition-all"
-            style={{ width: `${completeness.percent}%` }}
-          />
-        </div>
-      </button>
-
-      {open && (
-        <ul className="mt-2 space-y-1 rounded-xl border border-neutral-200 p-4 text-sm dark:border-neutral-700">
-          {completeness.parts.map((p) => (
-            <li key={p.key} className="flex items-baseline gap-2">
-              <span aria-hidden className={p.done ? 'text-emerald-600' : 'text-neutral-400'}>
-                {p.done ? '✓' : '○'}
-              </span>
-              <span className={p.done ? '' : 'text-neutral-600 dark:text-neutral-400'}>
-                {p.label}
-                <span className="ml-1 text-xs text-neutral-500">({p.weight}%)</span>
-              </span>
-              {!p.done && (
-                <span className="ml-auto text-right text-xs text-neutral-500">{p.todo}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   )
 }
