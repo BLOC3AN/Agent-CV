@@ -132,6 +132,22 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-22-06 | Thoát giữa chừng | E | P1 | Rời trang → quay lại vẫn còn nháp, không mất |
 | TC-22-07 | "Để tôi nhập tay" | E | P0 | Hủy nháp, chuyển sang form nhập tay trống |
 
+### 3.1.1 Chia mục & rà soát (UC-22)
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-22-10 | "Languages" trong CV IT → mục kỹ năng | U | **P0** | Khối không nêu tên ngôn ngữ nào → phân loại lại thành `skills` |
+| TC-22-11 | CV có ĐỒNG THỜI hai mục | U | **P0** | "Languages" (tech) và "Language" (English) trong cùng file → tách đúng cả hai |
+| TC-22-12 | Mọi CV ngành IT đều có mục kỹ năng | I | **P0** | CV-01/06/07/10 → `skills` không rỗng |
+| TC-22-13 | Nhãn nhóm không phải kỹ năng | I | P0 | Không trả về `Frameworks`, `Databases` làm tên kỹ năng |
+| TC-22-14 | Kỹ năng gộp một mục để rà soát | U | P1 | 44 kỹ năng → 1 mục, không phải 44 lần bấm |
+| TC-22-15 | Chốt chặn BR-22.1 ở SERVER | I | **P0** | Gọi thẳng `/complete` khi chưa rà soát xong → 409 kèm danh sách còn thiếu |
+| TC-22-16 | Đường dẫn giả không mở khoá được | I | **P0** | `verify` với `/education/99` → 422, không tính vào tiến độ |
+| TC-22-17 | Xác nhận không sinh revision rỗng | U | P1 | "Đúng rồi" không đổi giá trị → không thêm bản ghi vào lịch sử hoàn tác |
+| TC-22-18 | Một job chỉ tạo một CV | I | P1 | Gọi `/complete` hai lần → cùng `cvId`, `created: false` |
+| TC-22-19 | File gốc hết hạn | E | P1 | Sau 48 giờ → cột trái báo rõ, cột phải vẫn rà soát được |
+| TC-22-20 | Mã lỗi dẫn tới hành động cụ thể | E | **P0** | `NO_TEXT_LAYER` → lời mời nhập tay, không phải nút "Thử lại" (BR-71.1) |
+
 ### 3.2 PII (quan trọng nhất)
 
 > Các case TC-PII-1x bổ sung sau khi đo lớp che PII trên 6 CV thật (TDD §15.2.1).

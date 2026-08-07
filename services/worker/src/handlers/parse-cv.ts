@@ -1,6 +1,6 @@
 import {
   Gateway,
-  makeSectionTask,
+  sectionTask,
   redactSections,
   identityFromMap,
   type ParseableSection,
@@ -138,7 +138,8 @@ export function makeParseCvHandler(deps: ParseCvDeps) {
     for (const [i, kind] of available.entries()) {
       await ctx.progress(20 + (i / available.length) * 70, `Đang đọc mục ${kind}`)
 
-      const task = makeSectionTask(kind)
+      // `sectionTask` cache theo loại — dựng lại JSON Schema mỗi lần gọi là phí
+      const task = sectionTask(kind)
       const res = await deps.gateway.run(task, {
         kind,
         text: redacted.sections[kind]!,

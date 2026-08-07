@@ -120,8 +120,54 @@ def segment_cv(text: str) -> list[CvSection]:
     for s in sections:
         s.body = s.body.strip()
         if s.body:
-            out.append(s)
+            out.append(reclassify(s))
     return out
+
+
+# ── Phân loại lại theo NỘI DUNG ────────────────────────────────────────────
+
+# Tên ngôn ngữ và thước đo trình độ — dấu hiệu của mục ngoại ngữ THẬT
+LANG_SIGNALS = re.compile(
+    r"\b(english|vietnamese|japanese|chinese|korean|french|german|spanish"
+    r"|mandarin|cantonese|russian|thai"
+    r"|tiếng\s+(anh|việt|nhật|trung|hàn|pháp|đức|nga)"
+    # Dạng rút gọn hay gặp trong CV Việt: "Anh văn", "Nhật (N2)"
+    r"|(anh|nhật|trung|hàn|pháp|đức)\s*(văn|\(|:)"
+    r"|ielts|toeic|toefl|jlpt|hsk|topik|delf|dele|n[1-5]\b|[abc][12]\b"
+    r"|native|fluent|conversational|intermediate|beginner|proficien"
+    r"|bản ngữ|thành thạo|giao tiếp|cơ bản|khá)\b",
+    re.I,
+)
+
+def reclassify(section: CvSection) -> CvSection:
+    """
+    Sửa lại loại mục khi TIÊU ĐỀ nói một đằng, NỘI DUNG một nẻo.
+
+    Trường hợp bắt buộc phải xử lý: trong CV ngành IT, "Languages" thường là
+    NGÔN NGỮ LẬP TRÌNH, không phải ngoại ngữ. Đo trên CV-07 thật: cả tech stack
+    (811 ký tự — PHP, TypeScript, Laravel, MySQL, Vite…) rơi vào `languages`,
+    và `skills` ra RỖNG. Kỹ năng là trường mà đối chiếu JD phụ thuộc nhất, nên
+    mất nó là mất phần lớn giá trị của sản phẩm.
+
+    CV-07 còn có cả hai mục cùng lúc — "Languages" (tech) và "Language"
+    (English) — nên không thể quyết định bằng tiêu đề, chỉ nội dung mới phân
+    biệt được.
+    """
+    if section.kind != "languages":
+        return section
+
+    body = section.body
+    if LANG_SIGNALS.search(body):
+        return section  # có tên ngôn ngữ / thước đo trình độ → đúng là ngoại ngữ
+
+    # KHÔNG có tên ngôn ngữ nào → không phải mục ngoại ngữ.
+    #
+    # Quy tắc đảo ngược có chủ đích: một mục ngoại ngữ thật LUÔN nêu tên ít
+    # nhất một ngôn ngữ. Nếu tìm dấu hiệu "trông giống tech" thì phải duy trì
+    # một danh sách công nghệ không bao giờ đầy đủ, và mỗi framework mới ra đời
+    # lại là một lần bỏ sót. Nhận diện tên ngôn ngữ thì tập hữu hạn và ổn định.
+    section.kind = "skills"
+    return section
 
 
 def merge_by_kind(sections: list[CvSection]) -> dict[str, str]:

@@ -949,6 +949,49 @@ hỏng không kéo đổ cả CV; và thời gian tổng **không tăng** (26,4s
 ⚠ Còn tồn: CV-10 ra 44 kỹ năng — model tách danh sách kỹ năng quá mịn. Cần
 hậu xử lý gộp/chuẩn hoá ở M3 khi làm skill taxonomy.
 
+### 8.1.2.1 "Languages" trong CV IT là ngôn ngữ LẬP TRÌNH
+
+> Bổ sung sau khi đo chia mục trên 6 CV thật (M2-4).
+
+Chia mục theo tiêu đề chạy tốt cho 5/6 CV. CV-07 hỏng theo kiểu im lặng:
+
+```
+Languages                     ← tiêu đề khớp regex `languages`
+PHP 8.4, TypeScript, ...
+Frameworks
+Laravel 12, Vue 3, ...        ← 811 ký tự tech stack
+...
+Language                      ← mục ngoại ngữ THẬT, cùng file
+English: Good oral, ...
+```
+
+Toàn bộ tech stack rơi vào `languages`, còn `skills` ra **rỗng**. Kỹ năng là
+trường mà đối chiếu JD phụ thuộc nhất — mất nó là mất phần lớn giá trị sản phẩm,
+mà job vẫn báo "thành công".
+
+**Cách sửa: phân loại lại theo NỘI DUNG, không chỉ tiêu đề.** Mục `languages`
+không nêu tên ngôn ngữ nào (English, Tiếng Nhật, IELTS, N2…) thì được chuyển
+thành `skills`.
+
+Quy tắc cố ý viết theo chiều "nhận diện ngôn ngữ" chứ không phải "nhận diện
+công nghệ": tập tên ngôn ngữ là hữu hạn và ổn định, còn danh sách framework thì
+không bao giờ đầy đủ — mỗi thư viện mới ra đời lại là một lần bỏ sót.
+
+### 8.1.2.2 Nhãn nhóm không phải là kỹ năng
+
+Sau khi chia mục đúng, model lại trả về 8 "kỹ năng" chính là 8 **nhãn nhóm**
+(`Languages`, `Frameworks`, `Databases`, `Build Tools`…) thay vì công nghệ bên
+trong. JD hỏi "Laravel", không hỏi "Frameworks" — kết quả đó vô dụng.
+
+Sửa bằng luật riêng cho mục `skills` trong prompt (`EXTRA_RULES` ở
+`parse-section.ts`): nêu rõ nhãn nhóm không phải kỹ năng, kèm ví dụ, và yêu cầu
+bỏ số phiên bản. Sau khi sửa: 52 công nghệ thật, `Laravel 12` → `Laravel`.
+
+**Nguyên tắc rút ra:** hai lỗi trên đều KHÔNG làm job thất bại — job báo
+"thành công" với dữ liệu rỗng hoặc vô nghĩa. Chỉ đo trên CV thật mới thấy.
+Đây là lý do màn hình rà soát (UC-22) là bắt buộc, và là lý do `eval/run.ts`
+(X-3) phải đo `field_accuracy` chứ không chỉ đếm job thành công.
+
 ### 8.1.3 Ba lỗi hạ tầng phát hiện khi chạy thật
 
 Ghi lại vì cả ba đều hỏng âm thầm và đã có test hồi quy:

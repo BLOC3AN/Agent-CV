@@ -16,7 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.extract import _has_type3, extract_pdf, render_pages  # noqa: E402
-from app.segment import heading_kind, merge_by_kind, segment_cv  # noqa: E402
+from app.segment import CvSection, heading_kind, merge_by_kind, reclassify, segment_cv  # noqa: E402
 
 CV_DIR = Path(__file__).resolve().parents[3] / "eval" / "cv"
 
@@ -132,6 +132,51 @@ class TestSegment:
         # "INTERNSHIPS" không khớp từ khoá nào nhưng ALL CAPS → unknown
         assert "work" in merged
         assert "Công ty A" in merged["work"]
+
+
+class TestReclassify:
+    """
+    "Languages" trong CV IT thường là NGÔN NGỮ LẬP TRÌNH.
+
+    Đo trên CV-07 thật: cả tech stack (811 ký tự) rơi vào `languages` và
+    `skills` ra RỖNG. Kỹ năng là trường mà đối chiếu JD phụ thuộc nhất.
+    """
+
+    @pytest.mark.parametrize("body,expected", [
+        # Tech stack — không nêu tên ngôn ngữ nào
+        ("PHP 8.4, TypeScript\nFrameworks\nLaravel 12, Vue 3\nDatabases\nMySQL", "skills"),
+        ("Java, Python, Go", "skills"),
+        ("C++, Rust", "skills"),
+        # Ngoại ngữ thật — luôn nêu tên một ngôn ngữ hoặc thước đo trình độ
+        ("English: Good oral, reading, written communication", "languages"),
+        ("Tiếng Anh: IELTS 6.5\nTiếng Nhật: N3", "languages"),
+        ("Anh văn: khá", "languages"),
+        ("IELTS 7.0", "languages"),
+        ("Japanese (JLPT N2)", "languages"),
+    ])
+    def test_phan_loai_lai_theo_noi_dung(self, body, expected):
+        s = reclassify(CvSection(kind="languages", heading="Languages", body=body))
+        assert s.kind == expected
+
+    def test_khong_dung_toi_muc_khac(self):
+        for kind in ["work", "education", "skills", "projects"]:
+            s = reclassify(CvSection(kind=kind, heading="X", body="Java, Python"))
+            assert s.kind == kind
+
+    def test_cv07_tach_duoc_ca_hai_muc(self):
+        """CV-07 có ĐỒNG THỜI "Languages" (tech) và "Language" (English)."""
+        r = extract_pdf(str(cv("CV-07")))
+        merged = merge_by_kind(segment_cv(r.text))
+        assert "skills" in merged, f"mất mục kỹ năng: {list(merged)}"
+        assert "Laravel" in merged["skills"] or "TypeScript" in merged["skills"]
+        assert "languages" in merged
+        assert "English" in merged["languages"]
+
+    def test_moi_cv_it_deu_co_muc_ky_nang(self):
+        for name in ["CV-01", "CV-06", "CV-07", "CV-10"]:
+            r = extract_pdf(str(cv(name)))
+            merged = merge_by_kind(segment_cv(r.text))
+            assert "skills" in merged, f"{name}: không tách được mục kỹ năng"
 
 
 # ── Render ──────────────────────────────────────────────────────────────────

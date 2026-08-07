@@ -109,6 +109,50 @@ export class ProfileRepo {
     }
   }
 
+  /**
+   * Đánh dấu đã rà soát — UC-22 bước 4.
+   *
+   * Tách khỏi `patch()` vì "Đúng rồi" KHÔNG đổi giá trị nào: model đọc đúng,
+   * user chỉ xác nhận. Ép nó qua `patch()` sẽ sinh một revision rỗng trong lịch
+   * sử undo, và bấm hoàn tác sẽ "hoàn tác" một thao tác không thay đổi gì —
+   * vô nghĩa với người dùng.
+   *
+   * `_meta.verified` là siêu dữ liệu về mức tin cậy, không phải nội dung CV,
+   * nên nó nằm ngoài lịch sử patch một cách có chủ đích.
+   */
+  async verify(
+    profileId: string,
+    paths: string[],
+    verified = true,
+  ): Promise<Profile> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const { rows } = await client.query<{ data: unknown }>(
+        'SELECT data FROM profiles WHERE id = $1 FOR UPDATE',
+        [profileId],
+      )
+      if (rows.length === 0) throw new Error(`Không có profile ${profileId}`)
+
+      const profile = ProfileSchema.parse(rows[0]!.data)
+      const v = { ...profile._meta.verified }
+      for (const p of paths) {
+        if (verified) v[p] = true
+        else delete v[p]
+      }
+      const next: Profile = { ...profile, _meta: { ...profile._meta, verified: v } }
+
+      await client.query('UPDATE profiles SET data = $1 WHERE id = $2', [next, profileId])
+      await client.query('COMMIT')
+      return next
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {})
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
   async revisions(
     profileId: string,
     limit = 50,

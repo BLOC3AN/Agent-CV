@@ -36,6 +36,9 @@
       ],
       "@hr/worker/storage": [
         "../../services/worker/src/storage.ts"
+      ],
+      "@hr/worker/pdfkit": [
+        "../../services/worker/src/pdfkit-client.ts"
       ]
     },
     "lib": [

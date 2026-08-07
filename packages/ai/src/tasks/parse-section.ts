@@ -53,8 +53,50 @@ const LABEL: Record<ParseableSection, { vi: string; en: string }> = {
   languages: { vi: 'ngoại ngữ', en: 'languages' },
 }
 
+/**
+ * Luật riêng cho từng loại mục, thêm vào cuối prompt chung.
+ *
+ * Chỉ thêm khi có bằng chứng model làm sai — prompt dài hơn thì tốn token và
+ * làm loãng các luật quan trọng khác.
+ */
+const EXTRA_RULES: Partial<Record<ParseableSection, { vi: string; en: string }>> = {
+  skills: {
+    // Đo trên CV-07 thật: khối kỹ năng viết theo NHÓM
+    //     Languages
+    //     PHP 8.4, TypeScript, ...
+    //     Frameworks
+    //     Laravel 12, Vue 3, ...
+    // Model trả về 8 "kỹ năng" chính là 8 NHÃN NHÓM, không có công nghệ nào.
+    // Kết quả đó vô dụng cho đối chiếu JD — thứ JD hỏi là "Laravel", không phải
+    // "Frameworks".
+    vi: `
+QUAN TRỌNG — khối kỹ năng thường viết theo nhóm:
+    Ngôn ngữ
+    PHP, TypeScript, Python
+    Framework
+    Laravel, Vue, React
+
+"Ngôn ngữ", "Framework", "Cơ sở dữ liệu", "Công cụ"… là NHÃN NHÓM, KHÔNG phải
+kỹ năng. Chỉ trích các mục nằm BÊN TRONG nhóm: PHP, TypeScript, Python,
+Laravel, Vue, React — mỗi công nghệ là một phần tử riêng.
+Bỏ số phiên bản: "Laravel 12" → "Laravel". Bỏ mô tả trong ngoặc.`,
+    en: `
+IMPORTANT — skill blocks are usually written by category:
+    Languages
+    PHP, TypeScript, Python
+    Frameworks
+    Laravel, Vue, React
+
+"Languages", "Frameworks", "Databases", "Tools"… are CATEGORY LABELS, not
+skills. Extract only the items INSIDE each category: PHP, TypeScript, Python,
+Laravel, Vue, React — one element per technology.
+Drop version numbers: "Laravel 12" → "Laravel". Drop parenthetical notes.`,
+  },
+}
+
 function systemPrompt(kind: ParseableSection, lang: Language): string {
   const label = LABEL[kind][lang]
+  const extra = EXTRA_RULES[kind]?.[lang] ?? ''
   if (lang === 'vi') {
     return `Bạn trích xuất mục "${label}" của một CV thành JSON. Trả về DUY NHẤT object JSON có khoá "items".
 
@@ -67,7 +109,7 @@ Quy tắc:
 - Nếu text không chứa mục nào thuộc loại này, trả {"items": []}.
 
 Nội dung văn xuôi (highlights) viết bằng TIẾNG VIỆT tự nhiên, chuyên nghiệp.
-Nếu gốc là tiếng Anh thì DỊCH nghĩa sang tiếng Việt, không dịch từng từ.`
+Nếu gốc là tiếng Anh thì DỊCH nghĩa sang tiếng Việt, không dịch từng từ.${extra}`
   }
   return `You extract the "${label}" section of a CV into JSON. Return ONLY a JSON object with an "items" key.
 
@@ -77,7 +119,7 @@ Rules:
 - Never infer numbers that are not in the text.
 - Preserve proper nouns, technology names, school and company names verbatim.
 - Each distinct entry in the text is one element of "items". Do not merge two entries.
-- If the text contains no entry of this kind, return {"items": []}.`
+- If the text contains no entry of this kind, return {"items": []}.${extra}`
 }
 
 export interface ParseSectionInput {

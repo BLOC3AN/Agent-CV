@@ -19,6 +19,7 @@
       "@hr/pdf": ["./packages/pdf/src/index.ts"],
       "@hr/worker": ["./services/worker/src/index.ts"],
       "@hr/worker/queues": ["./services/worker/src/queues.ts"],
+      "@hr/worker/pdfkit": ["./services/worker/src/pdfkit-client.ts"],
       "@hr/worker/storage": ["./services/worker/src/storage.ts"],
       "@hr/templates": ["./packages/templates/src/index.ts"]
     }

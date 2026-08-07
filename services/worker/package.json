@@ -21,6 +21,7 @@
     ".": "./src/index.ts",
     "./queues": "./src/queues.ts",
     "./storage": "./src/storage.ts",
-    "./runner": "./src/runner.ts"
+    "./runner": "./src/runner.ts",
+    "./pdfkit": "./src/pdfkit-client.ts"
   }
 }
