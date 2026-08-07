@@ -37,8 +37,8 @@ HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
         r"^(education|academic|qualifications?"
         r"|học vấn|trình độ( học vấn)?|quá trình học tập|bằng cấp)\b", re.I)),
     ("work", re.compile(
-        r"^(work|experience|employment|professional|career"
-        r"|kinh nghiệm( làm việc)?|quá trình công tác)\b", re.I)),
+        r"^(work|experience|employment|professional|career|internships?"
+        r"|kinh nghiệm( làm việc)?|quá trình công tác|thực tập)\b", re.I)),
     ("projects", re.compile(r"^(projects?|portfolio|dự án|sản phẩm|đồ án)\b", re.I)),
     ("skills", re.compile(
         r"^(skills?|technical|technologies|competenc|expertise"
@@ -53,8 +53,44 @@ HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
         r"|hoạt động|tình nguyện|câu lạc bộ|ngoại kho[áa])\b", re.I)),
 ]
 
-BULLET_PREFIX = re.compile(r"^[•▪◦\-–—*·\s]+")
+# Tập ký tự đầu dòng rộng có chủ đích: CV-04 dùng ● (U+25CF), không phải •
+# (U+2022). Bỏ sót một ký tự làm cả mục mất ranh giới mục con.
+BULLETS = "•▪▫◦●○◆◇■□▸▶►‣⁃➢✦✔✓*·"
+BULLET_PREFIX = re.compile(rf"^[{re.escape(BULLETS)}\-–—\s]+")
 TRAILING_COLON = re.compile(r"[:：]\s*$")
+
+# Dòng bắt đầu bằng dấu đầu dòng — KHÔNG bao giờ là tiêu đề mục lạ (xem
+# heading_kind). Gạch ngang phải có khoảng trắng theo sau để không bắt "STK-ENG".
+BULLET_LINE = re.compile(rf"^\s*(?:[{re.escape(BULLETS)}]|[-–—]\s)")
+
+# Tên mục KHÁC — không parse được nhưng vẫn phải tách ra để không lẫn vào mục
+# trước. Danh sách tên mục là tập HỮU HẠN và ổn định; danh sách tên công ty thì
+# không, nên nhận diện theo tên mục (whitelist) chứ không loại theo tên công ty.
+OTHER_SECTION = re.compile(
+    r"^(references?|referees?|interests?|hobbies|publications?|patents?"
+    r"|memberships?|affiliations?|leadership|seminars?|workshops?|conferences?"
+    r"|training|courses?|coursework|research|portfolio|declaration|reference"
+    r"|additional|miscellaneous|personal|contact|misc"
+    r"|người tham chiếu|sở thích|xuất bản|nghiên cứu|liên hệ|cam kết"
+    r"|khoá học|khóa học|đào tạo|thông tin (thêm|khác|cá nhân)|người giới thiệu)\b",
+    re.I,
+)
+
+# Dấu hiệu dòng là TIÊU ĐỀ MỘT CHỖ LÀM (công ty, dự án) chứ không phải tên mục.
+# Kiểm trước OTHER_SECTION để "TRAINING CENTER JSC" không bị hiểu thành mục.
+ENTRY_SIGNALS = re.compile(
+    r"\d"                       # năm, phiên bản, mã số
+    r"|_"                       # STK_ENG
+    r"|[|/@]"
+    r"|\s[–—-]\s"               # "ZALO - VNG CORPORATION"
+    r"|,"
+    r"|\b(corp|corporation|company|co|ltd|inc|jsc|group|holdings?"
+    r"|university|college|school|institute|academy|center|centre"
+    r"|vietnam|viet nam|solutions?|technolog\w*|software|systems?|labs?"
+    r"|studio|agency|bank|hospital|factory|foundation"
+    r"|công ty|cty|tnhh|cổ phần|tập đoàn|nhà máy|trường|đại học)\b",
+    re.I,
+)
 
 
 @dataclass
@@ -70,9 +106,27 @@ class CvSection:
 def heading_kind(line: str) -> SectionKind | None:
     """
     Một dòng là tiêu đề mục khi: ngắn, không kết thúc bằng dấu câu, ít từ,
-    và (khớp từ khoá đã biết HOẶC viết hoa toàn bộ).
+    và (khớp từ khoá đã biết HOẶC là tên mục khác viết hoa toàn bộ).
+
+    ── Vì sao KHÔNG coi mọi dòng VIẾT HOA là tiêu đề ──
+    Luật cũ ("ALL CAPS không khớp từ khoá nào → mục lạ") cắt CV thật ở giữa mục.
+    Đo trên CV-06 (5 chỗ làm):
+
+        EXPERIENCE                  → work,    giữ được chỗ làm thứ nhất
+        STK_ENG – KANEKO SANGYO     → unknown, MẤT chỗ làm thứ ba
+        ZALO - VNG CORPORATION      → unknown, MẤT chỗ làm thứ tư
+        REALTIME ROBOTIC VIETNAM    → unknown, MẤT chỗ làm thứ năm
+
+    Tên công ty trong CV thường VIẾT HOA. Mục `unknown` không có task parse nên
+    bị bỏ hẳn → app chỉ thấy 1 trong 5 chỗ làm.
+
+    Nên đảo lại: dòng viết hoa chỉ mở mục mới khi TÊN NÓ trông như tên mục
+    (OTHER_SECTION). Còn lại coi là thân của mục đang mở. Nhận sai theo hướng này
+    chỉ làm mục hiện tại có thêm nhiễu — prompt đã dặn bỏ nội dung lạ — trong khi
+    nhận sai theo hướng cũ làm MẤT DỮ LIỆU.
     """
-    t = TRAILING_COLON.sub("", BULLET_PREFIX.sub("", line.strip()))
+    raw = line.strip()
+    t = TRAILING_COLON.sub("", BULLET_PREFIX.sub("", raw))
     if len(t) < 3 or len(t) > 46:
         return None
     if re.search(r"[.;,]$", t):
@@ -84,9 +138,17 @@ def heading_kind(line: str) -> SectionKind | None:
         if pattern.match(t):
             return kind
 
-    # ALL CAPS không khớp từ khoá nào → mục lạ, vẫn tách ra để không nuốt mất
+    # Dòng có dấu đầu dòng chỉ là tiêu đề khi khớp từ khoá ở trên. Nếu không,
+    # "• GPA: 7.18/10" thành tiêu đề và cắt mục học vấn làm hai (CV-06).
+    if BULLET_LINE.match(raw):
+        return None
+
     letters = "".join(c for c in t if c.isalpha())
-    if len(letters) >= 3 and letters == letters.upper():
+    if len(letters) < 3 or letters != letters.upper():
+        return None
+    if ENTRY_SIGNALS.search(t):
+        return None
+    if OTHER_SECTION.match(t):
         return "unknown"
     return None
 

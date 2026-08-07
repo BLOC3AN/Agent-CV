@@ -139,12 +139,21 @@ export function makeSectionTask<K extends ParseableSection>(
     name: 'parse_cv_to_profile',
     schema: SCHEMAS[kind] as unknown as z.ZodType<SectionOut<K>, z.ZodTypeDef, unknown>,
     // Mục đơn lẻ nhỏ hơn cả CV rất nhiều
-    budget: { total: 6_000, reserveForOutput: 1_800 },
+    budget: { total: 7_000, reserveForOutput: 2_200 },
     onSchemaFail: 'retry_then_fail',
     maxRetries: 2,
     temperature: 0,
-    maxTokens: 1_800,
-    timeoutMs: 90_000,
+    /*
+     * 2200 chứ không phải 1800: một chỗ làm dài (CV-06 ~1900 ký tự, 5 gạch đầu
+     * dòng) dịch sang tiếng Việt tốn 1.29× token, và JSON còn thêm khoá bao
+     * quanh. Vượt hạn mức khi decode có grammar thì JSON đứt giữa câu →
+     * SCHEMA_INVALID → retry cắt đúng chỗ đó → mất trắng cả khúc.
+     *
+     * Trần trên vẫn cần: `chunkSection` ở worker giữ mỗi lượt ~1800 ký tự.
+     */
+    maxTokens: 2_200,
+    // 2200 token ở ~35 tok/s ≈ 63s, cộng prefill và lúc máy tải nặng → 150s
+    timeoutMs: 150_000,
     buildSections: (input): PromptSection[] => [
       {
         key: 'system',

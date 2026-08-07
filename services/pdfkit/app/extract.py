@@ -27,6 +27,9 @@ GARBLE = re.compile(r"[ˇ˘˙˚˛˜˝ﬁﬂ]|(?<=[a-z])[A-Z]{2}(?=[a-z])")
 MIN_TEXT_CHARS = 200
 ENGINE_DIFF_THRESHOLD = 0.15
 
+# Số dòng ở đầu/cuối mỗi trang được coi là vùng header/footer
+RUNNER_ZONE = 5
+
 
 @dataclass
 class PageBlock:
@@ -53,6 +56,8 @@ class ExtractResult:
     engine_diff: float = 0.0
     fonts: list[str] = field(default_factory=list)
     blocks: list[PageBlock] = field(default_factory=list)
+    # Số dòng header/footer lặp lại đã bỏ — xem strip_page_runners()
+    runners_removed: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -66,6 +71,7 @@ class ExtractResult:
             "garbleCount": self.garble_count,
             "engineDiff": round(self.engine_diff, 4),
             "fonts": self.fonts,
+            "runnersRemoved": self.runners_removed,
             "blocks": [
                 {
                     "page": b.page,
@@ -147,18 +153,124 @@ def _poppler(path: str) -> str:
 
 
 def _norm(s: str) -> str:
+    # Bỏ ký tự rộng-không: CV xuất từ DOCX (CV-04) chèn U+200B sau mỗi dấu đầu
+    # dòng và sau tên công ty. Chúng vô hình nhưng làm lệch mọi so khớp chuỗi ở
+    # bước chia mục và che PII.
+    s = re.sub(r"[​‌‍⁠﻿]", "", s)
     return re.sub(r"[ \t]+", " ", s).strip()
+
+
+# ── Header/footer lặp lại giữa các trang ────────────────────────────────────
+
+
+def _runner_key(line: str) -> str:
+    """
+    Khoá so sánh một dòng giữa các trang: bỏ khoảng trắng, hạ chữ.
+
+    Số bị chuẩn hoá thành '#' CHỈ KHI dòng có chữ, để bắt footer đánh số trang
+    ("Trang 1/3" và "Trang 2/3" là cùng một runner). Dòng toàn số thì giữ nguyên:
+    chuẩn hoá luôn sẽ làm mọi dòng số khớp nhau, và một dòng "2024" nằm ở đầu
+    trang sẽ bị bỏ oan cùng với footer "3".
+    """
+    flat = re.sub(r"\s+", "", line).lower()
+    if re.search(r"[^\W\d_]", flat):
+        return re.sub(r"\d+", "#", flat)
+    return flat
+
+
+def _zone_indexes(lines: list[str], zone: int) -> tuple[set[int], set[int]]:
+    """
+    Chỉ số của `zone` dòng có chữ đầu trang và `zone` dòng có chữ cuối trang.
+
+    Trả về HAI tập riêng, không gộp: một dòng ở cuối trang 1 tình cờ trùng với
+    một dòng ở đầu trang 2 không phải runner, và gộp lại sẽ bỏ oan nó.
+    """
+    idx = [i for i, l in enumerate(lines) if l.strip()]
+    return set(idx[:zone]), set(idx[-zone:])
+
+
+def strip_page_runners(pages: list[str], zone: int = RUNNER_ZONE) -> tuple[str, int]:
+    """
+    Bỏ header/footer LẶP LẠI ở các trang từ trang thứ hai trở đi.
+
+    Vì sao bắt buộc: đo trên CV-06 thật (3 trang), mỗi trang mở đầu bằng khối
+    "LE THANH HAI" + dòng liên hệ. Sau khi ghép trang, khối đó nằm GIỮA mục
+    EXPERIENCE, và vì nó VIẾT HOA TOÀN BỘ nên `segment_cv` coi là tiêu đề mục
+    mới. Kết quả: mục kinh nghiệm bị cắt tại trang 1 — 4 trong 5 chỗ làm rơi vào
+    mục "unknown" và bị bỏ hẳn. 4502/7770 ký tự (58% CV) không tới được model.
+
+    Header còn chèn ngang giữa câu ("...deployed QC stations at" | header |
+    "the Tecomen factory..."), làm hỏng cả câu mà model đọc.
+
+    TRANG ĐẦU giữ nguyên: ở đó khối này KHÔNG phải runner mà là tên + thông tin
+    liên hệ thật — nguồn duy nhất để `identityFromMap` ghép danh tính trở lại.
+    """
+    if len(pages) < 2:
+        return "\n".join(pages), 0
+
+    has_text = [p for p in pages if p.strip()]
+    if len(has_text) < 2:
+        return "\n".join(pages), 0
+
+    head_counts: dict[str, int] = {}
+    foot_counts: dict[str, int] = {}
+    for p in has_text:
+        lines = p.split("\n")
+        head_idx, foot_idx = _zone_indexes(lines, zone)
+        for counts, idx in ((head_counts, head_idx), (foot_counts, foot_idx)):
+            # set(): một dòng lặp hai lần trong cùng trang vẫn chỉ tính một trang
+            for k in {_runner_key(lines[i]) for i in idx}:
+                if len(k) >= 3:
+                    counts[k] = counts.get(k, 0) + 1
+
+    # Quá bán số trang (tối thiểu 2) mới coi là runner. Ngưỡng thấp hơn sẽ bỏ
+    # mất nội dung thật chỉ vì hai trang tình cờ giống nhau một dòng.
+    need = max(2, (len(has_text) + 1) // 2)
+    head_runners = {k for k, c in head_counts.items() if c >= need}
+    foot_runners = {k for k, c in foot_counts.items() if c >= need}
+    if not head_runners and not foot_runners:
+        return "\n".join(pages), 0
+
+    out: list[str] = []
+    removed = 0
+    seen_first = False
+    for p in pages:
+        if not p.strip():
+            out.append(p)
+            continue
+        if not seen_first:
+            seen_first = True
+            out.append(p)
+            continue
+
+        lines = p.split("\n")
+        head_idx, foot_idx = _zone_indexes(lines, zone)
+        kept: list[str] = []
+        for i, l in enumerate(lines):
+            key = _runner_key(l)
+            if (i in head_idx and key in head_runners) or (
+                i in foot_idx and key in foot_runners
+            ):
+                removed += 1
+                continue
+            kept.append(l)
+        out.append("\n".join(kept))
+
+    return "\n".join(out), removed
 
 
 def extract_pdf(path: str) -> ExtractResult:
     doc = fitz.open(path)
     try:
-        mu = "".join(p.get_text() for p in doc)
+        mu_pages = [p.get_text() for p in doc]
+        mu = "\n".join(mu_pages)
         fonts = _fonts(doc)
         pages = doc.page_count
         columns = max((_columns(p) for p in doc), default=1)
 
         pop = _poppler(path)
+        # pdftotext ngắt trang bằng form feed — dùng để nhận ranh giới trang
+        pop_pages = pop.split("\f")
         a, b = _norm(mu), _norm(pop)
 
         flat_a = re.sub(r"\s+", "", a)
@@ -195,7 +307,15 @@ def extract_pdf(path: str) -> ExtractResult:
         # màn hình rà soát (UC-22) cần để tô sáng vùng trên ảnh trang.
         use_poppler = g_pop < g_mu
         engine = "poppler" if use_poppler else "pymupdf"
-        text = b if use_poppler else a
+
+        # Bỏ header/footer lặp lại TRƯỚC khi chia mục — xem strip_page_runners().
+        # KHÔNG thêm vào `reasons`: đây là bước làm sạch bình thường của CV nhiều
+        # trang, không phải dấu hiệu text kém. Thêm vào sẽ đẩy `quality` xuống
+        # "suspect" và đổi nhánh xử lý ở worker.
+        stripped, runners_removed = strip_page_runners(
+            pop_pages if use_poppler else mu_pages
+        )
+        text = _norm(stripped)
 
         blocks: list[PageBlock] = []
         if not use_poppler:
@@ -219,6 +339,7 @@ def extract_pdf(path: str) -> ExtractResult:
             engine_diff=diff,
             fonts=fonts,
             blocks=blocks,
+            runners_removed=runners_removed,
         )
     finally:
         doc.close()

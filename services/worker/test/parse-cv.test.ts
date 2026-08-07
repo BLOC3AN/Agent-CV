@@ -232,6 +232,75 @@ describe('parse_cv', () => {
     expect(sections.find((s) => s.kind === 'education')!.status).toBe('parsed')
   })
 
+  /*
+   * HỒI QUY CV-06 — CV 3 trang, 5 chỗ làm.
+   *
+   * Sau khi sửa bước chia mục, mục kinh nghiệm dài 5300 ký tự. Gửi một lượt thì
+   * output vượt `maxTokens`, JSON đứt giữa câu và MẤT TRẮNG cả mục. Phải chia
+   * thành từng chỗ làm rồi gộp kết quả.
+   */
+  describe('mục dài đi từng khúc — TDD §6.4 bước 5', () => {
+    const LONG_WORK = [
+      'EXPERIENCE',
+      ...['iMESPRO', 'bTaskee', 'KANEKO SANGYO', 'VNG CORPORATION', 'REALTIME ROBOTIC'].flatMap(
+        (org, i) => [
+          org,
+          'AI Engineer',
+          `${2020 + i} – ${2021 + i}`,
+          `• ${'Việc đã làm rất chi tiết và dài dòng ở đây. '.repeat(12)}`,
+        ],
+      ),
+    ].join('\n')
+
+    it('gọi model nhiều lượt, mỗi lượt một chỗ làm', async () => {
+      const h = harness({ segment: { merged: { work: LONG_WORK } } })
+      await h.handler(ctx())
+
+      expect(h.runs.length).toBeGreaterThan(1)
+      for (const r of h.runs) expect(r.input.kind).toBe('work')
+      // Mỗi chỗ làm phải tới được model, không sót chỗ nào
+      const sent = h.runs.map((r) => r.input.text).join('\n')
+      for (const org of ['iMESPRO', 'bTaskee', 'KANEKO', 'VNG', 'REALTIME']) {
+        expect(sent).toContain(org)
+      }
+    })
+
+    it('gộp item của mọi khúc, không chỉ lấy khúc cuối', async () => {
+      const h = harness({ segment: { merged: { work: LONG_WORK } } })
+      const out = await h.handler(ctx())
+
+      const sections = out['sections'] as { kind: string; count: number; chunks?: number }[]
+      const work = sections.find((s) => s.kind === 'work')!
+      expect(work.chunks).toBe(h.runs.length)
+      // Mock trả 1 item mỗi lượt → tổng phải bằng số lượt
+      expect(work.count).toBe(h.runs.length)
+    })
+
+    it('một khúc hỏng chỉ mất khúc đó, phần còn lại vẫn về', async () => {
+      let n = 0
+      const h = harness({
+        segment: { merged: { work: LONG_WORK } },
+        gatewayResult: () => (++n === 2 ? { ok: false, code: 'SCHEMA_INVALID' } : { ok: true, items: ITEMS['work'] }),
+      })
+      const out = await h.handler(ctx())
+
+      const work = (out['sections'] as { kind: string; status: string; count: number; failedChunks?: number }[])
+        .find((s) => s.kind === 'work')!
+      expect(work.status).toBe('parsed')
+      expect(work.failedChunks).toBe(1)
+      expect(work.count).toBe(h.runs.length - 1)
+    })
+
+    it('mục ngắn vẫn chỉ một lượt gọi — không sinh thêm chi phí', async () => {
+      const h = harness()
+      const res = await h.handler(ctx())
+
+      expect(h.runs).toHaveLength(2)
+      const sections = res['sections'] as { chunks?: number }[]
+      expect(sections.every((s) => s.chunks === undefined)).toBe(true)
+    })
+  })
+
   it('MỌI mục hỏng → dừng có kiểm soát, không tạo profile rỗng', async () => {
     const h = harness({ gatewayResult: () => ({ ok: false }) })
 

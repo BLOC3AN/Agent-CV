@@ -15,7 +15,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.extract import _has_type3, extract_pdf, render_pages  # noqa: E402
+from app.extract import (  # noqa: E402
+    _has_type3,
+    extract_pdf,
+    render_pages,
+    strip_page_runners,
+)
 from app.segment import CvSection, heading_kind, merge_by_kind, reclassify, segment_cv  # noqa: E402
 
 CV_DIR = Path(__file__).resolve().parents[3] / "eval" / "cv"
@@ -129,9 +134,147 @@ class TestSegment:
             "WORK EXPERIENCE\nCông ty A\n\nINTERNSHIPS\nCông ty B"
         )
         merged = merge_by_kind(sections)
-        # "INTERNSHIPS" không khớp từ khoá nào nhưng ALL CAPS → unknown
+        # "INTERNSHIPS" cũng là kinh nghiệm → cùng một mục `work`
         assert "work" in merged
         assert "Công ty A" in merged["work"]
+        assert "Công ty B" in merged["work"]
+
+
+class TestTieuDeGiaMao:
+    """
+    Dòng VIẾT HOA trong CV phần lớn là TÊN CÔNG TY, không phải tên mục.
+
+    HỒI QUY CV-06: luật cũ coi mọi dòng ALL CAPS là tiêu đề mục → 4 trong 5 chỗ
+    làm rơi vào mục `unknown` (không có task parse) và bị bỏ hẳn. App chỉ hiện 1
+    kinh nghiệm trên CV có 5.
+    """
+
+    @pytest.mark.parametrize("line", [
+        "STK_ENG – KANEKO SANGYO",       # gạch nối + dấu gạch dưới
+        "ZALO - VNG CORPORATION",        # có "CORPORATION"
+        "REALTIME ROBOTIC VIETNAM",      # có "VIETNAM"
+        "CÔNG TY TNHH ABC",
+        "FPT SOFTWARE",
+        "ĐẠI HỌC BÁCH KHOA",
+        "LE THANH HAI",                  # header trang lặp lại
+        "NGUYEN VAN AN",
+        "• GPA: 7.18/10",                # dòng có dấu đầu dòng
+        "• Aptis ESOL - B1(05/2026)",
+    ])
+    def test_khong_coi_ten_cong_ty_la_tieu_de(self, line):
+        assert heading_kind(line) is None
+
+    @pytest.mark.parametrize("line", [
+        "REFERENCES",
+        "INTERESTS",
+        "PUBLICATIONS",
+        "ADDITIONAL INFORMATION",
+        "SỞ THÍCH",
+    ])
+    def test_van_tach_duoc_muc_la_co_ten_giong_ten_muc(self, line):
+        assert heading_kind(line) == "unknown"
+
+    def test_ten_cong_ty_viet_hoa_o_lai_trong_muc_kinh_nghiem(self):
+        text = (
+            "EXPERIENCE\n"
+            "iMESPRO\nAI Engineer\n2025 – Current\n• Làm A\n"
+            "ZALO - VNG CORPORATION\nAI Engineer\n2022 – 2023\n• Làm B\n"
+            "REALTIME ROBOTIC VIETNAM\nIntern\n2022\n• Làm C\n"
+        )
+        merged = merge_by_kind(segment_cv(text))
+        assert "unknown" not in merged
+        for org in ["iMESPRO", "VNG CORPORATION", "REALTIME ROBOTIC VIETNAM"]:
+            assert org in merged["work"], f"mất {org}"
+
+    def test_cv06_lay_du_ca_nam_cho_lam(self):
+        """
+        HỒI QUY, đo trên CV thật 3 trang: mục kinh nghiệm phải chứa CẢ NĂM
+        chỗ làm, không phải chỉ chỗ đầu tiên (1079 → 5301 ký tự).
+        """
+        r = extract_pdf(str(cv("CV-06")))
+        merged = merge_by_kind(segment_cv(r.text))
+        for org in ["iMESPRO", "bTaskee", "KANEKO", "VNG", "REALTIME"]:
+            assert org in merged["work"], f"mất chỗ làm {org}"
+        # Không còn nội dung nào bị đẩy vào mục không parse được
+        assert "unknown" not in merged
+
+    def test_moi_cv_khong_con_muc_unknown_bi_bo(self):
+        """Nội dung rơi vào `unknown` là nội dung BỊ BỎ — phải bằng 0."""
+        for name in ["CV-01", "CV-02", "CV-04", "CV-06", "CV-07", "CV-10"]:
+            r = extract_pdf(str(cv(name)))
+            if r.quality == "none":
+                continue
+            merged = merge_by_kind(segment_cv(r.text))
+            assert "unknown" not in merged, (
+                f"{name}: {len(merged['unknown'])} ký tự bị bỏ vào mục unknown"
+            )
+
+
+class TestHeaderFooterLapLai:
+    """
+    Header lặp lại ở mỗi trang vừa cắt mục làm hai, vừa chèn ngang giữa câu.
+    TDD §8.1.1.
+    """
+
+    def test_bo_header_tu_trang_hai_tro_di(self):
+        pages = [
+            "NGUYEN VAN A\n0900000000\n\nEDUCATION\nĐH Bách Khoa\n",
+            "NGUYEN VAN A\n0900000000\n\n• Làm việc B\n",
+            "NGUYEN VAN A\n0900000000\n\n• Làm việc C\n",
+        ]
+        text, removed = strip_page_runners(pages)
+        assert removed == 4
+        # Trang đầu GIỮ tên + liên hệ: đó là nguồn duy nhất để ghép danh tính
+        assert text.count("NGUYEN VAN A") == 1
+        assert text.count("0900000000") == 1
+        assert "Làm việc B" in text and "Làm việc C" in text
+
+    def test_footer_co_so_trang_van_bi_nhan_ra(self):
+        pages = [
+            "EDUCATION\nĐH Bách Khoa\nTrang 1/3\n",
+            "• Làm việc B\nTrang 2/3\n",
+            "• Làm việc C\nTrang 3/3\n",
+        ]
+        text, removed = strip_page_runners(pages)
+        assert removed == 2, "số trang khác nhau vẫn phải coi là cùng một footer"
+        assert "Trang 2/3" not in text
+
+    def test_mot_trang_thi_khong_doi(self):
+        pages = ["NGUYEN VAN A\nEDUCATION\nĐH Bách Khoa\n"]
+        text, removed = strip_page_runners(pages)
+        assert removed == 0
+        assert "NGUYEN VAN A" in text
+
+    def test_dong_cuoi_trang_truoc_trung_dong_dau_trang_sau_thi_giu(self):
+        """
+        Đầu trang và cuối trang đếm RIÊNG: một dòng ở cuối trang này tình cờ
+        trùng dòng ở đầu trang kia không phải runner.
+        """
+        # Trang phải đủ dài để vùng đầu và vùng cuối không trùng nhau, và nội
+        # dung giữa phải khác nhau để không thành runner theo cách khác
+        def filler(tag: str) -> str:
+            return "\n".join(f"• {tag} việc thứ {i}" for i in range(8))
+
+        pages = [
+            f"EDUCATION\n{filler('một')}\nPython, Java\n",
+            f"Python, Java\n{filler('hai')}\nSKILLS\n",
+        ]
+        text, removed = strip_page_runners(pages)
+        assert removed == 0
+        assert text.count("Python, Java") == 2
+
+    def test_khong_bo_noi_dung_chi_giong_nhau_o_mot_trang(self):
+        pages = ["A\nEDUCATION\nX\n", "B\n• khác hẳn\n", "C\n• khác nữa\n"]
+        text, removed = strip_page_runners(pages)
+        assert removed == 0
+        assert "EDUCATION" in text
+
+    def test_cv06_bo_dung_header(self):
+        r = extract_pdf(str(cv("CV-06")))
+        assert r.runners_removed > 0
+        assert r.text.count("LE THANH HAI") == 1, (
+            "header lặp 3 lần: giữ trang đầu, bỏ hai trang sau"
+        )
 
 
 class TestReclassify:

@@ -10,6 +10,7 @@ import { assembleProfile, ParsedProfileSchema, type Language } from '@hr/schema'
 import type { JobContext } from '../runner.js'
 import type { PdfkitClient, SegmentResult, TextQuality } from '../pdfkit-client.js'
 import type { Storage } from '../storage.js'
+import { chunkSection } from '../cv-chunk.js'
 
 /**
  * Job `parse_cv` — hiện thực luồng F1 ở TDD §8.1.
@@ -53,7 +54,20 @@ export interface SectionOutcome {
   status: 'parsed' | 'empty' | 'failed'
   count: number
   errorCode?: string
+  /** Số khúc mục này bị chia (1 = không chia) — xem cv-chunk.ts */
+  chunks?: number
+  /** Khúc parse hỏng: mục vẫn có kết quả nhưng THIẾU, màn rà soát phải nói rõ */
+  failedChunks?: number
 }
+
+/**
+ * Mỗi lượt gọi model nhận tối đa bao nhiêu ký tự của một mục.
+ *
+ * Chọn 1800: chỗ làm dài nhất trong bộ CV thật là ~1900 ký tự, và output tiếng
+ * Việt của một khúc cỡ đó vào khoảng 1100–1400 token — vừa trong `maxTokens`
+ * 2200 của `parse_cv_to_profile` mà còn dư chỗ.
+ */
+const SECTION_CHUNK_CHARS = 1_800
 
 /**
  * Cổng chất lượng → nhánh xử lý (TDD §8.1.1).
@@ -136,38 +150,68 @@ export function makeParseCvHandler(deps: ParseCvDeps) {
     const outcomes: SectionOutcome[] = []
 
     for (const [i, kind] of available.entries()) {
-      await ctx.progress(20 + (i / available.length) * 70, `Đang đọc mục ${kind}`)
-
       // `sectionTask` cache theo loại — dựng lại JSON Schema mỗi lần gọi là phí
       const task = sectionTask(kind)
-      const res = await deps.gateway.run(task, {
-        kind,
-        text: redacted.sections[kind]!,
-        outputLanguage: lang,
-      })
 
-      if (!res.ok) {
-        // Một mục hỏng KHÔNG được kéo đổ cả CV — user vẫn có phần còn lại để
-        // rà soát và bổ sung. Đây là lợi ích chính của việc chia mục (§8.1.2).
-        parsed[kind] = []
-        outcomes.push({ kind, status: 'failed', count: 0, errorCode: res.error.code })
-        continue
+      /*
+       * Mục dài đi từng khúc, mỗi khúc một chỗ làm (xem cv-chunk.ts).
+       *
+       * Không chia thì mục kinh nghiệm 5 chỗ làm cần nhiều token output hơn hạn
+       * mức, JSON bị cắt giữa câu, và cả mục hỏng — người dùng đi từ "thấy 1
+       * chỗ làm" xuống "thấy 0 chỗ làm".
+       */
+      const chunks = chunkSection(redacted.sections[kind]!, SECTION_CHUNK_CHARS)
+      const items: unknown[] = []
+      let failedChunks = 0
+      let lastError: string | undefined
+
+      for (const [ci, chunk] of chunks.entries()) {
+        const done = (i + ci / chunks.length) / available.length
+        const label =
+          chunks.length > 1
+            ? `Đang đọc mục ${kind} (phần ${ci + 1}/${chunks.length})`
+            : `Đang đọc mục ${kind}`
+        await ctx.progress(20 + done * 70, label)
+
+        const res = await deps.gateway.run(task, {
+          kind,
+          text: chunk,
+          outputLanguage: lang,
+        })
+
+        if (!res.ok) {
+          // Một khúc hỏng KHÔNG được kéo đổ cả mục, cũng như một mục hỏng không
+          // kéo đổ cả CV — user vẫn có phần còn lại để rà soát và bổ sung.
+          failedChunks++
+          lastError = res.error.code
+          continue
+        }
+
+        // Kiểm lại hình dạng ở ĐÂY, không chỉ tin gateway đã validate.
+        // Nếu một item lệch schema lọt qua, `ParsedProfileSchema.parse` cuối
+        // luồng sẽ ném ZodError thô và giết cả CV — đúng thứ mà việc chia mục
+        // sinh ra để tránh. Kiểm ở đây thì một khúc hỏng chỉ mất chính nó.
+        const check = task.schema.safeParse(res.data)
+        if (!check.success) {
+          failedChunks++
+          lastError = 'SCHEMA_INVALID'
+          continue
+        }
+
+        items.push(...((check.data as { items?: unknown[] }).items ?? []))
       }
 
-      // Kiểm lại hình dạng ở ĐÂY, không chỉ tin gateway đã validate.
-      // Nếu một item lệch schema lọt qua, `ParsedProfileSchema.parse` cuối
-      // luồng sẽ ném ZodError thô và giết cả CV — đúng thứ mà việc chia mục
-      // sinh ra để tránh. Kiểm ở đây thì một mục hỏng chỉ mất chính nó.
-      const check = task.schema.safeParse(res.data)
-      if (!check.success) {
-        parsed[kind] = []
-        outcomes.push({ kind, status: 'failed', count: 0, errorCode: 'SCHEMA_INVALID' })
-        continue
-      }
-
-      const items = (check.data as { items?: unknown[] }).items ?? []
       parsed[kind] = items
-      outcomes.push({ kind, status: items.length ? 'parsed' : 'empty', count: items.length })
+      const status: SectionOutcome['status'] =
+        items.length > 0 ? 'parsed' : failedChunks > 0 ? 'failed' : 'empty'
+      outcomes.push({
+        kind,
+        status,
+        count: items.length,
+        ...(lastError ? { errorCode: lastError } : {}),
+        ...(chunks.length > 1 ? { chunks: chunks.length } : {}),
+        ...(failedChunks > 0 ? { failedChunks } : {}),
+      })
     }
 
     const parsedCount = outcomes.filter((o) => o.status === 'parsed').length
