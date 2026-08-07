@@ -105,6 +105,67 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 
 ---
 
+## 1.5 UC-0x — Lối vào & điều hướng ⭐
+
+Home cũ có đúng một nút "Tải CV lên", giả định người dùng đã có CV và biết mình
+cần sửa gì. Nhóm test này giữ cho bốn lối vào không tách thành bốn sản phẩm, và
+giữ cho mọi con số hiện ra đều tra được nguồn.
+
+### 1.5.1 Chọn Home theo TRẠNG THÁI THẬT
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-01-01 | Chưa có hồ sơ → Home lần đầu | U | **P0** | Hiện bộ định tuyến 4 lối vào |
+| TC-01-02 | Có hồ sơ → Home quay lại | U | **P0** | Không bắt onboarding lại (BR-02.4) |
+| TC-03-01 | Có import dở dang → Home tiếp tục | U | **P0** | Kiểm TRƯỚC hai trạng thái kia. Đóng tab giữa màn rà soát mà bị bắt làm lại là xoá công người dùng (BR-03.1) |
+| TC-03-02 | Job dở > 24 giờ không tính | U | P1 | BR-03.2 |
+| TC-03-03 | Nhiều job dở → lấy job MỚI NHẤT | U | P1 | Không liệt kê hết |
+| TC-03-04 | Job hỏng → nói rõ hỏng gì | U | P0 | Nối UC-71, không im lặng |
+| TC-01-03 | Không nút nào dẫn tới 404 | U | **P0** | BR-01.3 — nút 404 tệ hơn không có nút |
+| TC-01-04 | Nhãn là câu người dùng tự nói | M | P1 | BR-01.2 — không dùng "Đối chiếu JD" |
+
+### 1.5.2 Bốn lối vào, MỘT hồ sơ (BR-01.1)
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-01-10 | Vào cửa "làm từ đầu" rồi đối chiếu JD | I | **P0** | Chạy được, không phải làm lại. Vi phạm là sản phẩm tách thành 4 phần |
+| TC-01-11 | Vào cửa "chẩn đoán" rồi mở trình soạn | I | **P0** | Cùng `profileId`, không tạo hồ sơ thứ hai |
+| TC-01-12 | Mọi lối vào ra cùng một dạng `Profile` | U | P0 | `ProfileSchema` hợp lệ ở cả 4 |
+
+### 1.5.3 Mức đầy đủ hồ sơ phải TRA ĐƯỢC NGUỒN (BR-02.1)
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-02-01 | Hồ sơ rỗng → 0%, hồ sơ đủ → 100% | U | **P0** | Hai đầu mút phải đúng, không thì thang đo vô nghĩa |
+| TC-02-02 | Từng thành phần cộng đúng trọng số | U | **P0** | PRODUCT §6.1 |
+| TC-02-03 | Bấm vào % xem được gồm những gì | E | **P0** | Không phần trăm nào không tra được nguồn |
+| TC-02-04 | Phần còn thiếu được đánh dấu | U | P0 | Biết thiếu gì mới làm tiếp được |
+| TC-02-05 | MỘT việc nên làm tiếp, không phải danh sách | U | P0 | BR-02.2 |
+| TC-02-06 | Không còn gì đáng làm → nói thẳng | U | **P0** | BR-02.3 — bịa việc làm mất tin vào mọi thứ phía trên |
+
+### 1.5.4 Chẩn đoán sức khoẻ CV (UC-04)
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-04-01 | Mỗi thanh nối vào một tiêu chí rubric CÓ THẬT | U | **P0** | BR-04.1 — đã trả giá cho việc đo sai thứ (TDD §8.2) |
+| TC-04-02 | Chấm được KHÔNG cần JD | U | **P0** | `scoreRubric(profile, rubric)` |
+| TC-04-03 | Không rubric nào áp dụng được → nói thẳng | U | **P0** | Không hiện thanh rỗng giả vờ đã đo (BR-04.4 cũ / BR-P.4) |
+| TC-04-04 | Tối đa 3 việc | U | P0 | BR-04.3 — 12 lỗi thì người ta đóng tab |
+| TC-04-05 | Mỗi việc trỏ được vào một chỗ cụ thể | U | **P0** | BR-04.2 — "hãy chuyên nghiệp hơn" là lời khuyên vô dụng |
+| TC-04-06 | CV đã tốt → không bịa việc | U | P0 | Nối BR-02.3 |
+| TC-04-07 | Nêu điểm mạnh trước điểm yếu | M | P1 | BR-04.4 — giọng quyết định người ở lại hay bỏ đi |
+| TC-04-08 | "Sửa cùng trợ lý" mở chat đúng ngữ cảnh | E | P0 | Không bắt gõ lại vấn đề |
+
+### 1.5.5 Luồng có người dẫn (UC-05)
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-05-01 | Một cụm mỗi bước, có nút quay lại | E | P0 | BR-05.1 |
+| TC-05-02 | Lưu sau MỖI bước | I | **P0** | BR-05.3 — bỏ giữa chừng vẫn còn phần đã làm |
+| TC-05-03 | "Chưa đi làm bao giờ" → đổi hướng, không phải lỗi của họ | U | **P0** | BR-05.2. Sinh viên nhìn mục Kinh nghiệm trống sẽ kết luận mình không đủ tư cách rồi bỏ |
+| TC-05-04 | Bỏ giữa chừng → lần sau tiếp đúng bước đó | I | P0 | Nối UC-03 |
+| TC-05-05 | Trợ lý không bịa nội dung CV thay user | U | **P0** | BR-05.4, nối BR-52.1 |
+
 ## 2. UC-1x — Tài khoản
 
 | TC | Mô tả | Loại | Mức | Các bước | Kỳ vọng |

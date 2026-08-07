@@ -63,6 +63,141 @@ UC-3x  CV & xuất file     UC-6x  Knowledge Base
 
 ---
 
+# UC-0x — Lối vào & điều hướng
+
+> Thiết kế và lý do ở [PRODUCT.md](./PRODUCT.md). Nhóm này quyết định người dùng
+> gặp gì ở giây thứ nhất — trước cả khi họ biết sản phẩm làm được gì.
+
+## UC-01 · Chọn lối vào theo tình trạng `P0` ⭐
+
+| | |
+|---|---|
+| **Tác nhân** | UC (chưa có hồ sơ) |
+| **Mục đích** | Người dùng không phải hiểu cấu trúc sản phẩm trước khi dùng được nó |
+
+Home cũ có đúng một nút "Tải CV lên" — giả định người dùng đã có CV và biết
+mình cần sửa gì. Cả hai giả định đều sai với sinh viên và người mới ra trường.
+
+**Luồng chính**
+1. UC vào `/`.
+2. SYS kiểm TRẠNG THÁI THẬT: có hồ sơ chưa, có việc import dở dang không.
+3. Chưa có gì → hiện bộ định tuyến bốn lối vào (PRODUCT §4).
+4. UC bấm lối vào hợp với mình.
+5. SYS ghi nhớ ý định đó và dẫn thẳng tới bước đầu của luồng tương ứng.
+
+**Luồng thay thế**
+- 2a. Có hồ sơ → UC-02 (Home quay lại).
+- 2b. Có import dở dang → UC-03 (tiếp tục chỗ đang dở).
+
+**Quy tắc**
+- BR-01.1 **Bốn lối vào dùng CHUNG một `Profile`.** Chúng là bốn cửa, không phải bốn hệ thống. Vào cửa "làm từ đầu" rồi muốn đối chiếu JD phải dùng được ngay.
+- BR-01.2 Nhãn nút là **câu người dùng tự nói về mình**, không phải tên tính năng. "Đối chiếu JD" là từ của người làm sản phẩm.
+- BR-01.3 Không nút nào dẫn tới màn hình chưa tồn tại. Nút 404 còn tệ hơn không có nút.
+- BR-01.4 Không ép đăng nhập trước khi UC thấy được giá trị (nối UC-12).
+
+---
+
+## UC-02 · Home quay lại `P0` ⭐
+
+| | |
+|---|---|
+| **Tác nhân** | UC (đã có hồ sơ) |
+| **Mục đích** | Trả lời "tôi nên làm gì tiếp", không hỏi lại thứ hệ thống đã biết |
+
+**Luồng chính**
+1. UC vào `/`, SYS thấy đã có hồ sơ.
+2. Hiện: mức đầy đủ hồ sơ, CV đang làm dở, MỘT việc nên làm tiếp, các lần đối chiếu gần đây.
+3. UC bấm "Tiếp tục" → về đúng chỗ đang làm.
+
+**Luồng thay thế**
+- 2a. Không còn việc gì đáng làm → nói thẳng *"CV của bạn đang ổn"*.
+
+**Quy tắc**
+- BR-02.1 **Mức đầy đủ hồ sơ phải TRA ĐƯỢC NGUỒN.** Bấm vào con số hiện đúng bảng tiêu chí và phần còn thiếu. Không phần trăm nào mà người dùng không tra được (PRODUCT §6.1) — cùng chuẩn với BR-52.1.
+- BR-02.2 **MỘT việc nên làm tiếp**, không phải danh sách. Nhiều việc thì không việc nào được làm.
+- BR-02.3 **Không bịa việc để lấp chỗ trống.** Bịa một việc làm mất tin vào mọi thứ phía trên nó.
+- BR-02.4 Không bắt UC làm lại onboarding.
+
+---
+
+## UC-03 · Tiếp tục việc dở dang `P0` ⭐
+
+| | |
+|---|---|
+| **Tác nhân** | UC (có job import chưa xong) |
+| **Mục đích** | Không xoá công người dùng đã bỏ ra |
+
+Người tải CV lên rồi đóng tab giữa màn rà soát đã có `job` nhưng chưa có
+`Profile`. Chiếu Home lần đầu cho họ là bắt bắt đầu lại từ số không.
+
+**Luồng chính**
+1. UC quay lại `/`.
+2. SYS thấy job import ở trạng thái `queued` / `running` / chờ rà soát.
+3. Hiện thẳng: *"Bạn đang đọc CV `<tên file>` — tiếp tục?"* kèm nút về đúng bước dở.
+
+**Luồng thay thế**
+- 2a. Job hỏng → nói rõ hỏng gì và mời thử lại hoặc nhập tay (nối UC-71).
+- 2b. Có NHIỀU job dở → lấy job mới nhất, không liệt kê hết.
+
+**Quy tắc**
+- BR-03.1 Trạng thái này được kiểm TRƯỚC Home lần đầu và Home quay lại.
+- BR-03.2 Job quá cũ (> 24 giờ) không tính là "đang dở" — hiện Home bình thường.
+
+---
+
+## UC-04 · Chẩn đoán sức khoẻ CV `P0` ⭐
+
+| | |
+|---|---|
+| **Tác nhân** | UC, SYS |
+| **Mục đích** | Trả lời "CV tôi dở ở đâu" — câu hỏi thật của nhóm đông nhất |
+
+Đây là nhóm bị bỏ rơi nặng nhất: có CV, nhưng không biết nó dở chỗ nào. Họ
+không cần một Word đẹp hơn.
+
+**Luồng chính**
+1. UC vào bằng lối "Tôi không biết CV mình dở ở đâu", tải CV lên, rà soát xong.
+2. SYS chấm bằng `scoreRubric()` — **không cần JD**.
+3. Hiện các thanh sức khoẻ + tối đa **3 việc nên sửa trước**.
+4. UC chọn *"Sửa cùng trợ lý"* (sang UC-51) hoặc *"Mở trình soạn"*.
+
+**Luồng thay thế**
+- 2a. Không rubric nào áp dụng được → nói thẳng chưa chấm được, KHÔNG hiện thanh rỗng giả vờ đã đo.
+- 3a. CV đã tốt, không có việc nào đáng sửa → nói thẳng, không bịa việc.
+
+**Quy tắc**
+- BR-04.1 **Mỗi thanh đo một tiêu chí rubric CÓ THẬT.** Cấm vẽ thanh bằng số bịa — dự án đã trả giá cho việc đo sai thứ (TDD §8.2).
+- BR-04.2 **Mỗi việc phải TRỎ ĐƯỢC vào một chỗ cụ thể** trong CV; bấm vào là tới đúng chỗ.
+- BR-04.3 Tối đa 3 việc (PRODUCT §5.3).
+- BR-04.4 Nêu điểm mạnh trước điểm yếu. Cùng một sự thật, hai cách nói cho hai kết cục.
+
+---
+
+## UC-05 · Làm CV từ đầu, có người dẫn `P1` ⭐
+
+| | |
+|---|---|
+| **Tác nhân** | UC (chưa có CV), LLM |
+| **Mục đích** | Người chưa từng viết CV không bị bỏ trước một form 30 ô |
+
+**Luồng chính**
+1. UC chọn "Tôi chưa có CV nào".
+2. SYS hỏi **từng cụm một**: bạn đang ở đâu (sinh viên / mới ra trường / đang đi làm / chuyển ngành) → nhắm vị trí nào → đã đi làm chưa.
+3. Sau mỗi bước, SYS **lưu ngay** vào hồ sơ nháp.
+4. Hỏi đủ các cụm → dựng `Profile` → vào trình soạn.
+
+**Luồng thay thế**
+- 3a. UC bỏ giữa chừng → lần sau quay lại tiếp đúng bước đó (nối UC-03).
+- 2a. UC trả lời **"chưa đi làm bao giờ"** → trợ lý ĐỔI HƯỚNG sang Dự án / Học vấn / Kỹ năng và nói rõ vì sao.
+
+**Quy tắc**
+- BR-05.1 **Một cụm mỗi bước**, luôn có nút quay lại.
+- BR-05.2 Chưa có kinh nghiệm KHÔNG được trình bày như một thiếu sót. Với sinh viên, Dự án mới là phần nhà tuyển dụng đọc kỹ.
+- BR-05.3 Lưu sau mỗi bước — người bỏ giữa chừng vẫn còn phần đã làm.
+- BR-05.4 Trợ lý KHÔNG bịa nội dung CV thay người dùng (BR-52.1 vẫn áp dụng).
+
+---
+
 # UC-1x — Tài khoản
 
 ## UC-11 · Đăng nhập / Đăng ký `P0`

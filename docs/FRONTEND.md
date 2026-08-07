@@ -32,12 +32,16 @@ Ba nguyên tắc sản phẩm:
 
 ```
 ┌─ Public ──────────────────────────────────────────────────────────┐
-│ /                    Landing                                      │
+│ /                  ★ HOME — BA màn hình, chọn theo TRẠNG THÁI THẬT │
+│                      · chưa có gì      → bộ định tuyến ý định      │
+│                      · đang dở dang    → tiếp tục việc đang làm    │
+│                      · đã có hồ sơ     → bảng việc cần làm         │
 │ /login               Đăng nhập (Google OAuth · magic link)         │
 └───────────────────────────────────────────────────────────────────┘
 
 ┌─ Onboarding ──────────────────────────────────────────────────────┐
-│ /start               Chọn lối vào: Tải CV lên · Nhập tay           │
+│ /start/guided        Làm CV từ đầu, có người dẫn (UC-05) — CHƯA có │
+│ /import?intent=…     Tải CV lên, mang theo ý định từ Home          │
 │ /import              Tải PDF → tiến trình xử lý                    │
 │ /import/:jobId/review   ★ MÀN HÌNH RÀ SOÁT (bắt buộc)             │
 └───────────────────────────────────────────────────────────────────┘
@@ -62,6 +66,35 @@ Ba nguyên tắc sản phẩm:
 │ /print/:cvId?variant=presentation|ats   ← Playwright render → PDF  │
 └───────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 2.1 Home — ba màn hình, một địa chỉ
+
+Thiết kế và lý do đầy đủ ở [PRODUCT.md](./PRODUCT.md). Tóm tắt phần giao diện:
+
+| Trạng thái | Câu hỏi màn hình trả lời | Thành phần |
+|---|---|---|
+| Chưa có hồ sơ | *"Bạn cần giúp gì?"* | `IntentRouter` — 4 lối vào |
+| Có import dở dang | *"Tiếp tục chỗ đang dở?"* | `ResumeHome` |
+| Đã có hồ sơ | *"Bạn nên làm gì tiếp?"* | `ReturningHome` |
+
+Quyết định nằm ở `lib/home-state.ts` — hàm thuần, kiểm được cả ba nhánh mà
+không cần dựng React hay Postgres. **Không dùng cookie "đã xem onboarding"**:
+cookie nói người dùng đã NHÌN thấy gì, còn thứ cần biết là họ đang ở ĐÂU trong
+công việc của mình.
+
+Hai chỗ dễ sai, đã đo trên máy thật và đã có test hồi quy:
+
+- **Chỉ job `parse_cv` mới là "việc dở dang".** Một job `match_analysis` đã
+  xong (kết quả không có `profileId`) từng làm Home hiện *"Hệ thống đang đọc CV
+  của bạn"* cho một việc chẳng liên quan.
+- **Job HỎNG chỉ chặn người CHƯA có hồ sơ.** Người đã có hồ sơ thì đã đi tiếp;
+  một lần thử hỏng bỏ dở không được giữ họ ở màn hình lỗi suốt 24 giờ.
+
+Con số "Hồ sơ đã đầy đủ N%" tính bằng `profileCompleteness()` và **bấm vào xem
+được nó gồm những gì** (BR-02.1). Không phần trăm nào mà người dùng không tra
+được nguồn.
 
 ---
 
