@@ -23,6 +23,10 @@ export interface RecentMatch {
   jdTitle: string
   overall: number
   cvId: string
+  // `jdId`/`when` phục vụ khử trùng lặp và mốc thời gian ở page.tsx — giao
+  // diện hiển thị hai field này sẽ được dựng lại ở Task 12.
+  jdId: string | null
+  when: string
 }
 
 interface Props {
