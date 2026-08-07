@@ -34,9 +34,11 @@ const OPS: PatchOp[] = [
     path: '/work/0/highlights/0',
     value: 'Xây dựng API NodeJS phục vụ 20 nghìn lượt mỗi ngày',
     rationale: 'Thêm số liệu',
-    grounding: { type: 'user_message' },
+    // `ref` là bắt buộc trong GroundingSchema — một op dẫn nguồn "tin nhắn của
+    // user" mà không nói tin nhắn nào thì đúng bằng không dẫn nguồn.
+    grounding: { type: 'user_message', ref: 'msg-42' },
     kbRefs: [],
-  } as PatchOp,
+  },
 ]
 
 /** Ảnh chụp mốc: trước là bản chưa có số liệu, sau là bản đã có */
