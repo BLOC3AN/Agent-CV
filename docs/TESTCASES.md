@@ -482,6 +482,16 @@ curl -s -X POST http://100.68.50.41:5011/v1/chat/completions \
 
 ---
 
+### 12.1 Constrained decoding có THẬT SỰ hiệu lực
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-INT-10 | Grammar áp dụng cho MỌI task | I | **P0** | Prompt vô nghĩa → output vẫn đúng hình dạng schema. Bắt được ca llama.cpp im lặng bỏ grammar |
+| TC-INT-11 | `pattern` bị lược khỏi grammar | U | **P0** | `stripGrammarHostile` bỏ ở mọi độ sâu, không sửa schema gốc |
+| TC-INT-12 | Validate output KHÔNG bị nới lỏng | U | **P0** | Schema Zod vẫn từ chối đường dẫn sai định dạng |
+
+---
+
 ## 13. Ma trận truy vết
 
 | Use Case | Test case | Số TC |

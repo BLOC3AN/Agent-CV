@@ -358,6 +358,56 @@ run(task, input)
 // ❌ POST :5012 chat text-only          → echo lại prompt (OCR cần ảnh)
 ```
 
+### 5.4.2 Grammar hỏng thì llama.cpp IM LẶNG bỏ qua
+
+> Phát hiện từ log server, không phải từ test. M5.
+
+llama.cpp chuyển JSON Schema thành grammar GBNF để ép model sinh đúng hình
+dạng. Gặp cấu trúc nó không dựng được:
+
+```
+failed to parse grammar
+```
+
+Dòng đó nằm trong **log server**. Về phía gọi: **HTTP 200**, và model sinh tự
+do như thể không có `response_format` nào.
+
+**Thiệt hại đo được.** `JsonPointerSchema` (`z.string().regex(...)`) làm hỏng
+grammar của ba task:
+
+| Task | Nguyên bản | Bỏ `pattern` |
+|---|---|---|
+| `propose_patch` | `{"status":"success",…}` — không có `ops` | `{"ops":[…]}` |
+| `plan_agent_step` | tương tự | `{"intent":…}` |
+| `insight_mining` | tương tự | `{"reason":…}` |
+| `gap_analysis` | đúng (không có JSON Pointer) | đúng |
+
+Nghĩa là **toàn bộ trợ lý chat (M4) đã chạy không có constrained decoding**, và
+mọi test vẫn xanh — model tình cờ tuân theo prompt là đủ để qua. Nó cũng giải
+thích vì sao test "số bịa" lúc đỏ lúc xanh.
+
+**Cách sửa: `stripGrammarHostile`** — lược `pattern` khỏi bản JSON Schema gửi
+làm grammar. Đây KHÔNG phải nhượng bộ:
+
+| | |
+|---|---|
+| `pattern` bảo đảm | "chuỗi trông giống JSON Pointer" |
+| `validateOps` bảo đảm | "đường dẫn TỒN TẠI trong hồ sơ này" |
+
+Ràng buộc thứ hai mạnh hơn hẳn, và đã có sẵn. Đổi ràng buộc yếu lấy toàn bộ
+constrained decoding là món hời. `pattern` vẫn giữ trong schema Zod và vẫn có
+hiệu lực khi validate output cùng khi kiểm dữ liệu vào từ API — chỉ bản dùng
+làm grammar mới bị lược.
+
+**Bảo vệ lâu dài: `grammar.int.test.ts`.** Gửi prompt VÔ NGHĨA ("xin chào") cho
+từng task rồi kiểm output có bị ép về đúng hình dạng không. Prompt vô nghĩa là
+mấu chốt — model không có gợi ý nào từ nội dung, nên nếu output vẫn đúng schema
+thì chỉ có thể do grammar.
+
+**Bài học chung.** Đây là lần thứ N của cùng một dạng hỏng: HTTP 200, không lỗi
+ở đâu, hành vi sai. Với mọi thành phần bên ngoài, câu hỏi phải là *"làm sao tôi
+BIẾT nó đang thật sự làm việc đó"*, không phải *"nó có báo lỗi không"*.
+
 ### 5.4.1 Constrained decoding — BẮT BUỘC cho mọi task có schema
 
 > Bổ sung sau khi hiện thực M0. Đây là phát hiện làm thay đổi thiết kế.

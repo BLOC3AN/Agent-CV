@@ -5,7 +5,13 @@ export * from './policies.js'
 export * as piiPatterns from './patterns.js'
 export * from './pii.js'
 export * from './redact.js'
-export { Gateway, defineTask, extractJson, guardPlaceholders } from './gateway.js'
+export {
+  Gateway,
+  defineTask,
+  extractJson,
+  guardPlaceholders,
+  stripGrammarHostile,
+} from './gateway.js'
 export type { GatewayOptions, CallLogger } from './gateway.js'
 export * from './providers/index.js'
 export * from './tasks/parse-jd.js'

@@ -136,10 +136,12 @@ export class Gateway {
     const key = task.schema as unknown as object
     let s = this.jsonSchemas.get(key)
     if (!s) {
-      s = zodToJsonSchema(task.schema as z.ZodTypeAny, {
-        target: 'jsonSchema7',
-        $refStrategy: 'none',
-      })
+      s = stripGrammarHostile(
+        zodToJsonSchema(task.schema as z.ZodTypeAny, {
+          target: 'jsonSchema7',
+          $refStrategy: 'none',
+        }),
+      )
       this.jsonSchemas.set(key, s)
     }
     return s
@@ -443,6 +445,47 @@ export function guardPlaceholders(sections: PromptSection[], taskName: string): 
       throw new GatewayError('BAD_INPUT', `Task "${taskName}" section "${s.key}" rỗng.`)
     }
   }
+}
+
+/**
+ * Bỏ những từ khoá JSON Schema mà bộ chuyển GBNF của llama.cpp KHÔNG xử lý được.
+ *
+ * ── Vì sao cần ──
+ * llama.cpp chuyển JSON Schema thành grammar GBNF để ép model sinh đúng hình
+ * dạng. Gặp cấu trúc nó không dựng được, nó ghi "failed to parse grammar" vào
+ * LOG SERVER rồi **trả HTTP 200 và sinh tự do**. Phía gọi không nhận được tín
+ * hiệu nào.
+ *
+ * Đo thật trên `JsonPointerSchema` (`z.string().regex(/^(\/[^/~]*...)*$/)`):
+ *
+ *   PatchProposal   → sinh {"status":"success","message":...}  KHÔNG có `ops`
+ *   AgentPlan       → tương tự
+ *   ClarifyRequest  → tương tự
+ *   GapAnalysis     → đúng (schema không có JSON Pointer)
+ *
+ * Nghĩa là TOÀN BỘ trợ lý chat đã chạy không có constrained decoding, và chỉ
+ * hoạt động được nhờ model tình cờ tuân theo prompt. Nó cũng giải thích vì sao
+ * test bịa số lúc đỏ lúc xanh.
+ *
+ * ── Vì sao bỏ `pattern` là đúng, không phải nhượng bộ ──
+ * `pattern` ở đây chỉ nói "chuỗi trông giống JSON Pointer". Nhưng `validateOps`
+ * đã kiểm đường dẫn có TỒN TẠI trong hồ sơ hay không — mạnh hơn hẳn. Đổi một
+ * ràng buộc yếu lấy toàn bộ constrained decoding là món hời.
+ *
+ * `pattern` vẫn giữ nguyên trong schema Zod và vẫn có hiệu lực khi validate
+ * output và khi kiểm dữ liệu vào từ API. Chỉ bản gửi làm grammar mới bị lược.
+ */
+export function stripGrammarHostile(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripGrammarHostile)
+  if (node !== null && typeof node === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      if (k === 'pattern') continue
+      out[k] = stripGrammarHostile(v)
+    }
+    return out
+  }
+  return node
 }
 
 export function extractJson(raw: string): string | null {
