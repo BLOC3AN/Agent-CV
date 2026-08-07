@@ -49,7 +49,7 @@ export function CvThumbnail({
     <div
       aria-hidden="true"
       style={{ width, height: Math.round(width * 1.414) }}
-      className={`overflow-hidden rounded-sm border border-border bg-white ${className}`}
+      className={`overflow-hidden rounded-sm border border-border bg-surface ${className}`}
     >
       <div
         style={{
