@@ -58,11 +58,11 @@ Ba nguyên tắc sản phẩm:
 │ /settings            Tài khoản · ngôn ngữ · quyền riêng tư         │
 └───────────────────────────────────────────────────────────────────┘
 
-┌─ Admin (curator) ─────────────────────────────────────────────────┐
-│ /admin/kb            Nguồn tri thức                                │
-│ /admin/kb/review     Hàng đợi duyệt chunk                          │
-│ /admin/health        Trạng thái model server · metric              │
+┌─ Curator ─────────────────────────────────────────────────────────┐
+│ /kb                  Nguồn tri thức + duyệt chunk (một màn hình)   │
 └───────────────────────────────────────────────────────────────────┘
+  CHƯA CÓ: /admin/kb/review tách riêng · /admin/health (metric model
+  server). Trạng thái model hiện chỉ đọc được ở GET /api/health.
 
 ┌─ Nội bộ (không hiện với user) ────────────────────────────────────┐
 │ /print/:cvId?variant=presentation|ats   ← Playwright render → PDF  │
@@ -407,17 +407,30 @@ Job chạy nền. Đóng tab không mất kết quả — TDD §7.2 bảng `jobs
 
 ### 9.1 Stack
 
-| Lớp | Chọn |
-|---|---|
-| Framework | Next.js 15 App Router · React 19 · TypeScript strict |
-| Style | Tailwind CSS · shadcn/ui (Radix primitives) |
-| Server state | TanStack Query v5 |
-| Editor state | Zustand (Profile draft, undo/redo stack, selection) |
-| Form | React Hook Form + `@hookform/resolvers/zod` — dùng chung schema với backend |
-| Streaming | `EventSource` (SSE) |
-| Kéo thả | `@dnd-kit/core` (sắp xếp section) |
-| i18n | `next-intl` |
-| Xem PDF | `pdf.js` (render ảnh trang cho màn hình rà soát) |
+Cột **Trạng thái** ghi thứ ĐANG chạy, không phải thứ dự kiến — bảng này từng
+liệt kê 6 thư viện chưa hề được cài, và người đọc không có cách nào biết.
+
+| Lớp | Chọn | Trạng thái |
+|---|---|---|
+| Framework | Next.js 15 App Router · React 19 · TypeScript strict | ✅ đang dùng |
+| Style | Tailwind CSS v4 (`@import 'tailwindcss'`, không có file config) | ✅ đang dùng |
+| Component | **Viết tay.** Không có shadcn/ui hay Radix | ✅ quyết định hiện tại |
+| Server state | `fetch` trần trong Server Component + `useEffect` ở client | ✅ đang dùng |
+| Editor state | Zustand — `lib/editor-store.ts` (draft, undo/redo), `lib/chat-store.ts` | ✅ đang dùng |
+| Form | Thẻ `<form>` gốc; kiểm dữ liệu bằng Zod ở route handler | ✅ đang dùng |
+| Streaming | `EventSource` cho job (`/api/jobs/:id/stream`); chat đọc `ReadableStream` bằng tay vì `EventSource` chỉ làm được GET | ✅ đang dùng |
+| Xem PDF | pdfkit render sẵn PNG theo yêu cầu (`/api/imports/:jobId/pages`, 110 dpi), client chỉ hiện `<img>` | ✅ đang dùng |
+| Kéo thả | — | ⛔ chưa có (§10 mô tả thiết kế) |
+| i18n | — | ⛔ chưa có. Chuỗi giao diện đang viết thẳng tiếng Việt |
+
+**Vì sao không có thư viện server-state.** Màn hình nào cũng là Server Component
+đọc thẳng từ repository, phần client chỉ còn vài chỗ polling job. Thêm một tầng
+cache nữa thì phải đồng bộ nó với `editor-store`, mà `editor-store` mới là nguồn
+sự thật của bản nháp.
+
+**Render trang PDF ở server, không phải pdf.js.** Bản rà soát cần ảnh trang gốc
+đúng như pdfkit đọc được — dùng pdf.js ở client là render bằng một engine khác
+với engine đã trích text, và hai bên lệch nhau thì vùng tô sáng trỏ sai chỗ.
 
 ### 9.2 Điểm mấu chốt: **thao tác của user cũng là JSON Patch**
 
@@ -486,17 +499,29 @@ Template chỉ khai báo `path`. Toàn bộ logic sửa nằm trong `Editable`, 
 
 ### 9.5 SSE và stream từng phần
 
-```ts
-// Báo cáo đối chiếu: nhận theo từng sự kiện, không chờ trọn gói
-const es = new EventSource(`/api/match/${id}/stream`)
+Có **hai** đường stream, dùng cơ chế khác nhau vì ràng buộc khác nhau.
 
-es.addEventListener('score',    e => setScore(JSON.parse(e.data)))      // ~2s
-es.addEventListener('gap',      e => upsertGap(JSON.parse(e.data)))     // dần dần
-es.addEventListener('citation', e => attachCitation(JSON.parse(e.data)))
-es.addEventListener('degraded', e => setDegraded(JSON.parse(e.data)))
-es.addEventListener('done',     () => es.close())
-es.onerror = () => { es.close(); fallbackToPolling(id) }   // luôn có đường lui
+**a) Tiến trình job — `EventSource`, GET.** Dùng cho import CV và phân tích JD.
+
+```ts
+// components/import/UploadBox.tsx
+const es = new EventSource(`/api/jobs/${jobId}/stream`)
+
+es.addEventListener('status',   e => setStatus(JSON.parse(e.data)))
+es.addEventListener('progress', e => setPct(JSON.parse(e.data).pct))
+es.addEventListener('done',     e => finish(JSON.parse(e.data).result))
+es.addEventListener('failed',   e => showError(JSON.parse(e.data)))
+es.addEventListener('timeout',  e => reconnect())
+es.onerror = () => {
+  // SSE tự kết nối lại; chỉ báo lỗi khi trình duyệt đã bỏ cuộc hẳn
+  if (es.readyState === EventSource.CLOSED) showError({ code: 'STREAM' })
+}
 ```
+
+**b) Lượt chat — đọc `ReadableStream` bằng tay, POST.** `EventSource` chỉ làm
+được GET, mà một lượt chat phải gửi hồ sơ và câu trả lời qua body. Bộ đọc nằm ở
+`lib/chat-store.ts` (`readSse`), phát `step` cho từng bước của `runChatTurn` —
+`planning`, `answering`, `asking`, `proposing`, `validating` — rồi tới `result`.
 
 ### 9.6 Song ngữ — 3 trục độc lập (TDD §9)
 
@@ -532,32 +557,57 @@ Trên topbar có công tắc `vi | en` — công tắc này đổi **ngôn ngữ
 
 ## 10. Thư viện thành phần
 
+Cây dưới đây là `apps/web/components/` THẬT. Không có thư mục `ui/`: chưa dùng
+shadcn nên chưa có gì để đặt vào đó.
+
 ```
 components/
-├── ui/                     shadcn: Button · Dialog · Sheet · Tooltip …
-├── editor/
-│   ├── Editable.tsx        ★ ô sửa inline theo JSON Pointer
-│   ├── SectionOutline.tsx  mục lục + kéo thả + chỉ báo trạng thái
-│   ├── ThemePicker.tsx     mẫu · màu · font · giãn dòng
-│   └── UndoRedo.tsx
-├── review/
-│   ├── PdfPageViewer.tsx   ảnh trang + tô sáng vùng
-│   └── FieldConfirm.tsx    "Đúng rồi / Sửa lại"
-├── analysis/
-│   ├── ScoreRing.tsx       vòng điểm + breakdown
-│   ├── GapCard.tsx         hỗ trợ skeleton → nội dung streaming
-│   └── CitationBadge.tsx   ★ 📖 có nguồn / ⚡ gợi ý chung
+├── analyze/
+│   ├── JdForm.tsx           dán JD → gửi phân tích
+│   └── ReportView.tsx       ★ điểm + breakdown + gap + trích dẫn, hỗ trợ
+│                              skeleton → nội dung điền dần (§5.1)
 ├── chat/
-│   ├── ChatPanel.tsx       slide-over
-│   ├── ClarifyForm.tsx     ★ form câu hỏi làm rõ
-│   └── PatchReviewModal.tsx ★ diff + checkbox theo grounding
+│   ├── ChatPanel.tsx        slide-over
+│   ├── ClarifyForm.tsx      ★ form câu hỏi làm rõ (§6.1)
+│   └── PatchReviewModal.tsx ★ diff + checkbox theo grounding (§6.2)
+├── diagnose/
+│   └── HealthReport.tsx     chẩn đoán sức khoẻ CV (UC-04)
+├── editor/
+│   ├── BuilderShell.tsx     khung 2 pane của /builder
+│   ├── Editable.tsx         ★ ô sửa inline theo JSON Pointer (§9.4)
+│   ├── RevisionPreview.tsx  xem một mốc trước khi khôi phục (UC-34)
+│   ├── SectionOutline.tsx   mục lục + chỉ báo trạng thái (CHƯA có kéo thả)
+│   ├── ThemePicker.tsx      mẫu · màu
+│   ├── UndoRedo.tsx
+│   └── VersionHistory.tsx   danh sách mốc
+├── guided/
+│   └── GuidedFlow.tsx       luồng có người dẫn (UC-05)
+├── home/
+│   ├── IntentRouter.tsx     Home lần đầu — 4 lối vào (§2.1)
+│   ├── ResumeHome.tsx       Home khi có việc dở dang
+│   └── ReturningHome.tsx    Home khi đã có hồ sơ
+├── import/
+│   └── UploadBox.tsx        tải PDF + theo dõi job qua SSE
+├── kb/
+│   └── KbCurator.tsx        duyệt chunk (UC-61)
+├── nav/
+│   └── TopNav.tsx
+├── review/
+│   ├── OriginalPane.tsx     ★ ảnh trang PDF + tô sáng vùng (thay cho
+│   │                          "PdfPageViewer" ở bản thiết kế cũ)
+│   ├── ReviewList.tsx       ★ từng mục "Đúng rồi / Sửa lại"
+│   └── ReviewShell.tsx      khung 2 cột của màn hình rà soát (§4)
+├── settings/
+│   └── DeleteAccount.tsx
 └── system/
-    ├── DegradeBanner.tsx
-    ├── QueuePosition.tsx
-    └── JobProgress.tsx
+    └── DegradeBanner.tsx    §8.1
 ```
 
-★ = thành phần đặc thù của sản phẩm này, không có sẵn trong thư viện. Đây là những chỗ cần đầu tư thiết kế kỹ nhất.
+★ = thành phần đặc thù của sản phẩm này. Đây là những chỗ cần đầu tư thiết kế kỹ nhất.
+
+**Chưa có, và biết là chưa có:** `QueuePosition` / `JobProgress` (§8.3 — hiện
+tiến trình nằm trong `UploadBox`), và tách `ScoreRing` / `GapCard` /
+`CitationBadge` ra khỏi `ReportView`.
 
 ---
 
