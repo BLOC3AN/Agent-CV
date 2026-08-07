@@ -24,11 +24,15 @@ interface Props {
   onSkip: () => void
 }
 
+function questionKey(q: ClarifyRequest['questions'][number], index: number): string {
+  return `${index}:${q.id}`
+}
+
 export function ClarifyForm({ data, onSubmit, onSkip }: Props) {
   const [values, setValues] = useState<Record<string, string>>({})
 
   const answered = data.request.questions
-    .map((q) => ({ question: q.question, answer: (values[q.id] ?? '').trim() }))
+    .map((q, i) => ({ question: q.question, answer: (values[questionKey(q, i)] ?? '').trim() }))
     .filter((a) => a.answer !== '')
 
   return (
@@ -42,18 +46,21 @@ export function ClarifyForm({ data, onSubmit, onSkip }: Props) {
       <p className="text-sm text-neutral-700 dark:text-neutral-300">{data.request.reason}</p>
 
       <div className="mt-3 space-y-2">
-        {data.request.questions.map((q) => (
-          <label key={q.id} className="block text-sm">
-            <span className="text-neutral-700 dark:text-neutral-300">{q.question}</span>
-            <input
-              type="text"
-              value={values[q.id] ?? ''}
-              onChange={(e) => setValues((v) => ({ ...v, [q.id]: e.target.value }))}
-              placeholder={q.placeholder}
-              className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 dark:border-neutral-600 dark:bg-neutral-800"
-            />
-          </label>
-        ))}
+        {data.request.questions.map((q, i) => {
+          const key = questionKey(q, i)
+          return (
+            <label key={key} className="block text-sm">
+              <span className="text-neutral-700 dark:text-neutral-300">{q.question}</span>
+              <input
+                type="text"
+                value={values[key] ?? ''}
+                onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+                placeholder={q.placeholder}
+                className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 dark:border-neutral-600 dark:bg-neutral-800"
+              />
+            </label>
+          )
+        })}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
