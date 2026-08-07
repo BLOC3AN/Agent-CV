@@ -19,8 +19,46 @@ function joinParts(...parts: (string | undefined | null)[]): string {
 }
 
 /**
+ * Bỏ PII nhưng GIỮ NGUYÊN hình dạng Profile — dùng cho task sinh JSON Patch.
+ *
+ * `stripPII` rút gọn tên key (`work` → `exp`, `highlights` → `h`) để tiết kiệm
+ * token. Điều đó vô hại với task chỉ ĐỌC, nhưng chết người với task phải trả
+ * về JSON Pointer: model viết `/exp[0]/h[0]` theo đúng thứ nó nhìn thấy, và
+ * đường dẫn đó không tồn tại trong hồ sơ thật.
+ *
+ * Đo trên model thật: 3/3 op đều trỏ vào đường dẫn rút gọn → 0 op áp dụng
+ * được → tính năng chat vô dụng, mà không có lỗi nào ở đâu cả.
+ *
+ * Đắt hơn về token, nhưng đó là cái giá để đường dẫn có nghĩa.
+ */
+export function redactKeepShape(profile: Profile): Record<string, unknown> {
+  const { name, email, phone, location, dob, photo, ...safeBasics } = profile.basics
+  void name
+  void email
+  void phone
+  void location
+  void dob
+  void photo
+
+  return {
+    language: profile.language,
+    basics: safeBasics,
+    education: profile.education,
+    work: profile.work,
+    projects: profile.projects,
+    skills: profile.skills,
+    activities: profile.activities,
+    certifications: profile.certifications,
+    languages: profile.languages,
+  }
+}
+
+/**
  * Profile → CompactProfile. Bỏ PII, rút gọn tên key, bỏ field rỗng.
  * TDD §6.5 — mục tiêu giảm ≥35% token.
+ *
+ * CHỈ dùng cho task ĐỌC hồ sơ (gap_analysis, plan_agent_step). Task nào phải
+ * trả về JSON Pointer thì dùng `redactKeepShape`.
  */
 export function stripPII(profile: Profile): CompactProfile {
   return {

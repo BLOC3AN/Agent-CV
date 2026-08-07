@@ -1180,6 +1180,61 @@ và `jd_id`. Cột `profile_snapshot` được dùng đúng mục đích ban đ�
 tại thời điểm tạo, phục vụ đối chiếu "CV này lúc nộp trông thế nào", KHÔNG phải
 nguồn render.
 
+### 8.3.1 Hồ sơ gửi model có HAI dạng, không phải một
+
+> Bổ sung sau khi đo `propose_patch` trên model thật (M4).
+
+`stripPII` rút gọn tên key để tiết kiệm token: `work` → `exp`,
+`highlights` → `h`, `startDate`/`endDate` → `d`. Rẻ hơn ~35% token và vô hại
+với task chỉ ĐỌC hồ sơ.
+
+Nhưng `propose_patch` phải TRẢ VỀ JSON Pointer. Model viết đường dẫn theo đúng
+thứ nó nhìn thấy:
+
+```
+model trả:  /exp[0]/h[0]          ← theo hình dạng rút gọn
+hồ sơ thật: /work/0/highlights/0
+```
+
+Đo trên model thật: **3/3 op đều sai đường dẫn → 0 op áp dụng được**. Không có
+lỗi nào ở đâu cả — model trả JSON hợp lệ, task báo thành công, `validateOps`
+lặng lẽ loại hết, và người dùng thấy "trợ lý không giúp được gì".
+
+**Quy tắc:**
+
+| Task | Dạng hồ sơ | Vì sao |
+|---|---|---|
+| `gap_analysis`, `plan_agent_step` | `stripPII` | chỉ đọc, rẻ token |
+| `propose_patch` | `redactKeepShape` | phải trả JSON Pointer khớp hồ sơ thật |
+
+`redactKeepShape` giữ nguyên tên field, chỉ bỏ các field PII trong `basics`.
+
+### 8.3.2 Model gán SAI nguồn để làm điều bịa ra trông đáng tin
+
+Đo thật: yêu cầu *"thêm số liệu cho ấn tượng hơn"* lên một hồ sơ KHÔNG có con
+số nào, và KHÔNG có câu trả lời nào của người dùng. Model trả về:
+
+```json
+{ "path": "/work/0/highlights/0",
+  "value": "… giảm 30% thời gian xử lý …",
+  "grounding": { "type": "user_message", "ref": "msg-1" } }
+```
+
+Con số bịa ra, và được gán nguồn `user_message` — tức là giao diện sẽ **tick
+sẵn** op đó (UC-53 bước 2). Đây là kiểu hỏng nguy hiểm nhất: nó làm điều bịa
+ra trông như do chính người dùng cung cấp.
+
+**Hai lớp chặn, cả hai đều cần:**
+
+1. **Prompt** — khi không có câu trả lời nào, nói THẲNG rằng
+   `grounding.type="user_message"` là không hợp lệ vì không có messageId nào
+   để dẫn nguồn. Sau khi thêm, model ngừng bịa số trong phép đo lặp lại.
+2. **Code** — `validateOps` kiểm `grounding.ref` có nằm trong tập messageId
+   CÓ THẬT của phiên không. Prompt là gợi ý, code mới là ràng buộc.
+
+Test đo đúng tính chất cần đúng: không phải "model không bao giờ bịa" (model 4B
+sẽ bịa), mà **"số bịa ra không bao giờ tới tay người dùng dưới dạng có nguồn"**.
+
 ### 8.4 F4 — Export PDF
 
 ```

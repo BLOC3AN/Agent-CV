@@ -306,6 +306,25 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-53-07 | Op path sai | I | P0 | Model trả path `/nonexistent/0` → op đó bị bỏ, các op còn lại vẫn áp dụng, báo user |
 | TC-53-08 | Nội dung AI đánh dấu chưa xác nhận | I | P0 | Sau áp dụng, field mới có `_meta.verified = false`, UI hiện dấu ⚪ |
 
+### 7.1.1 Kiểm duyệt op trước khi hiện cho user (M4)
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-53-20 | Chặn chỉ số vượt mảng | U | **P0** | `/work/7` khi chỉ có 1 mục → loại kèm lý do |
+| TC-53-21 | Chặn field bịa ra | U | **P0** | `/work/0/salary` → loại |
+| TC-53-22 | Chặn dẫn nguồn tới tin nhắn KHÔNG có thật | U | **P0** | Nguy hiểm hơn bịa nội dung — UI sẽ tick sẵn op đó |
+| TC-53-23 | `replace` lên field chưa tồn tại bị chặn | U | P0 | RFC 6902 đòi đường dẫn có sẵn |
+| TC-53-24 | `add` với "/-" và field mới được phép | U | P0 | Thêm vào cuối mảng, tạo field mới |
+| TC-53-25 | Lọc TỪNG op, không bỏ cả lô | U | **P0** | Một op hỏng không làm mất các op đúng (UC-53 6a) |
+| TC-53-26 | Đường dẫn model sinh khớp hồ sơ THẬT | I | **P0** | Dùng `redactKeepShape`; `stripPII` làm model viết `/exp[0]/h[0]` |
+| TC-53-27 | Số bịa không lọt qua kiểm duyệt | I | **P0** | Guard chặn dù model gán `grounding: user_message` |
+| TC-53-28 | Duyệt một phần | I | P0 | Tick 2/3 op → `partial`, chỉ 2 op vào hồ sơ |
+| TC-53-29 | Duyệt lại lần hai bị chặn | I | **P0** | 409 — không cho áp chồng |
+| TC-53-30 | Bỏ qua tất cả | I | P0 | `rejected`, hồ sơ không đổi |
+| TC-51-10 | PII không lọt vào prompt chat | U | **P0** | Tên/email/SĐT không xuất hiện trong bất kỳ lượt gọi nào |
+| TC-52-10 | Thiếu thông tin → HỎI, không bịa | U | **P0** | Không gọi `propose_patch` khi chưa có câu trả lời |
+| TC-52-11 | "Tôi không có số liệu" | E | P0 | Luôn có lối thoát; ép điền sẽ dẫn tới bịa số |
+
 ### 7.2 Ngân sách context
 
 | TC | Mô tả | Loại | Mức | Kỳ vọng |

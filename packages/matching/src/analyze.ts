@@ -38,31 +38,39 @@ export interface AnalyzeResult {
 }
 
 /**
- * Trọng số giữa các lớp.
- *
- * `keyword` nặng nhất vì nó là thứ NHÀ TUYỂN DỤNG thật sự quét — kể cả khi
- * lớp semantic thấy CV có năng lực, ATS vẫn loại hồ sơ thiếu từ khoá.
- *
- * `semantic` nhẹ nhất vì khe hở giữa "cùng nghĩa" và "lạc đề" của bge-m3 chỉ
- * rộng 0.04 (xem `semantic.ts`) — độ tin cậy có hạn, không được để nó một mình
- * đẩy điểm lên xuống.
+ * Trọng số của năm thanh. `skills` nặng nhất vì đó là thứ nhà tuyển dụng đọc
+ * đầu tiên, và cũng là thứ ứng viên sửa được nhanh nhất.
  */
-const WEIGHTS = { keyword: 0.5, semantic: 0.2, rubric: 0.3 } as const
+const WEIGHTS = {
+  skills: 0.4,
+  keywords: 0.15,
+  experience: 0.1,
+  education: 0.05,
+  rubric: 0.3,
+} as const
 
 /**
- * 0.3 cho rubric là con số KB đã ghi:
+ * Điểm tổng là trung bình có trọng số của CHÍNH NĂM THANH mà giao diện hiện.
  *
- *   > "Tổng trọng số = 1.0. Điểm rubric chiếm 30% điểm tổng;
- *   >  70% còn lại từ độ khớp JD."
+ * Vì sao không lấy trực tiếp ba lớp: lớp ngữ nghĩa bị tính HAI LẦN. Nó vừa
+ * nâng `skills` (cứu những yêu cầu diễn đạt khác chữ), vừa là một số hạng
+ * riêng. Đo thật trên CV Fullstack + JD-01: bật embedder cho 79 điểm, TẮT
+ * embedder cho 89 — dịch vụ chạy tốt lại làm điểm thấp đi. Người dùng gặp
+ * điểm nhảy tuỳ lúc hạ tầng sống hay chết.
  *
- * HỆ QUẢ phải biết: một CV viết rất tốt nhưng SAI NGÀNH vẫn được khoảng 30
- * điểm — rubric đo chất lượng bản thân CV, không đo độ hợp việc. Đo thật trên
- * một CV dịch vụ khách hàng đối chiếu JD Fullstack: tổng 40, trong đó `skills`
- * bằng 0.
+ * Lớp ngữ nghĩa nay chỉ ảnh hưởng qua `skills`. Nó CHỈ CÓ THỂ nâng, không thể
+ * hạ — đúng vai trò của nó: tìm thêm bằng chứng, không phải một khía cạnh
+ * riêng của hồ sơ.
  *
- * Đây là hành vi ĐÚNG chứ không phải lỗi, nhưng con số 40 dễ đọc thành "tạm
- * hợp". Vì vậy giao diện luôn hiện đủ năm thanh bên cạnh điểm tổng — nhìn
- * `skills: 0` là hiểu ngay.
+ * Lợi ích kèm theo: điểm tổng suy ra được từ các thanh hiện trên màn hình.
+ * User nhìn `skills 0` là hiểu ngay vì sao tổng thấp, không phải tin suông.
+ *
+ * `rubric: 0.3` là con số KB đã ghi:
+ *   > "Điểm rubric chiếm 30% điểm tổng; 70% còn lại từ độ khớp JD."
+ *
+ * HỆ QUẢ phải biết: CV viết rất tốt nhưng SAI NGÀNH vẫn được khoảng 30 điểm —
+ * rubric đo chất lượng bản thân CV, không đo độ hợp việc. Đo thật: CV dịch vụ
+ * khách hàng trên JD Fullstack được 31, `skills` bằng 0.
  */
 
 /** Trung bình có trọng số, BỎ QUA lớp `null` — xem TDD §8.2.1. */
@@ -196,9 +204,15 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
     }),
   )
 
+  const breakdown = buildBreakdown(profile, jd, keyword, semantic, rubric)
+
+  // Lớp nào KHÔNG đo được thì loại khỏi trung bình, không cho 0 cũng không cho
+  // 100 (TDD §8.2.1). JD không nêu từ khoá ATS → thanh đó không tham gia.
   const overall = combine([
-    [keyword.parts.hard, WEIGHTS.keyword],
-    [semantic.score, WEIGHTS.semantic],
+    [breakdown.skills, WEIGHTS.skills],
+    [keyword.parts.ats === null ? null : breakdown.keywords, WEIGHTS.keywords],
+    [breakdown.experience, WEIGHTS.experience],
+    [breakdown.education, WEIGHTS.education],
     [rubric.score, WEIGHTS.rubric],
   ])
 
@@ -267,7 +281,7 @@ export async function analyze(input: AnalyzeInput): Promise<AnalyzeResult> {
 
   const match: MatchResult = {
     overall,
-    breakdown: buildBreakdown(profile, jd, keyword, semantic, rubric),
+    breakdown,
     matched,
     gaps,
     missingAtsKeywords: keyword.missingAtsKeywords,

@@ -279,7 +279,13 @@ export class Gateway {
       breaker.markAttempt()
 
       // ── Bước 3: dựng prompt + ép ngân sách ───────────────────────────
-      const sections = await task.buildSections(input)
+      // Bỏ section RỖNG trước mọi bước sau.
+      //
+      // `buildSections` hay dựng section theo điều kiện — không có đoạn tri
+      // thức KB, chưa có câu trả lời làm rõ — và trả về chuỗi rỗng. Một section
+      // rỗng không mang thông tin nào, nhưng vẫn thành một message trống gửi
+      // tới model và làm guard placeholder báo động nhầm.
+      const sections = (await task.buildSections(input)).filter((s) => s.content.trim() !== '')
       guardPlaceholders(sections, task.name)
       this.guardPII(sections, task.name)
 
@@ -429,9 +435,8 @@ export function guardPlaceholders(sections: PromptSection[], taskName: string): 
           'Payload KHÔNG được gửi.',
       )
     }
-    // Chỉ chặn RỖNG HẲN. Từng thử ngưỡng "dưới 10 ký tự" nhưng nó chặn cả
-    // đầu vào ngắn hợp lệ — một tin nhắn chat "sửa giúp em" chỉ có 11 ký tự.
-    // Suy đoán quá tay ở guard còn tệ hơn không có guard: nó chặn việc thật.
+    // Section rỗng đã bị lọc trước khi tới đây (xem `run`), nên còn sót lại
+    // nghĩa là ai đó gọi thẳng hàm này — vẫn chặn cho chắc.
     if (s.role === 'user' && s.content.trim() === '') {
       throw new GatewayError('BAD_INPUT', `Task "${taskName}" section "${s.key}" rỗng.`)
     }

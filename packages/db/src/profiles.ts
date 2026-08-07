@@ -1,4 +1,5 @@
 import type { Pool } from 'pg'
+import { jsonb } from './pool.js'
 import { ProfileSchema, type Profile, type PatchOp } from '@hr/schema'
 import {
   applyProfilePatch,
@@ -33,7 +34,7 @@ export class ProfileRepo {
     const { rows } = await this.pool.query<{ id: string }>(
       `INSERT INTO profiles (user_id, data, schema_version, language)
        VALUES ($1, $2, $3, $4) RETURNING id`,
-      [userId, parsed, parsed.schemaVersion, parsed.language],
+      [userId, jsonb(parsed), parsed.schemaVersion, parsed.language],
     )
     return { id: rows[0]!.id, profile: parsed }
   }
@@ -84,14 +85,14 @@ export class ProfileRepo {
           : markUnverified(res.profile, res.applied)
 
       await client.query('UPDATE profiles SET data = $1, language = $2 WHERE id = $3', [
-        marked,
+        jsonb(marked),
         marked.language,
         profileId,
       ])
       const rev = await client.query<{ id: string }>(
         `INSERT INTO profile_revisions (profile_id, patch, inverse, author, message_id)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [profileId, JSON.stringify(res.applied), JSON.stringify(res.inverse), author, messageId ?? null],
+        [profileId, jsonb(res.applied), jsonb(res.inverse), author, messageId ?? null],
       )
       await client.query('COMMIT')
 
@@ -142,7 +143,7 @@ export class ProfileRepo {
       }
       const next: Profile = { ...profile, _meta: { ...profile._meta, verified: v } }
 
-      await client.query('UPDATE profiles SET data = $1 WHERE id = $2', [next, profileId])
+      await client.query('UPDATE profiles SET data = $1 WHERE id = $2', [jsonb(next), profileId])
       await client.query('COMMIT')
       return next
     } catch (err) {
@@ -191,7 +192,7 @@ export class ProfileRepo {
         [profileId],
       )
       const restored = replay(ProfileSchema.parse(cur.rows[0]!.data), [rows[0]!.inverse])
-      await client.query('UPDATE profiles SET data = $1 WHERE id = $2', [restored, profileId])
+      await client.query('UPDATE profiles SET data = $1 WHERE id = $2', [jsonb(restored), profileId])
       await client.query('DELETE FROM profile_revisions WHERE id = $1', [rows[0]!.id])
       await client.query('COMMIT')
       return restored
@@ -221,7 +222,7 @@ export class ProfileRepo {
         ProfileSchema.parse(cur.rows[0]!.data),
         rows.map((r) => r.inverse),
       )
-      await client.query('UPDATE profiles SET data = $1 WHERE id = $2', [restored, profileId])
+      await client.query('UPDATE profiles SET data = $1 WHERE id = $2', [jsonb(restored), profileId])
       await client.query('DELETE FROM profile_revisions WHERE profile_id = $1 AND id >= $2', [
         profileId,
         revisionId,

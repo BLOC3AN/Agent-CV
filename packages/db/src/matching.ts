@@ -1,5 +1,6 @@
 import type { Pool } from 'pg'
 import { ProfileSchema, type JDRequirements, type MatchResult, type Profile } from '@hr/schema'
+import { jsonb } from './pool.js'
 
 /**
  * Repository cho JD, kết quả đối chiếu, và bản CV theo JD — TDD §8.2, §8.5.
@@ -36,7 +37,7 @@ export class MatchRepo {
         input.rawText,
         input.sourceUrl ?? null,
         input.language ?? req?.language ?? 'vi',
-        req,
+        jsonb(req),
         req?.roleFamily ?? null,
         req?.seniority ?? null,
       ],
@@ -74,7 +75,7 @@ export class MatchRepo {
       `UPDATE job_descriptions
           SET requirements = $2, role_family = $3, seniority = $4, language = $5
         WHERE id = $1`,
-      [id, req, req.roleFamily, req.seniority, req.language],
+      [id, jsonb(req), req.roleFamily, req.seniority, req.language],
     )
   }
 
@@ -133,7 +134,7 @@ export class MatchRepo {
       const prof = await client.query<{ id: string }>(
         `INSERT INTO profiles (user_id, data, schema_version, language)
          VALUES ($1, $2, 1, $3) RETURNING id`,
-        [s.user_id, s.data, s.language],
+        [s.user_id, jsonb(s.data), s.language],
       )
       const profileId = prof.rows[0]!.id
 
@@ -145,10 +146,10 @@ export class MatchRepo {
         [
           s.user_id,
           profileId,
-          s.data,
+          jsonb(s.data),
           s.template_id,
-          s.theme,
-          s.layout,
+          jsonb(s.theme),
+          jsonb(s.layout),
           input.jdId,
           s.language,
           input.title,
@@ -222,17 +223,14 @@ export class MatchRepo {
         input.cvId,
         input.jdId,
         input.revisionId,
-        {
+        jsonb({
           overall: result.overall,
           breakdown: result.breakdown,
           missingAtsKeywords: result.missingAtsKeywords,
           degradedReason: result.degradedReason,
-        },
-        // JSON.stringify BẮT BUỘC cho MẢNG: driver `pg` tự chuyển object thành
-        // JSON nhưng biến mảng thành mảng POSTGRES (`{...}`), và cột jsonb từ
-        // chối cú pháp đó — "invalid input syntax for type json".
-        JSON.stringify(result.matched),
-        JSON.stringify(result.gaps),
+        }),
+        jsonb(result.matched),
+        jsonb(result.gaps),
         result.degraded,
         input.modelUsed ?? null,
       ],
