@@ -261,7 +261,11 @@ export class MatchRepo {
       matched_count: string
       gaps: { requirement: string; severity: string; reason: string }[]
     }>(
-      `SELECT j.title AS jd_title,
+      // `job_descriptions` không có cột `title`; tên tin nằm trong `requirements`.
+      // Chỗ gọi bọc `.catch(() => null)` nên viết sai ở đây IM LẶNG hoàn toàn:
+      // trợ lý tưởng là chưa có kết quả đối chiếu nào và trả lời chung chung,
+      // thay vì chỉ đúng chỗ yếu (BR-56.2).
+      `SELECT j.requirements->>'title' AS jd_title,
               m.score,
               jsonb_array_length(m.matched) AS matched_count,
               m.gaps

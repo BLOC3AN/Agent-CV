@@ -1818,6 +1818,41 @@ vì sao.
 **Bài học.** Hệ thống biết chính xác nó vừa loại gì. Không kể ra là tự bịt mắt
 mình — và mọi lỗi loại này sẽ tốn đúng một lần dựng lại hiện trường bằng tay.
 
+### 8.3.14 `catch(() => null)` biến lỗi SQL thành "chưa có dữ liệu"
+
+> Phát hiện từ người dùng: trang `/cv` nổ 500. M5.
+
+`latestForProfile` viết `SELECT j.title …`, mà `job_descriptions` **không có
+cột `title`** — tên tin nằm trong `requirements->>'title'`. Câu truy vấn ném
+lỗi mọi lần chạy.
+
+Nhưng chỗ gọi bọc `.catch(() => null)`, và `null` ở đây có nghĩa hợp lệ: *"hồ
+sơ này chưa đối chiếu tin nào"*. Nên hệ thống cư xử **đúng như thiết kế** cho
+một tình huống không có thật:
+
+> *"Vì chưa có kết quả đối chiếu, tôi không thể nhận xét chính xác hơn."*
+
+Trợ lý nói câu đó cho một hồ sơ có sẵn kết quả 44/100 với 11 điểm thiếu. Không
+lỗi ở đâu, không cảnh báo, chỉ là lời khuyên tệ đi mà không ai biết vì sao.
+
+Cùng câu SQL sai đó ở `/cv` thì nổ 500 — vì trang đó KHÔNG bọc `catch`. Một lỗi,
+hai biểu hiện: chỗ nào nuốt lỗi thì im lặng hỏng, chỗ nào không nuốt thì lộ ra.
+**Chỗ lộ ra là chỗ may mắn.**
+
+| | |
+|---|---|
+| TypeScript bắt được? | **không** — SQL là chuỗi |
+| Test đơn vị bắt được? | **không** — không chạm Postgres |
+| Bắt bằng gì | test tích hợp chạm DB thật + E2E quét mọi trang |
+
+**Luật rút ra.** `catch(() => <giá trị mặc định>)` chỉ được dùng khi giá trị mặc
+định có nghĩa **và** không che mất lỗi lập trình. Ở đây `null` thoả vế đầu mà
+không thoả vế sau. Khi cần cả hai, phải phân biệt: hỏng thì ghi log, không có
+dữ liệu thì trả mặc định.
+
+Lớp E2E cũng đã sửa cùng lúc: bản đầu chỉ quét `main a[href]` nên bỏ sót link
+"CV của tôi" ở thanh điều hướng — đúng trang đang hỏng.
+
 ### 8.4 F4 — Export PDF
 
 ```

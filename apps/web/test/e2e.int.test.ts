@@ -66,21 +66,46 @@ describe('E2E · Home phân luồng theo tình trạng (UC-01/02/03)', () => {
   )
 
   it(
-    'không nút nào trên Home dẫn tới 404 (BR-01.3)',
+    'MỌI link trên trang chủ mở được — kể cả ở thanh điều hướng (BR-01.3)',
     async () => {
       if (skip()) return
+      /*
+       * HỒI QUY: bản đầu chỉ quét `main a[href]`, nên bỏ sót link "CV của tôi"
+       * ở thanh nav — và `/cv` nổ 500 vì một cột SQL không tồn tại. Người dùng
+       * tìm ra, test thì xanh.
+       *
+       * Lỗi kiểu này (`j.title` không có thật) TypeScript không bắt được: SQL
+       * là chuỗi, Postgres chỉ báo lúc chạy thật. Quét cả trang là cách duy
+       * nhất để một trang hỏng không lọt.
+       */
       const page = await fresh()
       await page.goto(BASE, { waitUntil: 'networkidle' })
 
-      const hrefs = await page.locator('main a[href^="/"]').evaluateAll((els) =>
-        els.map((e) => (e as HTMLAnchorElement).getAttribute('href')!),
-      )
+      const hrefs = await page.locator('a[href^="/"]').evaluateAll((els) => [
+        ...new Set(els.map((e) => (e as HTMLAnchorElement).getAttribute('href')!)),
+      ])
       expect(hrefs.length).toBeGreaterThan(0)
 
       for (const href of hrefs) {
         const res = await page.request.get(`${BASE}${href}`)
-        // Nút 404 còn tệ hơn không có nút: người bấm vào nghĩ cả hệ thống hỏng
+        // Nút 404/500 còn tệ hơn không có nút: người bấm vào nghĩ hệ thống hỏng
         expect(res.status(), `${href} trả ${res.status()}`).toBeLessThan(400)
+      }
+      await page.close()
+    },
+    120_000,
+  )
+
+  it(
+    'mọi trang chính mở được, không trang nào nổ 500',
+    async () => {
+      if (skip()) return
+      // Danh sách này là hợp đồng: thêm màn hình mới thì thêm vào đây, để một
+      // câu SQL sai không nằm im tới lúc người dùng bấm vào.
+      const page = await fresh()
+      for (const path of ['/', '/login', '/cv', '/cv/new', '/import', '/start/guided', '/settings']) {
+        const res = await page.request.get(`${BASE}${path}`)
+        expect(res.status(), `${path} trả ${res.status()}`).toBeLessThan(400)
       }
       await page.close()
     },

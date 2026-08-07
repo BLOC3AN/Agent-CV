@@ -70,7 +70,9 @@ async function load(): Promise<HomeData | null> {
       .catch(() => ({ rows: [{ n: '0' }] })),
     pool
       .query<{ title: string | null; overall: number; cv_id: string }>(
-        `SELECT j.title, (m.score->>'overall')::int AS overall, m.cv_id
+        // `job_descriptions` không có cột `title` — tên nằm trong `requirements`
+        `SELECT j.requirements->>'title' AS title,
+                (m.score->>'overall')::int AS overall, m.cv_id
            FROM match_analyses m
            JOIN cv_documents c ON c.id = m.cv_id
            LEFT JOIN job_descriptions j ON j.id = m.jd_id

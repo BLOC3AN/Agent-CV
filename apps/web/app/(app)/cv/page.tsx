@@ -32,7 +32,9 @@ export default async function CvListPage() {
   if (!user) redirect('/login')
 
   const { rows } = await getPool().query<Row>(
-    `SELECT c.id, c.title, c.updated_at, j.title AS jd_title
+    // Tên tin tuyển dụng nằm trong `requirements`, không phải cột riêng —
+    // `job_descriptions` không có cột `title`.
+    `SELECT c.id, c.title, c.updated_at, j.requirements->>'title' AS jd_title
        FROM cv_documents c
        LEFT JOIN job_descriptions j ON j.id = c.jd_id
       WHERE c.user_id = $1
