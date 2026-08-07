@@ -1489,6 +1489,10 @@ R2. `redact_pii` có required_local: true — local chết thì FAIL, không fal
     cloud. Fallback ở đây đồng nghĩa với việc gửi PII thô ra ngoài.
 
 R3. File PDF gốc xóa sau 48 giờ. Chỉ giữ Profile đã chuẩn hóa.
+    Hiện thực: `services/worker/src/retention.ts`, chạy mỗi giờ + ngay khi
+    worker khởi động. Khoá lưu trữ là sha256 NỘI DUNG nên hai người tải cùng
+    một file sẽ trùng khoá — chỉ xoá khi không còn job nào chưa dọn dùng chung.
+    Xoá lỗi thì KHÔNG đánh dấu, để lượt sau thử lại.
 
 R4. Có nút xóa tài khoản → xóa cascade toàn bộ, kể cả file storage.
 
@@ -1525,6 +1529,12 @@ Và **che nhầm** trên 1/6:
 | R8 | Fixture test dùng dữ liệu **tổng hợp cùng hình dạng**, không bao giờ commit PII thật |
 | R9 | **Che thừa cũng là lỗi**, ngang với bỏ sót — nó cắt mất nội dung model cần |
 | R10 | Viết tắt mơ hồ (`Q4`, `P3`, `H2`) mặc định KHÔNG coi là địa chỉ; chỉ dạng có dấu chấm (`Q.7`) mới tính |
+| R11 | **Lớp che và guard dùng CHUNG một bộ mẫu** (`packages/ai/src/patterns.ts`) |
+
+**Vì sao R11:** guard trong `pii.ts` từng có bản sao regex riêng, yếu hơn —
+`(?:\+?84|0)[35789]\d{8}` đòi chữ số mạng đứng ngay sau mã nước. Nó bỏ sót
+đúng hai dạng mà lớp che vừa học cách bắt. Một hàng phòng thủ cuối chỉ bắt được
+thứ lớp trước đã bắt thì không phòng thủ gì cả.
 
 ### 15.3 Đường mạng
 

@@ -15,6 +15,7 @@ import { PdfkitClient } from './pdfkit-client.js'
 import { LocalStorage } from './storage.js'
 import { makeParseCvHandler } from './handlers/parse-cv.js'
 import { makeExportPdfHandler } from './handlers/export-pdf.js'
+import { purgeExpiredFiles } from './retention.js'
 
 /**
  * Điểm khởi động worker — TDD §12.1.
@@ -125,12 +126,30 @@ async function main(): Promise<void> {
   }, 5 * 60_000)
   reaper.unref()
 
+  // Xoá file gốc quá 48 giờ — TDD §15.2 R3. Đây là cam kết trong Chính sách
+  // bảo mật, không phải việc dọn ổ đĩa: không chạy thì lời cam kết thành nói dối.
+  const pool = getPool()
+  const storage = new LocalStorage()
+  const purgeOnce = (): void => {
+    purgeExpiredFiles(pool, storage)
+      .then((r) => {
+        if (r.scanned > 0) {
+          log('info', `dọn file: xoá ${r.deleted}, dùng chung ${r.shared}, lỗi ${r.errors}`)
+        }
+      })
+      .catch((e) => log('error', 'dọn file lỗi', e))
+  }
+  purgeOnce() // chạy ngay khi khởi động: worker có thể đã tắt nhiều ngày
+  const purger = setInterval(purgeOnce, 60 * 60_000)
+  purger.unref()
+
   let closing = false
   const shutdown = async (sig: string): Promise<void> => {
     if (closing) return
     closing = true
     log('info', `nhận ${sig}, đang dừng…`)
     clearInterval(reaper)
+    clearInterval(purger)
     // Đóng worker TRƯỚC: chờ job đang chạy xong thay vì cắt ngang, nếu không
     // job đó sẽ kẹt ở `running` cho tới lượt reaper.
     await Promise.all(workers.map((w) => w.close()))
@@ -159,3 +178,4 @@ export { PdfkitClient } from './pdfkit-client.js'
 export { LocalStorage, contentKey, jobKey } from './storage.js'
 export { makeParseCvHandler, decideRoute } from './handlers/parse-cv.js'
 export { makeExportPdfHandler } from './handlers/export-pdf.js'
+export { purgeExpiredFiles, RETENTION_MS } from './retention.js'

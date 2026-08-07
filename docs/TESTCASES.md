@@ -170,6 +170,13 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-SEC-03 | Không fallback cloud cho PII | U | **P0** | Đặt `anthropic.enabled = true`, làm `redact_pii` local fail → **KHÔNG** gọi cloud, task fail |
 | TC-SEC-04 | `llm_calls` không lưu nội dung | I | P0 | Sau import, `SELECT * FROM llm_calls` → chỉ có metric, không có text CV |
 | TC-SEC-05 | Xóa file gốc sau 48h | I | P1 | Chỉnh đồng hồ +49h, chạy cron → file không còn trên storage, Profile vẫn còn |
+| TC-SEC-05a | Không xoá file dùng chung | I | **P0** | Hai job cùng `storageKey`, một quá hạn → giữ file, chỉ đánh dấu job quá hạn |
+| TC-SEC-05b | Xoá lỗi thì thử lại | I | P0 | Storage lỗi → KHÔNG đánh dấu đã dọn, lượt sau quét lại |
+| TC-SEC-05c | Dọn dẹp idempotent | I | P1 | Chạy hai lần → lượt hai không quét lại job đã dọn |
+| TC-SEC-10 | Guard mạnh ngang lớp che | U | **P0** | `detectPII` bắt đủ 6 cách viết SĐT; hai bên dùng chung `patterns.ts` |
+| TC-SEC-11 | Tên thật không lọt sang model | I | **P0** | Với mọi CV thật: nhận ra dòng tên VÀ tên đó không còn trong payload nào |
+| TC-SEC-12 | `jobs.result` không chứa PII | I | P0 | Kết quả job chỉ có metric và id |
+| TC-SEC-13 | `llm_calls` không có cột text tự do | I | **P0** | Chặn ở tầng lược đồ, không phải ở tầng "nhớ đừng ghi" |
 | TC-SEC-06 | PII vẫn hiện ở màn rà soát | E | P0 | UC vẫn thấy SĐT/email để kiểm tra (chỉ không gửi model) |
 
 ---

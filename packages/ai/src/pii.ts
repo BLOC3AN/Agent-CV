@@ -1,4 +1,5 @@
 import type { Profile, CompactProfile } from '@hr/schema'
+import * as P from './patterns.js'
 
 /**
  * TDD §15.2 — Quy tắc cứng R1:
@@ -69,17 +70,21 @@ export interface PIILeak {
   sample: string
 }
 
-const PHONE_VN = /(?:\+?84|0)(?:3|5|7|8|9)\d{8}\b/g
-const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]{2,}/g
-const DOB = /\b(?:0?[1-9]|[12]\d|3[01])[/\-.](?:0?[1-9]|1[0-2])[/\-.](?:19|20)\d{2}\b/g
-
+/**
+ * Mẫu lấy từ `patterns.ts` — CÙNG bộ với lớp che ở `redact.ts`.
+ *
+ * Trước đây guard có bản sao riêng, yếu hơn: `(?:\+?84|0)[35789]\d{8}` đòi chữ
+ * số mạng đứng NGAY sau mã nước, nên bỏ sót "(+84) 919275773" và
+ * "+84 815599465" — đúng hai dạng mà lớp che đã học cách bắt. Một hàng phòng
+ * thủ cuối chỉ bắt được thứ lớp trước đã bắt thì không phòng thủ gì cả.
+ */
 export function detectPII(text: string): PIILeak[] {
   const leaks: PIILeak[] = []
-  const phone = text.match(PHONE_VN)
+  const phone = text.match(P.phone())
   if (phone?.[0]) leaks.push({ kind: 'phone', sample: phone[0] })
-  const email = text.match(EMAIL)
+  const email = text.match(P.email())
   if (email?.[0]) leaks.push({ kind: 'email', sample: email[0] })
-  const dob = text.match(DOB)
+  const dob = text.match(P.dob())
   if (dob?.[0]) leaks.push({ kind: 'dob', sample: dob[0] })
   return leaks
 }

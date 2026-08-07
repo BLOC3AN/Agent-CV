@@ -7,7 +7,10 @@
  *
  * Cặp `redactPII` / `RedactionMap` cho phép gắn danh tính thật trở lại sau khi
  * model trả kết quả, mà không bao giờ để danh tính đó rời khỏi máy.
+ *
+ * Mẫu nhận diện nằm ở `patterns.ts` — dùng CHUNG với guard trong `pii.ts`.
  */
+import * as P from './patterns.js'
 
 export interface RedactionMap {
   NAME?: string
@@ -22,44 +25,6 @@ export interface RedactResult {
   map: RedactionMap
   count: number
 }
-
-const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]{2,}/g
-
-/**
- * Số điện thoại VN. Đo trên 6 CV thật: mỗi CV một kiểu viết khác nhau. Mẫu
- * dưới đây là dữ liệu TỔNG HỢP giữ nguyên hình dạng (không phải số thật):
- *
- *     +8491 234 5678      0901234567        (+84) 912345678
- *     +84900112233        0312345678        +84 987654321
- *
- * Bản đầu (`(?:\+?84|0)(?:3|5|7|8|9)…`) BỎ SÓT hai kiểu cuối vì nó đòi chữ số
- * mạng đứng ngay sau mã nước — có dấu ngoặc hoặc dấu cách xen vào là trượt.
- * Bỏ sót ở đây nghĩa là số điện thoại thật đi thẳng tới model (§15.2 R1).
- *
- * `(?<![\d+])` chặn bắt nhầm phần đuôi của một dãy số dài hơn.
- */
-const PHONE = /(?<![\d+])(?:\(\s*\+?84\s*\)|\+\s*84|84(?=[\s.-])|0)[\s.-]*[35789][\d\s.-]{7,11}\d/g
-
-const DOB = /\b(?:0?[1-9]|[12]\d|3[01])[/\-.](?:0?[1-9]|1[0-2])[/\-.](?:19|20)\d{2}\b/g
-
-/**
- * Địa chỉ đường phố VN — có số nhà/ngõ/phường/quận thì mới coi là PII.
- *
- * Viết tắt `q`/`p` phải được rào hai đầu: bản đầu khớp "Q15" bên trong token
- * `Q15ABCDEF0GH` (mã theo dõi trong URL LinkedIn) và xoá mất 40 ký tự kế bên.
- * Che nhầm cũng hỏng như bỏ sót — nó cắt mất nội dung thật gửi cho model.
- */
-const STREET = new RegExp(
-  '(?:' +
-    '\\b(?:số|ngõ)\\s*\\d+[^\\n,]{0,40}' +
-    '|\\b(?:đường|phố|quận|phường)\\s+[\\p{L}\\d][^\\n,]{0,40}' +
-    // Viết tắt quận/phường BẮT BUỘC có dấu chấm: "Q.7" hầu như chỉ là địa chỉ,
-    // còn "Q4", "P3", "H2" trong CV IT thường là quý tài chính, mức ưu tiên,
-    // hay tên công nghệ. Che nhầm chúng cắt mất nội dung thật gửi cho model.
-    '|(?<![\\p{L}\\d])[qp]\\.\\s*\\d{1,2}(?![\\p{L}\\d])' +
-    ')',
-  'giu',
-)
 
 /**
  * Tên người ở CV hầu như luôn nằm ở dòng đầu, in đậm, không có động từ.
@@ -132,10 +97,10 @@ export function redactPII(text: string): RedactResult {
     count += found.length
   }
 
-  swap(EMAIL, 'EMAIL', '<EMAIL>')
-  swap(PHONE, 'PHONE', '<PHONE>')
-  swap(DOB, 'DOB', '<DOB>')
-  swap(STREET, 'LOCATION', '<LOCATION>')
+  swap(P.email(), 'EMAIL', '<EMAIL>')
+  swap(P.phone(), 'PHONE', '<PHONE>')
+  swap(P.dob(), 'DOB', '<DOB>')
+  swap(P.street(), 'LOCATION', '<LOCATION>')
 
   return { text: out, map, count }
 }
@@ -160,8 +125,11 @@ export function redactSections(
   for (const [kind, body] of Object.entries(sections)) {
     let t = body
     if (whole.map.NAME) t = t.split(whole.map.NAME).join('<NAME>')
-    t = t.replace(EMAIL, '<EMAIL>').replace(PHONE, '<PHONE>').replace(DOB, '<DOB>')
-    t = t.replace(STREET, '<LOCATION>')
+    t = t
+      .replace(P.email(), '<EMAIL>')
+      .replace(P.phone(), '<PHONE>')
+      .replace(P.dob(), '<DOB>')
+    t = t.replace(P.street(), '<LOCATION>')
     out[kind] = t
   }
 
