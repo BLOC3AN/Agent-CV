@@ -33,6 +33,24 @@ describe('Badge', () => {
     const { container } = render(<Badge tone="success" icon="✓">Đã xác nhận</Badge>)
     expect(container.querySelector('[aria-hidden="true"]')?.textContent).toBe('✓')
   })
+
+  /**
+   * Bảo vệ hợp đồng TONE: cả 5 tông phải render được kèm chữ + icon ẩn.
+   * Nếu ai xoá nhầm một nhánh từ TONE record, hoặc gõ sai tên tông, test sẽ
+   * bắt được — đây là tuỳ từng tông, không phải kiểm hằng số.
+   */
+  it.each<Parameters<typeof Badge>[0]['tone']>(['neutral', 'success', 'warn', 'danger', 'ai'])(
+    'tông %s render được với chữ + icon ẩn',
+    (tone) => {
+      const { container } = render(
+        <Badge tone={tone} icon="◆">
+          Trạng thái
+        </Badge>,
+      )
+      expect(screen.getByText('Trạng thái')).toBeInTheDocument()
+      expect(container.querySelector('[aria-hidden="true"]')?.textContent).toBe('◆')
+    },
+  )
 })
 
 describe('Card', () => {
@@ -41,8 +59,38 @@ describe('Card', () => {
     expect(screen.getByText('xin chào')).toBeInTheDocument()
   })
 
-  it('biến thể ai đánh dấu được để test khác kiểm chữ ký AI', () => {
-    const { container } = render(<Card variant="ai"><p>đề xuất</p></Card>)
-    expect(container.querySelector('[data-variant="ai"]')).toBeInTheDocument()
+  /**
+   * Bảo vệ hợp đồng VARIANT: cả 3 biến thể phải render với data-variant đúng.
+   * Nếu ai xoá nhầm một nhánh từ VARIANT record hoặc TypeScript được sửa để
+   * bỏ qua invalid variant, test sẽ bắt được.
+   */
+  it.each<Parameters<typeof Card>[0]['variant']>(['default', 'ai', 'raised'])(
+    'biến thể "%s" đánh dấu data-variant đúng',
+    (variant) => {
+      const { container } = render(<Card variant={variant}><p>nội dung</p></Card>)
+      expect(container.querySelector(`[data-variant="${variant}"]`)).toBeInTheDocument()
+    },
+  )
+
+  /**
+   * Chữ ký thị giác của AI (spec §5.1): CHỈ biến thể `ai` có dải gradient 3px phía trên.
+   * `default` và `raised` KHÔNG được có phần tử aria-hidden nào (tức không có gradient).
+   *
+   * Nguy hiểm: nếu ai đó vô tình thêm gradient vào `raised`, card raised sẽ trông
+   * như card AI — những người dùng sẽ nhầm raised lẫn với AI.
+   */
+  it('CHỈ ai có dải gradient, default và raised không có', () => {
+    const { container: defaultCard } = render(<Card variant="default"><p>thử</p></Card>)
+    const { container: raisedCard } = render(<Card variant="raised"><p>thử</p></Card>)
+    const { container: aiCard } = render(<Card variant="ai"><p>thử</p></Card>)
+
+    // default: không có phần tử aria-hidden nào (không có gradient)
+    expect(defaultCard.querySelector('[aria-hidden="true"]')).toBeNull()
+
+    // raised: không có phần tử aria-hidden nào (không có gradient)
+    expect(raisedCard.querySelector('[aria-hidden="true"]')).toBeNull()
+
+    // ai: có phần tử aria-hidden (đó là gradient)
+    expect(aiCard.querySelector('[aria-hidden="true"]')).toBeInTheDocument()
   })
 })
