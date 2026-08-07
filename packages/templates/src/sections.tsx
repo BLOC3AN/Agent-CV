@@ -84,6 +84,34 @@ export interface SectionProps {
   variant: TemplateVariant
 }
 
+/**
+ * Kỹ năng gom theo `group`, giữ THỨ TỰ NHÓM XUẤT HIỆN LẦN ĐẦU — UC-57.
+ *
+ * Không sắp xếp lại theo bảng chữ cái: thứ tự người dùng viết ra mang thông tin
+ * (nhóm mạnh nhất thường đứng đầu), sắp lại là vứt thông tin đó đi.
+ *
+ * Kỹ năng chưa có nhóm dồn xuống một nhóm cuối KHÔNG TÊN thay vì bị bỏ qua
+ * (BR-57.2) — giữ luôn `index` để `Field` trỏ đúng chỗ trong hồ sơ.
+ */
+export function groupSkills(
+  skills: Profile['skills'],
+): { name: string | null; items: { skill: Profile['skills'][number]; index: number }[] }[] {
+  const byName = new Map<string | null, { skill: Profile['skills'][number]; index: number }[]>()
+  for (const [index, skill] of skills.entries()) {
+    const key = skill.group?.trim() || null
+    const bucket = byName.get(key)
+    if (bucket) bucket.push({ skill, index })
+    else byName.set(key, [{ skill, index }])
+  }
+
+  const named = [...byName.entries()].filter(([k]) => k !== null)
+  const rest = byName.get(null)
+  return [
+    ...named.map(([name, items]) => ({ name, items })),
+    ...(rest ? [{ name: null, items: rest }] : []),
+  ]
+}
+
 export function renderSection(id: SectionId, p: SectionProps): ReactNode | null {
   const { profile } = p
   const lang = profile.language
@@ -190,15 +218,40 @@ export function renderSection(id: SectionId, p: SectionProps): ReactNode | null 
 
     case 'skills': {
       if (profile.skills.length === 0) return null
+
+      // Gom nhóm khi CÓ nhóm, còn không thì hiện phẳng như cũ — UC-57.
+      //
+      // Kỹ năng chưa được đặt nhóm vẫn phải hiện ra (BR-57.2): gom nhóm mà làm
+      // mất kỹ năng thì hỏng nặng hơn là không gom.
+      const groups = groupSkills(profile.skills)
+      if (groups.length === 1 && groups[0]!.name === null) {
+        return (
+          <Section key={id} id={id} title={t('skills')}>
+            <div className="cv-skills">
+              {profile.skills.map((s, i) => (
+                <Field key={i} path={ptr('skills', i, 'name')} className="cv-skill">
+                  {s.name}
+                </Field>
+              ))}
+            </div>
+          </Section>
+        )
+      }
+
       return (
         <Section key={id} id={id} title={t('skills')}>
-          <div className="cv-skills">
-            {profile.skills.map((s, i) => (
-              <Field key={i} path={ptr('skills', i, 'name')} className="cv-skill">
-                {s.name}
-              </Field>
-            ))}
-          </div>
+          {groups.map((g) => (
+            <div className="cv-skill-group" key={g.name ?? '__khac'}>
+              {g.name !== null && <span className="cv-skill-group-name">{g.name}</span>}
+              <div className="cv-skills">
+                {g.items.map(({ skill, index }) => (
+                  <Field key={index} path={ptr('skills', index, 'name')} className="cv-skill">
+                    {skill.name}
+                  </Field>
+                ))}
+              </div>
+            </div>
+          ))}
         </Section>
       )
     }

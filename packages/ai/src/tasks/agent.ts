@@ -277,6 +277,9 @@ QUY TẮC CỨNG:
   được là tham chiếu như {"$ref": "/activities/0/name"} — hồ sơ không có kiểu
   dữ liệu đó, và op sẽ bị loại.
 - Không thêm field mà hồ sơ không có (ví dụ "period", "duration").
+- Nhóm kỹ năng: đặt "/skills/N/group" thành tên nhóm ("Edge AI", "MLOps",
+  "Cloud"). KHÔNG thay cả phần tử "/skills/N" bằng một chuỗi — mỗi kỹ năng là
+  một object có "name".
 - Phần giới thiệu bản thân nằm ở "/basics/summary", KHÔNG phải "/summary".
   Chức danh nằm ở "/basics/headline". Field nào hồ sơ chưa có thì vẫn dùng
   đúng đường dẫn đó để thêm.
@@ -307,6 +310,8 @@ HARD RULES:
   COMPLETE object using the exact field names of existing elements.
 - "value" must be REAL DATA — never a reference like {"$ref": "/activities/0/name"}.
 - Never add fields the profile does not have (e.g. "period", "duration").
+- To group skills, set "/skills/N/group" to a group name. Never replace a whole
+  "/skills/N" element with a string — each skill is an object with "name".
 - The personal summary lives at "/basics/summary", never "/summary".
 - 20 ops maximum. Fewer and correct beats many and sloppy.
 

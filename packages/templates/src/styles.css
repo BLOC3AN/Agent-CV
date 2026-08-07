@@ -132,6 +132,18 @@
   flex-wrap: wrap;
   gap: 1.5mm 2.5mm;
 }
+.cv-skill-group {
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  margin-bottom: 1mm;
+}
+.cv-skill-group-name {
+  flex: 0 0 auto;
+  min-width: 22mm;
+  font-weight: 600;
+  font-size: calc(9.5pt * var(--cv-scale));
+}
 .cv-skill {
   background: color-mix(in srgb, var(--cv-accent) 8%, transparent);
   border-radius: 1mm;
@@ -156,8 +168,18 @@
   border-radius: 0;
   padding: 0;
 }
+/*
+ * Bản ATS xuất PHẲNG — BR-57.3. Nhiều bộ quét đọc theo thứ tự DOM và coi nhãn
+ * nhóm là một kỹ năng, nên gom nhóm ở đây làm hại nhiều hơn lợi.
+ */
 .cv-root[data-variant='ats'] .cv-skills {
   display: block;
+}
+.cv-root[data-variant='ats'] .cv-skill-group {
+  display: block;
+}
+.cv-root[data-variant='ats'] .cv-skill-group-name {
+  display: none;
 }
 .cv-root[data-variant='ats'] .cv-skills .cv-skill::after {
   content: ' · ';

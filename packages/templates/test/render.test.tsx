@@ -10,6 +10,7 @@ import {
   DEFAULT_THEME,
   DEFAULT_LAYOUT,
   FieldProvider,
+  groupSkills,
   ptr,
   type FieldRenderer,
 } from '../src/index.js'
@@ -224,5 +225,84 @@ describe('Profile rỗng — không crash', () => {
     const html = renderToStaticMarkup(<T profile={bare} />)
     expect(html).toContain('A')
     expect(html).not.toContain('Kinh nghiệm') // section rỗng bị bỏ
+  })
+})
+
+// ── UC-57 · nhóm kỹ năng ───────────────────────────────────────────────────
+//
+// Sinh ra từ một ngõ cụt có thật: trợ lý tự đề xuất "nhóm các công cụ thành
+// nhóm (ML Ops, Edge AI, Cloud)", người dùng bấm đúng gợi ý đó, và nhận
+// "giá trị không đúng dạng ở skills/0" — vì `SkillSchema` không có chỗ để đặt
+// nhóm. Hệ thống mời người dùng làm một việc nó không làm được.
+
+const grouped: Profile = ProfileSchema.parse({
+  schemaVersion: 1,
+  language: 'vi',
+  basics: { name: 'Trần Hoàng Nam' },
+  skills: [
+    { name: 'YOLOv8', group: 'Edge AI' },
+    { name: 'Docker', group: 'MLOps' },
+    { name: 'ByteTrack', group: 'Edge AI' },
+    { name: 'Kafka' },
+  ],
+})
+
+function markup(p: Profile, variant: 'presentation' | 'ats' = 'presentation'): string {
+  const T = getTemplate('elegant').component
+  return renderToStaticMarkup(
+    <T
+      profile={p}
+      theme={variant === 'ats' ? atsTheme(DEFAULT_THEME) : DEFAULT_THEME}
+      layout={variant === 'ats' ? atsLayout(DEFAULT_LAYOUT) : DEFAULT_LAYOUT}
+      variant={variant}
+    />,
+  )
+}
+
+describe('TC-57 — nhóm kỹ năng', () => {
+  it('TC-57-02 gom theo nhóm, giữ thứ tự nhóm xuất hiện lần đầu', () => {
+    const g = groupSkills(grouped.skills)
+    expect(g.map((x) => x.name)).toEqual(['Edge AI', 'MLOps', null])
+    expect(g[0]!.items.map((i) => i.skill.name)).toEqual(['YOLOv8', 'ByteTrack'])
+  })
+
+  it('TC-57-03 kỹ năng CHƯA có nhóm vẫn hiện ra (BR-57.2)', () => {
+    // Gom nhóm mà làm mất kỹ năng thì hỏng nặng hơn là không gom
+    const html = markup(grouped)
+    for (const s of ['YOLOv8', 'Docker', 'ByteTrack', 'Kafka']) {
+      expect(html).toContain(s)
+    }
+  })
+
+  it('`index` trỏ đúng vị trí trong hồ sơ, không phải vị trí trong nhóm', () => {
+    const g = groupSkills(grouped.skills)
+    expect(g[0]!.items.map((i) => i.index)).toEqual([0, 2])
+    expect(g[2]!.items.map((i) => i.index)).toEqual([3])
+  })
+
+  it('TC-57-04 không kỹ năng nào có nhóm → hiện phẳng như cũ', () => {
+    const flat = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      skills: [{ name: 'Node.js' }, { name: 'React' }],
+    })
+    const html = markup(flat)
+    expect(html).not.toContain('cv-skill-group')
+    expect(html).toContain('Node.js')
+  })
+
+  it('tên nhóm hiện ra ở bản trình bày', () => {
+    const html = markup(grouped)
+    expect(html).toContain('Edge AI')
+    expect(html).toContain('cv-skill-group-name')
+  })
+
+  it('TC-57-05 bản ATS vẫn liệt kê đủ kỹ năng', () => {
+    // Nhãn nhóm bị CSS ẩn ở bản ATS (BR-57.3), nhưng kỹ năng thì không được mất
+    const html = markup(grouped, 'ats')
+    for (const s of ['YOLOv8', 'Docker', 'ByteTrack', 'Kafka']) {
+      expect(html).toContain(s)
+    }
   })
 })

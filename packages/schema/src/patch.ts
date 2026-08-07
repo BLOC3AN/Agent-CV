@@ -68,6 +68,7 @@ export const CvItemSchema = z
     endDate: z.string().optional(),
     url: z.string().optional(),
     level: z.string().optional(),
+    group: z.string().optional(),
     tech: z.array(z.string()).optional(),
     highlights: z.array(z.string()).optional(),
   })

@@ -530,6 +530,35 @@ lệ và là **giá trị cốt lõi** của sản phẩm — cố vấn, không
 
 ---
 
+## UC-57 · Nhóm kỹ năng theo mảng `P1`
+
+| | |
+|---|---|
+| **Tác nhân** | UC, LLM |
+| **Mục đích** | CV có 20+ công cụ rời rạc thì nhà tuyển dụng không đọc được tư duy tổ chức |
+
+CV sinh viên ngành phần mềm hay liệt kê hàng chục công cụ thành một dãy dài
+(`YOLOv8, ByteTrack, LeNet, Docker, Kafka…`). Nhà tuyển dụng quét 6 giây không
+rút ra được gì. Gom thành nhóm — *Edge AI*, *MLOps*, *Cloud* — thì cùng nội
+dung đó đọc được ngay.
+
+**Luồng chính**
+1. UC nói "nhóm kỹ năng lại theo mảng" (hoặc bấm gợi ý trợ lý đưa ra).
+2. SYS gọi `propose_patch` → sinh op đặt `group` cho từng kỹ năng.
+3. UC duyệt như mọi đề xuất khác (UC-53).
+4. Mẫu CV hiện kỹ năng theo nhóm, giữ nguyên thứ tự nhóm xuất hiện lần đầu.
+
+**Luồng thay thế**
+- 4a. Kỹ năng chưa có `group` → gom vào nhóm cuối không tên, KHÔNG bị mất.
+- 4b. Không kỹ năng nào có `group` → hiện y như cũ, một dãy phẳng.
+
+**Quy tắc**
+- BR-57.1 `group` chỉ là NHÃN hiển thị. Lớp đối chiếu JD vẫn dùng `canonical` — gom nhóm không được làm đổi điểm.
+- BR-57.2 Không kỹ năng nào được biến mất khi gom nhóm.
+- BR-57.3 Bản ATS vẫn xuất phẳng, vì nhiều bộ quét đọc theo thứ tự DOM.
+
+---
+
 # UC-6x — Knowledge Base
 
 ## UC-61 · Nạp nguồn tri thức `P1`

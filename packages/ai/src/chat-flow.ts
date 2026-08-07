@@ -298,9 +298,27 @@ function wouldBreakProfile(profile: Profile, op: PatchOp): string | null {
     const landed = op.path.endsWith('/-')
       ? lastElementPath(parsed.data, op.path)
       : op.path
-    if (landed === null || valueAt(parsed.data, landed) === undefined) {
+    if (landed === null) {
       const field = op.path.split('/').filter(Boolean).join('/')
       return `Hồ sơ không có chỗ "${field}" — nội dung sẽ bị mất`
+    }
+
+    const after = valueAt(parsed.data, landed)
+    if (after === undefined) {
+      const field = op.path.split('/').filter(Boolean).join('/')
+      return `Hồ sơ không có chỗ "${field}" — nội dung sẽ bị mất`
+    }
+
+    // Cả object sống sót vẫn chưa đủ: Zod lược TỪNG KHOÁ lạ bên trong nó.
+    //
+    // Đo thật khi gom nhóm kỹ năng: model trả
+    //   replace /skills/0 {"name":"Python","group":"ML Ops","highlights":[…]}
+    // `SkillSchema` không có `highlights`, nên nó bị vứt lặng lẽ. Người dùng
+    // nhìn thấy `highlights` trong khung so sánh trước/sau, bấm đồng ý, rồi
+    // không nhận được nó — cùng kiểu hỏng với §8.3.11, chỉ nhỏ hơn một bậc.
+    const lost = droppedKeys(op.value, after)
+    if (lost.length > 0) {
+      return `Hồ sơ không có trường ${lost.map((k) => `"${k}"`).join(', ')} — phần đó sẽ bị mất`
     }
   }
 
@@ -328,6 +346,19 @@ function summarizeValidatedProposal(ops: PatchOp[]): string {
   const labels = [...new Set(ops.map((o) => sectionLabel(o.path)).filter(Boolean))]
   const where = labels.length > 0 ? `: cập nhật ${labels.join(', ')}` : ''
   return `Trợ lý còn ${count} thay đổi có thể áp dụng sau khi kiểm tra${where}.`
+}
+
+/**
+ * Khoá mà model viết ra nhưng KHÔNG còn sau khi qua schema.
+ *
+ * Chỉ soi một tầng: đủ để bắt field bịa ra ở mức mục CV, mà không phải đi sâu
+ * vào những chỗ schema vốn cho phép tự do.
+ */
+function droppedKeys(wrote: unknown, kept: unknown): string[] {
+  if (wrote === null || typeof wrote !== 'object' || Array.isArray(wrote)) return []
+  if (kept === null || typeof kept !== 'object' || Array.isArray(kept)) return []
+  const after = kept as Record<string, unknown>
+  return Object.keys(wrote as Record<string, unknown>).filter((k) => !(k in after))
 }
 
 /** `/work/-` → `/work/2` sau khi đã thêm; `null` nếu chỗ đó không phải mảng. */

@@ -235,3 +235,29 @@ describe('khoảng trống', () => {
     expect(new Set(runs.map((r) => r.match.overall)).size).toBe(1)
   })
 })
+
+describe('TC-57-06 — nhóm kỹ năng KHÔNG làm đổi điểm (BR-57.1)', () => {
+  it('cùng bộ kỹ năng, có nhóm và không nhóm → điểm y hệt', async () => {
+    // `group` chỉ là nhãn hiển thị. Nếu nó lọt vào lớp đối chiếu thì người dùng
+    // sắp xếp lại CV cho dễ đọc sẽ vô tình làm đổi điểm — và không đoán nổi vì sao.
+    const skills = ['Node.js', 'Docker', 'PostgreSQL']
+    const j = jd({ hardSkills: ['Node.js', 'Docker', 'Kubernetes'] })
+
+    const phang = await run(profile({ skills: skills.map((name) => ({ name })) }), j)
+    const nhom = await run(
+      profile({
+        skills: [
+          { name: 'Node.js', group: 'Backend' },
+          { name: 'Docker', group: 'DevOps' },
+          { name: 'PostgreSQL', group: 'Backend' },
+        ],
+      }),
+      j,
+    )
+
+    expect(nhom.match.overall).toBe(phang.match.overall)
+    expect(nhom.match.breakdown).toEqual(phang.match.breakdown)
+    expect(nhom.match.matched.length).toBe(phang.match.matched.length)
+    expect(nhom.match.gaps.length).toBe(phang.match.gaps.length)
+  })
+})

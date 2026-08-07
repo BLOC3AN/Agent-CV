@@ -340,6 +340,7 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-53-44b | `value` object có hình dạng ĐÓNG trong grammar | I | **P0** | `additionalProperties: {}` cho model viết `{"$ref": …}`; ba cách sửa bằng prompt đều thất bại 100% (TDD §8.3.10) |
 | TC-53-45b | Op bị Zod LƯỢC BỎ phải bị loại | U | **P0** | `add /summary` được duyệt, báo "đã áp dụng 1 thay đổi", nội dung biến mất. Mất dữ liệu mà báo thành công thì không ai đi tìm (TDD §8.3.11) |
 | TC-53-46b | `summary`/`rationale` không lộ con trỏ | U | P0 | Hai chuỗi này hiện thẳng cho người đọc, cùng lý do với `reason` |
+| TC-53-47b | Khoá lạ BÊN TRONG object cũng bị chặn | U | **P0** | `{"name","group","highlights"}` — object sống sót nhưng Zod vứt riêng `highlights` (TDD §8.3.13) |
 | TC-53-47b | `replace` no-op bị loại | U | **P0** | `replace /basics/summary` với value giống hệt hiện tại → loại kèm lý do, không hiện thành thay đổi thật |
 | TC-53-48b | Summary được cập nhật sau khi lọc op | U | **P0** | Model sinh 4 op, 3 op bị loại; summary hiển thị chỉ nói về 1 op còn hợp lệ, không nói “đã chuyển 3 dự án” |
 | TC-53-49b | Thêm item vào mảng phải dùng `/-` | U | **P0** | `profile.work` rỗng, model trả `/work/0` → loại; retry/correction phải hướng model dùng `add /work/-` |
@@ -390,6 +391,23 @@ rỗng và tầng API điền vào *"Mình chưa rõ bạn muốn sửa gì"*.
 | TC-56-09 | Grammar có hiệu lực cho `answer_question` | I | **P0** | Cùng khoảng mù đã làm hỏng ba task khác |
 | TC-56-10 | UI hiện việc làm tiếp được dưới dạng NÚT | UI | P0 | Bấm là gửi lượt mới; in ra chữ thường thì người dùng phải gõ lại |
 | TC-56-11 | Trả lời thật từ model có nêu bằng chứng | I | P0 | BR-56.2 — đo trên hồ sơ thật |
+
+### 7.1.3 UC-57 — Nhóm kỹ năng (M5)
+
+Sinh ra từ một ngõ cụt có thật: trợ lý TỰ ĐỀ XUẤT *"nhóm các công cụ thành
+nhóm (ML Ops, Edge AI, Cloud)"*, người dùng bấm đúng gợi ý đó, và nhận
+*"giá trị không đúng dạng ở skills/0"* — vì `SkillSchema` không có chỗ nào
+để đặt nhóm. Hệ thống mời người dùng làm một việc nó không làm được.
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-57-01 | `group` biểu diễn được trong Profile | U | **P0** | Không có field thì mọi đề xuất gom nhóm đều bị loại, không cách nào khác |
+| TC-57-02 | Mẫu CV hiện kỹ năng theo nhóm | U | P0 | Giữ thứ tự nhóm xuất hiện lần đầu |
+| TC-57-03 | Kỹ năng KHÔNG có nhóm vẫn hiện | U | **P0** | BR-57.2 — gom nhóm mà làm mất kỹ năng là hỏng nặng hơn không gom |
+| TC-57-04 | Không kỹ năng nào có nhóm → hiện phẳng như cũ | U | P0 | BR-57.3 |
+| TC-57-05 | Bản ATS xuất phẳng | U | P0 | Nhiều bộ quét đọc theo thứ tự DOM |
+| TC-57-06 | Gom nhóm KHÔNG đổi điểm đối chiếu | U | **P0** | BR-57.1 — `group` là nhãn hiển thị, matching dùng `canonical` |
+| TC-57-07 | Model sinh được op đặt nhóm trên hồ sơ thật | I | P0 | Đo đầu-cuối, đúng yêu cầu người dùng đã gõ |
 
 ### 7.2 Ngân sách context
 

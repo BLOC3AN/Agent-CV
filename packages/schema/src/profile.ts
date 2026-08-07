@@ -72,6 +72,17 @@ export const SkillSchema = z.object({
   level: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
   /** Sau khi chuẩn hoá qua skill_taxonomy — dùng cho matching lớp keyword */
   canonical: z.string().optional(),
+  /**
+   * Nhóm hiển thị: "Edge AI", "MLOps", "Cloud" — UC-57.
+   *
+   * CV sinh viên hay liệt kê 20+ công cụ thành một dãy dài mà nhà tuyển dụng
+   * quét 6 giây không rút ra được gì. Gom nhóm thì cùng nội dung đó đọc được
+   * ngay.
+   *
+   * CHỈ là nhãn hiển thị (BR-57.1): lớp đối chiếu JD vẫn dùng `canonical`, nên
+   * gom nhóm không làm đổi điểm.
+   */
+  group: z.string().optional(),
 })
 
 export const ActivitySchema = z.object({

@@ -1659,6 +1659,62 @@ không được lấy nguyên văn từ model sau khi danh sách op đã thay đ
 loại bớt op, summary phải là summary của phần **còn áp dụng được**; nếu không còn
 op thật, trả lỗi/hỏi lại thay vì hiện modal rỗng hoặc no-op.
 
+### 8.3.12 Trợ lý mời người dùng làm việc mà hệ thống không làm được
+
+> Phát hiện từ người dùng. M5. UC-57.
+
+Trợ lý trả lời câu hỏi về CV (§8.3.5) rồi đưa ra việc làm tiếp được:
+
+> *"Tổ chức lại mục Kỹ năng: nhóm các công cụ thành nhóm (ML Ops, Edge AI, Cloud)"*
+
+Người dùng bấm đúng gợi ý đó và nhận:
+
+> *"Trợ lý soạn đề xuất chưa dùng được: giá trị không đúng dạng ở skills/0."*
+
+`SkillSchema` khi ấy có `name`, `level`, `canonical` — **không có chỗ nào để
+đặt nhóm**. Model không sai: nó thử thay cả `/skills/0` bằng một chuỗi
+`"Edge AI: YOLOv8, ByteTrack"` vì đó là cách duy nhất còn lại. Không có cách
+nào để op đó hợp lệ.
+
+Hệ thống tự mời người dùng làm một việc nó không làm được. Tệ hơn một tính
+năng thiếu: tính năng thiếu thì người dùng không biết mà mong đợi.
+
+**Sửa bằng cách làm cho nó LÀM ĐƯỢC**, không phải bằng cách chặn gợi ý:
+
+| Thay đổi | Vì sao |
+|---|---|
+| `SkillSchema.group?: string` | JSONB, không cần migration |
+| `CvItemSchema.group` | model phải VIẾT được nó, không chỉ hồ sơ chứa được |
+| Mẫu CV gom nhóm | giữ thứ tự nhóm xuất hiện lần đầu; kỹ năng chưa có nhóm dồn xuống cuối, KHÔNG mất (BR-57.2) |
+| Bản ATS xuất phẳng | nhiều bộ quét đọc theo thứ tự DOM và coi nhãn nhóm là một kỹ năng |
+| `group` KHÔNG vào lớp đối chiếu | sắp xếp lại cho dễ đọc mà đổi điểm thì người dùng không đoán nổi vì sao (BR-57.1) |
+
+**Bài học.** Gợi ý do model sinh ra là một lời hứa. Trước khi thêm một loại gợi
+ý mới, phải trả lời được: *nếu người dùng bấm vào, hệ thống có đường nào để làm
+không?* Ở đây câu trả lời là không, và không ai kiểm điều đó.
+
+### 8.3.13 Zod cũng lược TỪNG KHOÁ bên trong object
+
+> Phát hiện khi kiểm chứng UC-57 trên hồ sơ thật. M5.
+
+§8.3.11 kiểm "giá trị có còn ở đúng chỗ vừa ghi không". Chưa đủ — khi gom nhóm
+kỹ năng, model trả về:
+
+```json
+replace /skills/0  {"name":"Python","group":"ML Ops","highlights":["Xử lý dữ liệu lớn…"]}
+```
+
+Object sống sót, nhưng `SkillSchema` không có `highlights` nên Zod vứt riêng
+khoá đó. Người dùng nhìn thấy `highlights` trong khung so sánh trước/sau, bấm
+đồng ý, và không nhận được nó.
+
+`droppedKeys` so khoá model VIẾT với khoá CÒN LẠI sau parse, và loại op kèm tên
+khoá bị mất — nên lượt sửa (§8.3.7) đưa được lý do đó cho model. Đo lại: model
+tự bỏ `highlights`, 20 op đều dùng được, 0 op bị loại.
+
+Chỉ soi một tầng: đủ để bắt field bịa ra ở mức mục CV mà không đi sâu vào những
+chỗ schema vốn cho phép tự do.
+
 ### 8.4 F4 — Export PDF
 
 ```

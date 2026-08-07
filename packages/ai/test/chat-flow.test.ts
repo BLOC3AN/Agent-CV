@@ -1183,3 +1183,68 @@ describe('mọi chuỗi HIỂN THỊ của đề xuất đều sạch con trỏ'
     expect(r.proposal.ops[0]!.path).toBe('/basics/summary')
   })
 })
+
+describe('UC-57 — nhóm kỹ năng', () => {
+  const withSkills = () =>
+    profile({ skills: [{ name: 'YOLOv8' }, { name: 'Docker' }] } as never)
+
+  it('TC-57-01 đặt `group` cho từng kỹ năng là op HỢP LỆ', () => {
+    // Trước khi có field này, MỌI đề xuất gom nhóm đều bị loại — mà chính trợ
+    // lý lại đi mời người dùng làm việc đó.
+    const { valid, rejected } = validateOps(
+      [
+        op({ op: 'add', path: '/skills/0/group', value: 'Edge AI' }),
+        op({ op: 'add', path: '/skills/1/group', value: 'MLOps' }),
+      ],
+      withSkills(),
+      MSG_IDS,
+    )
+    expect(rejected).toHaveLength(0)
+    expect(valid).toHaveLength(2)
+  })
+
+  it('vẫn CHẶN thay cả phần tử kỹ năng bằng một chuỗi', () => {
+    // Đây là thứ model đã làm và gây ra "giá trị không đúng dạng ở skills/0"
+    const { valid, rejected } = validateOps(
+      [op({ path: '/skills/0', value: 'Edge AI: YOLOv8, ByteTrack' })],
+      withSkills(),
+      MSG_IDS,
+    )
+    expect(valid).toHaveLength(0)
+    expect(rejected[0]!.reason).toMatch(/đang là object|không đúng dạng/i)
+  })
+})
+
+describe('TC-53-47b khoá lạ BÊN TRONG object cũng phải bị chặn', () => {
+  it('CHẶN kỹ năng kèm `highlights` — SkillSchema không có trường đó', () => {
+    // Đo thật khi gom nhóm: người dùng nhìn thấy `highlights` trong khung so
+    // sánh trước/sau, bấm đồng ý, rồi không nhận được nó.
+    const { valid, rejected } = validateOps(
+      [
+        op({
+          path: '/skills/0',
+          value: { name: 'Python', group: 'ML Ops', highlights: ['Xử lý dữ liệu lớn'] },
+        }),
+      ],
+      profile({ skills: [{ name: 'Python' }] } as never),
+      MSG_IDS,
+    )
+    expect(valid).toHaveLength(0)
+    expect(rejected[0]!.reason).toContain('highlights')
+  })
+
+  it('CHO QUA khi mọi trường đều có chỗ trong hồ sơ', () => {
+    const { valid, rejected } = validateOps(
+      [op({ path: '/skills/0', value: { name: 'Python', group: 'ML Ops' } })],
+      profile({ skills: [{ name: 'Python' }] } as never),
+      MSG_IDS,
+    )
+    expect(rejected).toHaveLength(0)
+    expect(valid).toHaveLength(1)
+  })
+
+  it('giá trị chuỗi không bị ảnh hưởng', () => {
+    const { valid } = validateOps([op({ path: '/work/0/role', value: 'Backend Developer' })], profile(), MSG_IDS)
+    expect(valid).toHaveLength(1)
+  })
+})
