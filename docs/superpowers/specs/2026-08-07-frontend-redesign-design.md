@@ -109,6 +109,11 @@ Nạp Be Vietnam Pro thật bằng `next/font/local`, file `.woff2` đặt trong
 (`apps/web/app/fonts/`) — không gọi mạng, đúng ý định ghi ở `globals.css`. Thêm
 cùng font vào `services/worker/Dockerfile` để PDF khớp bản xem trước.
 
+> **Cập nhật khi triển khai:** đã đo bằng Playwright thật và quyết định KHÔNG
+> cần bước này — `/print` tải `.woff2` qua HTTP từ chính web app, cùng origin
+> với trang Chromium vừa mở. Số liệu đo và lý do đầy đủ ở
+> [FRONTEND.md §12.2](../../FRONTEND.md#122-chữ).
+
 Thang chữ nới rộng hơn mặc định vì dấu tiếng Việt chồng cả trên lẫn dưới
 (`ệ`, `ữ`, `ợ`):
 

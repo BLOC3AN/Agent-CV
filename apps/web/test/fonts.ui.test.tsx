@@ -40,4 +40,18 @@ describe('font Be Vietnam Pro', () => {
     )
     expect(css).toMatch(/--cv-font:\s*var\(--font-be-vietnam\)/)
   })
+
+  it('layout.tsx gắn beVietnamPro.variable lên <html> — cả chuỗi trên phụ thuộc dòng này', () => {
+    // Toàn bộ chuỗi (lib/fonts.ts khai biến, globals.css và styles.css dùng
+    // biến) treo trên MỘT dòng ở layout.tsx gắn `beVietnamPro.variable` lên
+    // phần tử <html>. Bốn test phía trên đọc fonts.ts/globals.css/styles.css
+    // nên vẫn xanh dù dòng này bị xoá — chúng không đọc layout.tsx. Nếu dòng
+    // đó biến mất, `--font-be-vietnam` không còn được định nghĩa và
+    // `--cv-font: var(--font-be-vietnam), 'Inter', …` trở thành invalid at
+    // computed-value time: font-family KHÔNG rơi về Inter mà kế thừa từ cha —
+    // lỗi im lặng, chỉ lộ trong file PDF người dùng đã nộp đi.
+    const src = readFileSync(resolve(__dirname, '../app/layout.tsx'), 'utf8')
+    const htmlTag = src.match(/<html\b[^>]*>/)?.[0] ?? ''
+    expect(htmlTag).toMatch(/beVietnamPro\.variable/)
+  })
 })

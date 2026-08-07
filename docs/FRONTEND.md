@@ -413,8 +413,8 @@ liệt kê 6 thư viện chưa hề được cài, và người đọc không c�
 | Lớp | Chọn | Trạng thái |
 |---|---|---|
 | Framework | Next.js 15 App Router · React 19 · TypeScript strict | ✅ đang dùng |
-| Style | Tailwind CSS v4 + token `@theme` (xem §13.1) | ✅ đang dùng |
-| Component | Tự viết — `components/ui/`, 8 primitive (xem §13.3). Không có shadcn/ui hay Radix | ✅ đang dùng |
+| Style | Tailwind CSS v4 + token `@theme` (xem §12.1) | ✅ đang dùng |
+| Component | Tự viết — `components/ui/`, 8 primitive (xem §12.3). Không có shadcn/ui hay Radix | ✅ đang dùng |
 | Chữ | Be Vietnam Pro qua `next/font/local`, 2 weight | ✅ đang dùng |
 | Server state | `fetch` trần trong Server Component + `useEffect` ở client | ✅ đang dùng |
 | Editor state | Zustand — `lib/editor-store.ts` (draft, undo/redo), `lib/chat-store.ts` | ✅ đang dùng |
@@ -557,7 +557,7 @@ người dùng bấm EN rồi chờ CV tự dịch.
 | Cache kết quả theo `(cvRevision, jdId)` | Không phân tích lại khi không có gì đổi (TDD §14.3) |
 
 Hai hạng mục "Virtualize danh sách gap" và "Prefetch template khi hover" đã
-chuyển xuống §12 — để chúng ở đây khiến người đọc tưởng đã có.
+chuyển xuống §13 — để chúng ở đây khiến người đọc tưởng đã có.
 
 ### 9.8 Khả năng tiếp cận
 
@@ -574,12 +574,12 @@ Cây dưới đây là `apps/web/components/` THẬT.
 
 ```
 components/
-├── ui/                      8 primitive tự viết, không phụ thuộc ngoài — §13.3
+├── ui/                      8 primitive tự viết, không phụ thuộc ngoài — §12.3
 │   ├── Button.tsx · Card.tsx · Section.tsx · Badge.tsx
 │   ├── Meter.tsx · Dialog.tsx · Sheet.tsx · Field.tsx
 │   └── useFocusTrap.ts      dùng chung bởi Dialog và Sheet
 ├── ai/
-│   └── AiPanel.tsx          ★ chữ ký AI, tầng "bề mặt" — §13.4
+│   └── AiPanel.tsx          ★ chữ ký AI, tầng "bề mặt" — §12.4
 ├── analyze/
 │   ├── JdForm.tsx           dán JD → gửi phân tích
 │   └── ReportView.tsx       ★ điểm + breakdown + gap + trích dẫn, hỗ trợ
@@ -645,11 +645,11 @@ Thông báo lỗi phải nói **user làm gì tiếp theo**, không mô tả l�
 
 ---
 
-## 13. Hệ thiết kế
+## 12. Hệ thiết kế
 
 Nguồn: [spec 2026-08-07](superpowers/specs/2026-08-07-frontend-redesign-design.md).
 
-### 13.1 Token
+### 12.1 Token
 
 Khai một chỗ duy nhất trong `apps/web/app/globals.css` bằng `@theme` của
 Tailwind v4. Component **không** dùng palette thô (`bg-sky-600`,
@@ -672,7 +672,7 @@ máy đang tham gia. Trạng thái không mượn teal; AI không mượn xanh l
 không phải hoãn sang giai đoạn sau. Lý do: bớt một bảng màu phải chăm, và
 `/print` (bản PDF) vốn luôn hiển thị sáng nên chế độ tối không giúp gì ở đó.
 
-### 13.2 Chữ
+### 12.2 Chữ
 
 Be Vietnam Pro nạp bằng `next/font/local` (file `.woff2` trong repo, không gọi
 mạng). Hai weight: 400 và 600.
@@ -684,7 +684,17 @@ Thang chữ nới rộng hơn mặc định vì dấu tiếng Việt chồng c�
 `display 30/38 · h1 24/32 · h2 18/28 · h3 15/22 · body 15/24 · small 13/20 ·
 micro 12/16`.
 
-### 13.3 Primitive
+**Cố ý KHÔNG cài font vào `services/worker/Dockerfile`.** Spec §3.2 (bản gốc)
+dự tính thêm, nhưng đo bằng Playwright thật (mở `/print/:cvId`, hai `cvId`
+khác nhau, hai lần chạy) cho kết quả: `document.fonts` báo `beVietnamPro`
+weight 400 và 600 `status=loaded`, và `getComputedStyle('.cv-root').fontFamily`
+bắt đầu bằng `beVietnamPro`. Lý do việc này chạy được mà không cần cài font
+vào image: `/print` dùng root layout của web app, nên Chromium của Playwright
+tải `.woff2` qua HTTP từ chính web app — cùng origin với trang nó vừa mở,
+không cần font hệ điều hành, không gọi mạng ra ngoài. Thêm: fontconfig không
+xử lý `.woff2` đáng tin, nên cài vào image cũng không chắc có tác dụng.
+
+### 12.3 Primitive
 
 `apps/web/components/ui/` — tám cái, không thêm dependency ngoài.
 
@@ -703,7 +713,7 @@ Hai cái mang doctrine, ở mức khuyến nghị (thiếu thì cảnh báo ở 
 `Dialog` và `Sheet` dùng chung `useFocusTrap`: Escape đóng, bẫy focus, trả
 focus về nơi đã mở, khoá cuộn nền.
 
-### 13.4 Chữ ký AI
+### 12.4 Chữ ký AI
 
 `components/ai/AiPanel.tsx` là tầng **bề mặt** của chữ ký AI: nó bọc
 `Card variant="ai"` (nền `brand-subtle`, viền `brand-border`, dải gradient 3px
@@ -728,6 +738,12 @@ Chữ ký AI hoàn chỉnh gồm ba tầng, nhưng chúng **không nằm cùng m
   không phải hiện trạng.
 - `?assistant=1` trên link "Trợ lý" ở TopNav **chưa được `/builder` đọc** —
   màn builder hiện bỏ qua tham số này. Phần tiêu thụ nó thuộc việc chưa làm.
+- `?focus=<path>` cùng bệnh, và đây là CTA chính trong khối AI trên trang chủ
+  — hành động nổi bật nhất màn hình. `apps/web/lib/home-state.ts`
+  (`nextStepFor`) và `components/diagnose/HealthReport.tsx` cùng dựng
+  `href: /builder/${cvId}?focus=${gap.path}`, nhưng
+  `app/(app)/builder/[cvId]/page.tsx` không nhận `searchParams` và không chỗ
+  nào trong repo đọc param `focus`. Phần tiêu thụ nó cũng thuộc việc chưa làm.
 
 **Trạng thái degrade nằm cùng file với chữ ký**, có chủ ý: chữ ký làm khối AI
 to, nên xử lý lúc-model-chết ở nơi khác sẽ có chỗ quên, và chỗ quên hiện ra
@@ -741,7 +757,7 @@ lớp bọc này vì `Gateway.health()` ping cả 6 provider qua mạng và khô
 cache — gọi thẳng khi render Home sẽ làm trang chủ phụ thuộc model server,
 trái ràng buộc "degrade, đừng sập" (TDD §3.2 A7).
 
-### 13.5 Điểm khớp JD không tô màu
+### 12.5 Điểm khớp JD không tô màu
 
 TDD §8.2.3: đo thực tế cho 41 và 41 là **đúng**; thứ có ý nghĩa là thứ tự
 tương đối, không phải vạch ngưỡng. Con số để `ink` trung tính; nghĩa nằm ở
@@ -750,7 +766,7 @@ so với các lần đối chiếu khác của chính người dùng.
 
 ---
 
-## 12. Việc chưa làm ở giai đoạn 1
+## 13. Việc chưa làm ở giai đoạn 1
 
 | Hạng mục | Lý do hoãn |
 |---|---|
@@ -765,4 +781,4 @@ so với các lần đối chiếu khác của chính người dùng.
 | Prefetch template khi hover | Chờ bộ chọn mẫu được dựng lại ở kế hoạch 2 |
 
 **Chế độ tối không nằm trong bảng này** — spec D4 đã **quyết bỏ hẳn**, không
-phải hoãn. Xem §13.1.
+phải hoãn. Xem §12.1.

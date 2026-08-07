@@ -25,7 +25,6 @@ export interface RecentCv {
   id: string
   title: string
   updatedAt: string
-  headline?: string
 }
 
 export interface RecentMatch {
@@ -68,9 +67,6 @@ export function ReturningHome({
 
             <div className="min-w-0 flex-1">
               <p className="truncate text-[18px] font-semibold text-ink">{cv.title}</p>
-              {cv.headline && (
-                <p className="truncate text-[13px] text-ink-muted">{cv.headline}</p>
-              )}
               <p className="mt-0.5 text-[13px] text-ink-subtle">Sửa {cv.updatedAt}</p>
 
               <Meter

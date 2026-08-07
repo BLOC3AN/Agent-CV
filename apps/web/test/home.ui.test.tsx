@@ -65,6 +65,16 @@ describe('Home lần đầu — bộ định tuyến ý định (UC-01)', () => 
     // Nhóm đông nhất và bị bỏ rơi nặng nhất (PRODUCT §2)
     expect(ENTRIES.find((e) => e.featured)!.title).toMatch(/không biết/)
   })
+
+  it('KHÔNG lối vào nào mang chữ ký AI — teal-gradient chỉ dành cho vùng MÁY tham gia', () => {
+    // Quy tắc màu cốt lõi (spec §5.1): nền teal + dải gradient 3px
+    // (Card variant="ai") báo hiệu MÁY đang tham gia. IntentRouter là điều
+    // hướng thuần người dùng chọn — không lối vào nào, kể cả lối `featured`,
+    // được mượn chữ ký đó. Trộn hai nghĩa này làm người dùng không còn phân
+    // biệt được đâu là gợi ý của máy, đâu là điều hướng của sản phẩm.
+    const { container } = render(<IntentRouter />)
+    expect(container.querySelector('[data-variant="ai"]')).not.toBeInTheDocument()
+  })
 })
 
 describe('Home quay lại (UC-02)', () => {

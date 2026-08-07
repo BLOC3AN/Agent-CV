@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi" className={beVietnamPro.variable}>
-      <body className="bg-neutral-50 text-neutral-900">
+      <body>
         <DegradeBanner />
         <TopNav />
         {children}
