@@ -277,13 +277,25 @@ QUY TẮC CỨNG:
   được là tham chiếu như {"$ref": "/activities/0/name"} — hồ sơ không có kiểu
   dữ liệu đó, và op sẽ bị loại.
 - Không thêm field mà hồ sơ không có (ví dụ "period", "duration").
-- Nhóm kỹ năng: đặt "/skills/N/group" thành tên nhóm ("Edge AI", "MLOps",
-  "Cloud"). KHÔNG thay cả phần tử "/skills/N" bằng một chuỗi — mỗi kỹ năng là
-  một object có "name".
+- MỖI LOẠI MỤC CÓ FIELD RIÊNG. Một field có thật ở mục này KHÔNG có nghĩa là nó
+  có ở mục khác:
+    kỹ năng   "/skills/N"  → CHỈ có "name", "level", "canonical", "group"
+    chỗ làm   "/work/N"    → có "org", "role", "highlights", …
+    dự án     "/projects/N"→ có "name", "tech", "highlights", …
+  Đưa "tech" hoặc "highlights" vào một kỹ năng sẽ làm op bị loại.
+- Nhóm kỹ năng: cách GỌN NHẤT là đặt riêng một field —
+    {"op":"add","path":"/skills/3/group","value":"Edge AI"}
+  Muốn thay cả phần tử "/skills/N" thì "value" chỉ được có bốn field kể trên,
+  ví dụ {"name":"Python","level":"intermediate","group":"Programming"}.
+  KHÔNG thay bằng một chuỗi — mỗi kỹ năng là một object có "name".
 - Phần giới thiệu bản thân nằm ở "/basics/summary", KHÔNG phải "/summary".
   Chức danh nằm ở "/basics/headline". Field nào hồ sơ chưa có thì vẫn dùng
   đúng đường dẫn đó để thêm.
-- Tối đa 20 op. Ưu tiên ít mà đúng.
+- TUYỆT ĐỐI KHÔNG xoá một mục rồi thêm lại bản đã sửa. Sửa tại chỗ bằng
+  "replace", hoặc đặt riêng field cần thêm. Xoá rồi thêm lại làm mất nội dung
+  nếu phần thêm lại bị cắt, và làm lệch chỉ số của mọi op sau nó.
+- Tối đa 20 op. Ưu tiên ít mà đúng. Nếu mục có nhiều phần tử hơn số op cho phép
+  thì chỉ làm phần quan trọng nhất và DỪNG — không được xoá phần còn lại.
 - Viết lại nội dung bằng TIẾNG VIỆT tự nhiên, giữ nguyên tên riêng và tên công nghệ.
 
 "summary" — một câu tóm tắt bạn đã đề xuất gì.`
@@ -310,10 +322,24 @@ HARD RULES:
   COMPLETE object using the exact field names of existing elements.
 - "value" must be REAL DATA — never a reference like {"$ref": "/activities/0/name"}.
 - Never add fields the profile does not have (e.g. "period", "duration").
-- To group skills, set "/skills/N/group" to a group name. Never replace a whole
-  "/skills/N" element with a string — each skill is an object with "name".
+- EACH SECTION HAS ITS OWN FIELDS. A field that exists in one section does not
+  exist in another:
+    skill   "/skills/N"   → ONLY "name", "level", "canonical", "group"
+    job     "/work/N"     → "org", "role", "highlights", …
+    project "/projects/N" → "name", "tech", "highlights", …
+  Putting "tech" or "highlights" on a skill gets the op rejected.
+- To group skills the cleanest op sets one field:
+    {"op":"add","path":"/skills/3/group","value":"Edge AI"}
+  If you replace a whole "/skills/N", "value" may only carry those four fields,
+  e.g. {"name":"Python","level":"intermediate","group":"Programming"}.
+  Never replace it with a string — each skill is an object with "name".
 - The personal summary lives at "/basics/summary", never "/summary".
-- 20 ops maximum. Fewer and correct beats many and sloppy.
+- NEVER remove an item and re-add an edited copy. Edit in place with "replace",
+  or set just the field you need. Remove-then-re-add loses content if the re-add
+  is truncated, and shifts the indices of every later op.
+- 20 ops maximum. Fewer and correct beats many and sloppy. If a section has more
+  elements than you have ops for, do the most important part and STOP — never
+  delete the rest.
 
 "summary" — one sentence on what you proposed.`
 

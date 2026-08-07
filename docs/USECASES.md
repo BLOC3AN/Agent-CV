@@ -551,11 +551,13 @@ dung đó đọc được ngay.
 **Luồng thay thế**
 - 4a. Kỹ năng chưa có `group` → gom vào nhóm cuối không tên, KHÔNG bị mất.
 - 4b. Không kỹ năng nào có `group` → hiện y như cũ, một dãy phẳng.
+- 2a. Hồ sơ có nhiều kỹ năng hơn số op một lượt cho phép → gom phần quan trọng nhất, phần còn lại GIỮ NGUYÊN. Không được xoá để "thêm lại bản đã nhóm" (TDD §8.3.16).
 
 **Quy tắc**
 - BR-57.1 `group` chỉ là NHÃN hiển thị. Lớp đối chiếu JD vẫn dùng `canonical` — gom nhóm không được làm đổi điểm.
-- BR-57.2 Không kỹ năng nào được biến mất khi gom nhóm.
+- BR-57.2 Không kỹ năng nào được biến mất khi gom nhóm. Kể cả khi trợ lý chỉ gom được một phần.
 - BR-57.3 Bản ATS vẫn xuất phẳng, vì nhiều bộ quét đọc theo thứ tự DOM.
+- BR-57.4 Gom nhóm là ĐẶT field `group`, không phải xoá rồi thêm lại — xoá rồi thêm lại làm mất nội dung khi phần thêm lại bị cắt, và làm lệch chỉ số của mọi op sau nó.
 
 ---
 

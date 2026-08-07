@@ -340,7 +340,7 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-53-44b | `value` object có hình dạng ĐÓNG trong grammar | I | **P0** | `additionalProperties: {}` cho model viết `{"$ref": …}`; ba cách sửa bằng prompt đều thất bại 100% (TDD §8.3.10) |
 | TC-53-45b | Op bị Zod LƯỢC BỎ phải bị loại | U | **P0** | `add /summary` được duyệt, báo "đã áp dụng 1 thay đổi", nội dung biến mất. Mất dữ liệu mà báo thành công thì không ai đi tìm (TDD §8.3.11) |
 | TC-53-46b | `summary`/`rationale` không lộ con trỏ | U | P0 | Hai chuỗi này hiện thẳng cho người đọc, cùng lý do với `reason` |
-| TC-53-47b | Khoá lạ BÊN TRONG object cũng bị chặn | U | **P0** | `{"name","group","highlights"}` — object sống sót nhưng Zod vứt riêng `highlights` (TDD §8.3.13) |
+| TC-53-47b | Khoá lạ BÊN TRONG object cũng bị chặn | U | **P0** | `{"name","group","highlights"}` — object sống sót nhưng Zod vứt riêng `highlights` (TDD §8.3.14) |
 | TC-53-47b | `replace` no-op bị loại | U | **P0** | `replace /basics/summary` với value giống hệt hiện tại → loại kèm lý do, không hiện thành thay đổi thật |
 | TC-53-48b | Summary được cập nhật sau khi lọc op | U | **P0** | Model sinh 4 op, 3 op bị loại; summary hiển thị chỉ nói về 1 op còn hợp lệ, không nói “đã chuyển 3 dự án” |
 | TC-53-49b | Thêm item vào mảng phải dùng `/-` | U | **P0** | `profile.work` rỗng, model trả `/work/0` → loại; retry/correction phải hướng model dùng `add /work/-` |
@@ -407,7 +407,11 @@ nhóm (ML Ops, Edge AI, Cloud)"*, người dùng bấm đúng gợi ý đó, và
 | TC-57-04 | Không kỹ năng nào có nhóm → hiện phẳng như cũ | U | P0 | BR-57.3 |
 | TC-57-05 | Bản ATS xuất phẳng | U | P0 | Nhiều bộ quét đọc theo thứ tự DOM |
 | TC-57-06 | Gom nhóm KHÔNG đổi điểm đối chiếu | U | **P0** | BR-57.1 — `group` là nhãn hiển thị, matching dùng `canonical` |
-| TC-57-07 | Model sinh được op đặt nhóm trên hồ sơ thật | I | P0 | Đo đầu-cuối, đúng yêu cầu người dùng đã gõ |
+| TC-57-07 | Model sinh được op đặt nhóm trên hồ sơ thật | I | P0 | Đo đầu-cuối, đúng yêu cầu người dùng đã gõ. Phải dùng hồ sơ NHIỀU kỹ năng: với 2-3 kỹ năng model không có lý do gom nhóm nên test xanh oan |
+| TC-57-08 | Lý do loại op nêu field ĐÚNG, không chỉ field sai | U | **P0** | TDD §8.3.15 — lý do loại chính là lời nhắc gửi model; lời cấm trần trụi làm model bỏ `group` và giữ `tech` |
+| TC-57-09 | CHẶN xoá hàng loạt một mục | U | **P0** | TDD §8.3.16 — hết op để gom nhóm thì model chọn "xoá hết rồi thêm lại" và bị trần op cắt mất phần thêm lại. BR-57.2 |
+| TC-57-10 | Một op `remove` đơn lẻ vẫn hợp lệ | U | P1 | "Xoá kỹ năng trùng" là việc có thật — chỉ TẬP op mới hỏng |
+| TC-57-11 | Op bị loại được ghi vào log server | U | P1 | TDD §8.3.17 — không log thì mọi lỗi loại này tốn một lần dựng lại hiện trường bằng tay |
 
 ### 7.2 Ngân sách context
 

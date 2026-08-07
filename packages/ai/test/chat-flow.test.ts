@@ -1248,3 +1248,204 @@ describe('TC-53-47b khoá lạ BÊN TRONG object cũng phải bị chặn', () =
     expect(valid).toHaveLength(1)
   })
 })
+
+describe('onReject — op bị loại phải ra được log', () => {
+  /*
+   * Khi UC-57 hỏng trên hồ sơ thật, log Next chỉ có dòng khởi động và log worker
+   * chỉ có `parse_cv`. Không chỗ nào ghi op nào bị loại vì lý do gì, nên phải
+   * bọc `gateway.run` bằng script riêng mới lần ra được nguyên nhân.
+   *
+   * Hệ thống biết chính xác nó vừa loại gì — không kể ra là tự bịt mắt mình.
+   */
+  const badOp = op({
+    path: '/skills/0',
+    value: { name: 'Python', tech: ['NumPy'] },
+    grounding: { type: 'existing_field', ref: '/skills/0' },
+  })
+  const goodOp = op({
+    op: 'add',
+    path: '/skills/0/group',
+    value: 'ML Ops',
+    grounding: { type: 'existing_field', ref: '/skills/0' },
+  })
+  const withSkill = () => profile({ skills: [{ name: 'Python' }] } as never)
+
+  it('báo op bị loại ở vòng 1, kèm lý do', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'rewrite', targetPath: '/skills', needsInfo: [] },
+      propose_patch: { ops: [badOp, goodOp], summary: 'Gom nhóm kỹ năng' },
+    })
+    const seen: { round: number; reason: string }[] = []
+    const r = await runChatTurn(
+      { ...deps(g), onReject: (round, rej) => seen.push(...rej.map((x) => ({ round, reason: x.reason }))) },
+      { message: 'Tổ chức lại mục kỹ năng', profile: withSkill(), history: [] },
+    )
+
+    expect(r.kind).toBe('patch')
+    expect(seen).toHaveLength(1)
+    expect(seen[0]!.round).toBe(1)
+    expect(seen[0]!.reason).toContain('"tech"')
+  })
+
+  it('báo cả vòng SỬA khi vòng 1 loại sạch', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'rewrite', targetPath: '/skills', needsInfo: [] },
+      propose_patch: { ops: [badOp], summary: 'Gom nhóm kỹ năng' },
+    })
+    const rounds: number[] = []
+    await runChatTurn(
+      { ...deps(g), onReject: (round) => rounds.push(round) },
+      { message: 'Tổ chức lại mục kỹ năng', profile: withSkill(), history: [] },
+    )
+    // Vòng 1 loại sạch → gọi lại model → vòng 2 cũng loại (cùng mock)
+    expect(rounds).toEqual([1, 2])
+  })
+
+  it('không op nào bị loại → không gọi onReject', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'rewrite', targetPath: '/skills', needsInfo: [] },
+      propose_patch: { ops: [goodOp], summary: 'Gom nhóm kỹ năng' },
+    })
+    const onReject = vi.fn()
+    const r = await runChatTurn(
+      { ...deps(g), onReject },
+      { message: 'Tổ chức lại mục kỹ năng', profile: withSkill(), history: [] },
+    )
+    expect(r.kind).toBe('patch')
+    expect(onReject).not.toHaveBeenCalled()
+  })
+})
+
+describe('TC-57-09 CHẶN xoá hàng loạt — BR-57.2', () => {
+  /*
+   * HỒI QUY, đo trên hồ sơ 24 kỹ năng: model không đủ 20 op để đặt nhóm cho
+   * từng kỹ năng, nên chọn "xoá hết rồi thêm lại bản đã nhóm" — và trần 20 op
+   * cắt mất toàn bộ phần thêm lại:
+   *     remove /skills/0 … remove /skills/19    (không có op add nào)
+   *     summary: "Đã xoá toàn bộ 20 kỹ năng cũ để chuẩn bị thêm kỹ năng mới"
+   * User bấm đồng ý → mất sạch mục kỹ năng, còn summary hứa một việc không op
+   * nào làm.
+   */
+  const manySkills = (n: number) =>
+    profile({ skills: Array.from({ length: n }, (_, i) => ({ name: `S${i}` })) } as never)
+
+  const rm = (path: string) => op({ op: 'remove', path, value: null })
+
+  it('xoá 20 kỹ năng mà không thêm lại gì → loại HẾT', () => {
+    const ops = Array.from({ length: 20 }, (_, i) => rm(`/skills/${i}`))
+    const { valid, rejected } = validateOps(ops, manySkills(20), MSG_IDS)
+
+    expect(valid).toHaveLength(0)
+    expect(rejected).toHaveLength(20)
+    expect(rejected[0]!.reason).toMatch(/nội dung sẽ mất/i)
+    // Lý do phải chỉ đường: đặt "group", đừng xoá
+    expect(rejected[0]!.reason).toContain('group')
+    // và gọi tên mục bằng tiếng Việt
+    expect(rejected[0]!.reason).toContain('Kỹ năng')
+  })
+
+  it('MỘT op xoá vẫn hợp lệ — "xoá kỹ năng trùng" là việc có thật', () => {
+    const { valid, rejected } = validateOps([rm('/skills/1')], manySkills(3), MSG_IDS)
+    expect(rejected).toHaveLength(0)
+    expect(valid).toHaveLength(1)
+  })
+
+  it('xoá nhiều mà thêm lại đủ vẫn bị chặn vì LỆCH CHỈ SỐ', () => {
+    // Chỉ số tính trên hồ sơ TRƯỚC patch; xoá /skills/0 xong thì /skills/1 đã
+    // trỏ sang kỹ năng khác. Người dùng còn bỏ tick được từng op.
+    const ops = [
+      rm('/skills/0'),
+      rm('/skills/1'),
+      op({ op: 'add', path: '/skills/-', value: { name: 'Python', group: 'ML' } }),
+      op({ op: 'add', path: '/skills/-', value: { name: 'Docker', group: 'MLOps' } }),
+    ]
+    const { valid, rejected } = validateOps(ops, manySkills(3), MSG_IDS)
+
+    expect(rejected.filter((r) => r.op.op === 'remove')).toHaveLength(2)
+    expect(rejected[0]!.reason).toMatch(/lệch/i)
+    // Các op `add` KHÔNG bị kéo theo — chúng vẫn dùng được
+    expect(valid.filter((o) => o.op === 'add')).toHaveLength(2)
+  })
+
+  it('xoá ở hai mục KHÁC nhau không cộng dồn vào nhau', () => {
+    const p = profile({
+      skills: [{ name: 'A' }, { name: 'B' }],
+      work: [
+        { org: 'X', role: 'Dev', highlights: ['a'] },
+        { org: 'Y', role: 'Dev', highlights: ['b'] },
+      ],
+    } as never)
+    const { valid, rejected } = validateOps([rm('/skills/0'), rm('/work/0')], p, MSG_IDS)
+    expect(rejected).toHaveLength(0)
+    expect(valid).toHaveLength(2)
+  })
+})
+
+describe('TC-57-08 lý do loại phải nói field ĐÚNG, không chỉ field sai', () => {
+  /*
+   * HỒI QUY UC-57 trên hồ sơ 24 kỹ năng: model trả
+   *   replace /skills/N {"name":…,"group":…,"tech":[…],"highlights":[…]}
+   * cho cả 16 op. Lý do loại cũ chỉ nói "Hồ sơ không có trường tech, highlights"
+   * — một lời cấm trần trụi. Lượt sửa, model bỏ luôn `group` (thứ nó đang cần)
+   * mà vẫn giữ `tech`/`highlights` → loại hết lần hai → NO_VALID_OPS.
+   *
+   * Lý do loại CHÍNH LÀ lời nhắc gửi model, nên nó phải chứa dạng đúng.
+   */
+  const withPython = () => profile({ skills: [{ name: 'Python' }] } as never)
+
+  it('nêu đủ field hợp lệ của kỹ năng', () => {
+    const { rejected } = validateOps(
+      [
+        op({
+          path: '/skills/0',
+          value: { name: 'Python', group: 'ML Ops', tech: ['NumPy'], highlights: ['Xử lý dữ liệu'] },
+        }),
+      ],
+      withPython(),
+      MSG_IDS,
+    )
+    const reason = rejected[0]!.reason
+    for (const f of ['name', 'level', 'canonical', 'group']) {
+      expect(reason).toContain(`"${f}"`)
+    }
+    // và vẫn chỉ ra field phải bỏ
+    expect(reason).toContain('"tech"')
+    expect(reason).toContain('"highlights"')
+    // gọi tên mục bằng tiếng Việt, không phải "/skills/0"
+    expect(reason).toContain('kỹ năng')
+    expect(reason).not.toContain('/skills')
+  })
+
+  it('KHÔNG gợi ý field của mục khác — mỗi mục một bộ field', () => {
+    const { rejected } = validateOps(
+      [op({ path: '/skills/0', value: { name: 'Python', highlights: ['x'] } })],
+      withPython(),
+      MSG_IDS,
+    )
+    // `org`, `role` là field của chỗ làm, không được lọt vào lời nhắc cho kỹ năng
+    expect(rejected[0]!.reason).not.toContain('"org"')
+    expect(rejected[0]!.reason).not.toContain('"role"')
+  })
+
+  it('mục khác cũng được lời nhắc đúng bộ field của nó', () => {
+    const { rejected } = validateOps(
+      [op({ path: '/work/0', value: { org: 'Cty X', role: 'Dev', group: 'Backend' } })],
+      profile(),
+      MSG_IDS,
+    )
+    // `group` là field của kỹ năng, chỗ làm không có
+    expect(rejected[0]!.reason).toContain('chỗ làm')
+    expect(rejected[0]!.reason).toContain('"org"')
+    expect(rejected[0]!.reason).toContain('"group"')
+  })
+
+  it('op hợp lệ vẫn không sinh lời nhắc nào', () => {
+    const { valid, rejected } = validateOps(
+      [op({ op: 'add', path: '/skills/0/group', value: 'Edge AI' })],
+      withPython(),
+      MSG_IDS,
+    )
+    expect(rejected).toHaveLength(0)
+    expect(valid).toHaveLength(1)
+  })
+})

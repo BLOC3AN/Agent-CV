@@ -1,5 +1,6 @@
 import fastJsonPatch from 'fast-json-patch'
 import {
+  allowedFieldsAt,
   PatchOpSchema,
   ProfileSchema,
   type ClarifyRequest,
@@ -70,8 +71,15 @@ export function validateOps(
   const valid: PatchOp[] = []
   const rejected: RejectedOp[] = []
   const answerText = answers.map((a) => a.answer).join(' ')
+  const unsafeRemoval = unsafeRemovals(ops)
 
   for (const op of ops) {
+    const removalIssue = unsafeRemoval.get(op)
+    if (removalIssue) {
+      rejected.push({ op, reason: removalIssue })
+      continue
+    }
+
     const parsed = PatchOpSchema.safeParse(op)
     if (!parsed.success) {
       rejected.push({ op, reason: 'Cấu trúc op không hợp lệ' })
@@ -318,7 +326,26 @@ function wouldBreakProfile(profile: Profile, op: PatchOp): string | null {
     // không nhận được nó — cùng kiểu hỏng với §8.3.11, chỉ nhỏ hơn một bậc.
     const lost = droppedKeys(op.value, after)
     if (lost.length > 0) {
-      return `Hồ sơ không có trường ${lost.map((k) => `"${k}"`).join(', ')} — phần đó sẽ bị mất`
+      /*
+       * Nói cả field ĐÚNG, không chỉ field sai.
+       *
+       * Lý do loại op cũng chính là lời nhắc gửi cho model ở lượt sửa (§8.3.7).
+       * Bản đầu chỉ nói "Hồ sơ không có trường tech, highlights" — một lời cấm
+       * trần trụi. Đo thật trên UC-57: model 4B nghe xong bỏ luôn `group`, thứ
+       * nó đang cần, mà vẫn giữ `tech`/`highlights` → lượt sửa cũng loại hết →
+       * NO_VALID_OPS. Cấm mà không nói dạng đúng thì model chỉ đổi sang lỗi khác.
+       *
+       * `allowedFieldsAt` suy ra từ schema nên lời nhắc không lệch khi thêm field.
+       */
+      const missing = lost.map((k) => `"${k}"`).join(', ')
+      const allowed = allowedFieldsAt(landed)
+      if (allowed) {
+        return (
+          `${allowed.label} chỉ có ${allowed.fields.map((f) => `"${f}"`).join(', ')}` +
+          ` — bỏ ${missing}`
+        )
+      }
+      return `Hồ sơ không có trường ${missing} — phần đó sẽ bị mất`
     }
   }
 
@@ -359,6 +386,63 @@ function droppedKeys(wrote: unknown, kept: unknown): string[] {
   if (kept === null || typeof kept !== 'object' || Array.isArray(kept)) return []
   const after = kept as Record<string, unknown>
   return Object.keys(wrote as Record<string, unknown>).filter((k) => !(k in after))
+}
+
+/**
+ * Op `remove` theo CHỈ SỐ vào cùng một mảng — hai lỗi cùng lúc.
+ *
+ * Đo thật trên UC-57, hồ sơ 24 kỹ năng: model không đủ 20 op để đặt nhóm cho
+ * từng kỹ năng, nên nó chọn "xoá hết rồi thêm lại bản đã nhóm" — và bị trần 20
+ * op cắt mất toàn bộ phần thêm lại:
+ *
+ *     remove /skills/0 … remove /skills/19      (không có op `add` nào)
+ *     summary: "Đã xoá toàn bộ 20 kỹ năng cũ để chuẩn bị thêm các kỹ năng mới"
+ *
+ * 1. MẤT DỮ LIỆU. Người dùng bấm đồng ý và mất sạch mục kỹ năng, còn summary
+ *    thì hứa một việc không có op nào thực hiện. Vi phạm BR-57.2.
+ *
+ * 2. LỆCH CHỈ SỐ. `applyProfilePatch` áp op lần lượt, nhưng mọi chỉ số đều tính
+ *    trên hồ sơ TRƯỚC patch. Xoá `/skills/0` xong thì `/skills/1` đã trỏ sang
+ *    một kỹ năng khác. Người dùng lại được bỏ tick từng op, nên không có thứ
+ *    tự nào cứu được. Chỉ dãy xoá GIẢM DẦN là an toàn.
+ *
+ * Kiểm ở mức PROPOSAL chứ không từng op: một op `remove` đơn lẻ là hợp lệ và
+ * hữu ích ("xoá kỹ năng trùng"), chỉ tập hợp mới hỏng.
+ */
+function unsafeRemovals(ops: PatchOp[]): Map<PatchOp, string> {
+  const out = new Map<PatchOp, string>()
+  const byArray = new Map<string, PatchOp[]>()
+
+  for (const op of ops) {
+    if (op.op !== 'remove') continue
+    const m = /^(.*)\/(\d+)$/.exec(op.path)
+    if (!m) continue
+    const arr = m[1]!
+    const list = byArray.get(arr)
+    if (list) list.push(op)
+    else byArray.set(arr, [op])
+  }
+
+  for (const [arr, removes] of byArray) {
+    if (removes.length < 2) continue
+
+    const label = sectionLabel(arr) ?? 'mục này'
+    const adds = ops.filter(
+      (o) => (o.op === 'add' || o.op === 'replace') && o.path.startsWith(`${arr}/`),
+    ).length
+
+    // Xoá nhiều hơn thêm lại → net là mất nội dung, bất kể model hứa gì
+    const reason =
+      adds < removes.length
+        ? `Xoá ${removes.length} mục trong "${label}" mà chỉ thêm lại ${adds} — ` +
+          `nội dung sẽ mất. Muốn gom nhóm thì đặt field "group" cho từng mục, đừng xoá.`
+        : `Nhiều op xoá trong "${label}" cùng lúc: sau op đầu tiên mọi chỉ số đều ` +
+          `lệch đi. Mỗi lượt chỉ xoá một phần tử.`
+
+    for (const op of removes) out.set(op, reason)
+  }
+
+  return out
 }
 
 /** `/work/-` → `/work/2` sau khi đã thêm; `null` nếu chỗ đó không phải mảng. */
@@ -463,6 +547,16 @@ export interface ChatFlowDeps {
    * vào hàng đợi vốn đã chậm.
    */
   onStep?: (step: ChatStep) => void
+  /**
+   * Báo các op BỊ LOẠI, kèm vòng validate thứ mấy.
+   *
+   * Vì sao cần: khi UC-57 hỏng trên hồ sơ thật, log của Next chỉ có dòng khởi
+   * động và log worker chỉ có `parse_cv`. Không chỗ nào ghi op nào bị loại vì
+   * lý do gì, nên phải bọc `gateway.run` bằng script riêng mới chẩn đoán được.
+   *
+   * Hệ thống biết chính xác nó vừa loại gì — không kể ra là tự bịt mắt mình.
+   */
+  onReject?: (round: 1 | 2, rejected: { op: PatchOp; reason: string }[]) => void
 }
 
 /**
@@ -599,6 +693,8 @@ export async function runChatTurn(
     deps.messageIds,
     input.answers ?? [],
   )
+  if (rejected.length > 0) deps.onReject?.(1, rejected)
+
   // Không op nào dùng được → NÓI CHO MODEL BIẾT NÓ SAI Ở ĐÂU rồi thử lại một lần.
   //
   // Prompt cấm chung chung không ăn thua: đo trên hồ sơ thật, model lặp lại
@@ -625,6 +721,7 @@ export async function runChatTurn(
         deps.messageIds,
         input.answers ?? [],
       )
+      if (second.rejected.length > 0) deps.onReject?.(2, second.rejected)
       if (second.valid.length > 0) {
         return {
           kind: 'patch',

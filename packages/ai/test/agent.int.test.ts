@@ -195,4 +195,76 @@ describe('runChatTurn đầu-cuối', () => {
     },
     300_000,
   )
+
+  /**
+   * TC-57-07 — nhóm kỹ năng trên hồ sơ có NHIỀU kỹ năng.
+   *
+   * Test này lẽ ra phải có từ khi làm UC-57. TESTCASES §TC-57-07 đã ghi nó là
+   * P0 nhưng không ai viết, nên tính năng ra bản chạy trong trạng thái: hồ sơ
+   * chứa được `group`, template hiện được `group`, mà model KHÔNG bao giờ sinh
+   * nổi một op hợp lệ — vì `CvItemSchema` gộp field mọi mục nên nó gắn thêm
+   * `tech`/`highlights` vào từng kỹ năng và bị loại sạch.
+   *
+   * Chỉ hồ sơ nhiều kỹ năng mới bộc lộ: với 2 kỹ năng, model không có lý do gì
+   * để gom nhóm.
+   */
+  it(
+    'TC-57-07 "tổ chức lại mục kỹ năng" ra đề xuất dùng được, không loại sạch',
+    async () => {
+      if (!up) return
+      const profile = ProfileSchema.parse({
+        ...cv(),
+        skills: [
+          'Python', 'C++', 'PyTorch', 'TensorFlow Lite', 'ONNX', 'TensorRT',
+          'YOLOv5', 'YOLOv8', 'ByteTrack', 'Triton Inference Server',
+          'Docker Compose', 'Nginx', 'Apache Kafka', 'Jetson Edge Devices',
+          'PostgreSQL', 'Redis', 'MinIO', 'Grafana', 'Loki', 'Dozzle',
+        ].map((name) => ({ name, level: 'intermediate' })),
+      })
+
+      const rejectedLog: { round: number; reason: string }[] = []
+      const r = await runChatTurn(
+        {
+          gateway: gw,
+          messageIds: new Set(['msg-1']),
+          onReject: (round, rejected) => {
+            for (const x of rejected) rejectedLog.push({ round, reason: x.reason })
+          },
+        },
+        { message: 'Tổ chức lại các mục kỹ năng cho tôi', profile, history: [] },
+      )
+
+      console.log(`  kind=${r.kind}`)
+      for (const x of rejectedLog) console.log(`    [vòng ${x.round}] loại: ${x.reason}`)
+      if (r.kind === 'patch') {
+        for (const op of r.proposal.ops) {
+          console.log(`    ${op.op} ${op.path} = ${JSON.stringify(op.value)}`)
+        }
+      } else if (r.kind === 'error') {
+        console.log(`  ${r.code}: ${r.message}`)
+      }
+
+      // Người dùng gõ một yêu cầu hợp lệ mà hệ thống có đường làm → phải ra
+      // đề xuất, không được trả lỗi "bạn thử nói cụ thể hơn"
+      expect(r.kind, `nhận được ${r.kind}`).toBe('patch')
+      if (r.kind !== 'patch') return
+
+      // Và đề xuất phải thực sự gom nhóm, không phải sửa vài chữ cho có
+      const touchesGroup = r.proposal.ops.filter(
+        (o) =>
+          o.path.startsWith('/skills/') &&
+          (o.path.endsWith('/group') ||
+            (typeof o.value === 'object' &&
+              o.value !== null &&
+              'group' in (o.value as Record<string, unknown>))),
+      )
+      expect(touchesGroup.length, 'không op nào đặt nhóm cho kỹ năng').toBeGreaterThan(0)
+
+      // Không kỹ năng nào được biến mất (BR-57.2)
+      for (const o of r.proposal.ops) {
+        expect(o.op, `op ${o.op} ${o.path} xoá kỹ năng`).not.toBe('remove')
+      }
+    },
+    300_000,
+  )
 })

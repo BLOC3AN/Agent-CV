@@ -1659,7 +1659,7 @@ không được lấy nguyên văn từ model sau khi danh sách op đã thay đ
 loại bớt op, summary phải là summary của phần **còn áp dụng được**; nếu không còn
 op thật, trả lỗi/hỏi lại thay vì hiện modal rỗng hoặc no-op.
 
-### 8.3.12 Trợ lý mời người dùng làm việc mà hệ thống không làm được
+### 8.3.13 Trợ lý mời người dùng làm việc mà hệ thống không làm được
 
 > Phát hiện từ người dùng. M5. UC-57.
 
@@ -1693,7 +1693,7 @@ năng thiếu: tính năng thiếu thì người dùng không biết mà mong đ
 ý mới, phải trả lời được: *nếu người dùng bấm vào, hệ thống có đường nào để làm
 không?* Ở đây câu trả lời là không, và không ai kiểm điều đó.
 
-### 8.3.13 Zod cũng lược TỪNG KHOÁ bên trong object
+### 8.3.14 Zod cũng lược TỪNG KHOÁ bên trong object
 
 > Phát hiện khi kiểm chứng UC-57 trên hồ sơ thật. M5.
 
@@ -1709,11 +1709,114 @@ khoá đó. Người dùng nhìn thấy `highlights` trong khung so sánh trư�
 đồng ý, và không nhận được nó.
 
 `droppedKeys` so khoá model VIẾT với khoá CÒN LẠI sau parse, và loại op kèm tên
-khoá bị mất — nên lượt sửa (§8.3.7) đưa được lý do đó cho model. Đo lại: model
-tự bỏ `highlights`, 20 op đều dùng được, 0 op bị loại.
+khoá bị mất — nên lượt sửa (§8.3.7) đưa được lý do đó cho model.
 
 Chỉ soi một tầng: đủ để bắt field bịa ra ở mức mục CV mà không đi sâu vào những
 chỗ schema vốn cho phép tự do.
+
+> **Đo lại trên hồ sơ khác thì KHÔNG như vậy.** Bản đầu ghi ở đây *"model tự bỏ
+> `highlights`, 20 op đều dùng được, 0 op bị loại"*. Trên hồ sơ 24 kỹ năng lấy
+> từ CV thật, cùng câu yêu cầu, kết quả là **loại sạch cả hai vòng** →
+> `NO_VALID_OPS`. Chốt chặn này bắt đúng lỗi, nhưng một mình nó không đủ để lượt
+> sửa hội tụ — xem §8.3.15.
+
+### 8.3.15 Nói cái SAI thì model đổi sang lỗi khác — phải nói dạng ĐÚNG
+
+> Phát hiện từ người dùng. M5. UC-57.
+
+Người dùng gõ *"Tổ chức lại các mục kỹ năng cho tôi"* trên hồ sơ 24 kỹ năng.
+Model trả 16 op, mỗi op một kỹ năng:
+
+```json
+replace /skills/0
+{"name":"Python","group":"Programming","tech":["Python"],"highlights":["Tối ưu hoá với NumPy…"]}
+```
+
+`group` đúng — UC-57 chạy. Nhưng `tech` và `highlights` không thuộc
+`SkillSchema`, nên §8.3.14 loại cả 16 op. Lượt sửa gửi cho model đúng lý do:
+
+```
+replace /skills/0: Hồ sơ không có trường "tech", "highlights" — phần đó sẽ bị mất
+```
+
+Model 4B nghe xong **bỏ luôn `group`** — thứ nó đang cần — mà **vẫn giữ**
+`tech`/`highlights`. Loại sạch lần hai → `NO_VALID_OPS`, và người dùng nhận
+*"bạn thử nói cụ thể hơn giúp nhé"* cho một yêu cầu hoàn toàn hợp lệ.
+
+**Vì sao model làm vậy.** `CvItemSchema` (§8.3.9) gộp field của MỌI loại mục vào
+một object để grammar chỉ phải dựng một lần. Nên grammar *nói với model* rằng
+`tech` và `highlights` là khoá hợp lệ — kể cả khi nó đang viết một kỹ năng.
+Luật chung trong prompt (*"không thêm field mà hồ sơ không có, ví dụ `period`"*)
+cũng không cứu được: `tech`/`highlights` **là** field thật của hồ sơ, chỉ không
+thuộc mục kỹ năng.
+
+| Thay đổi | Vì sao |
+|---|---|
+| `allowedFieldsAt(pointer)` trong `@hr/schema` | Lý do loại nêu luôn field ĐÚNG: *"một kỹ năng chỉ có "name", "level", "canonical", "group" — bỏ "tech", "highlights""*. Suy ra từ `.shape` của schema, KHÔNG viết tay: viết tay thì lần sau thêm field là lời nhắc thành sai mà không test nào đỏ |
+| Prompt liệt kê field theo TỪNG MỤC | Một field có ở mục này không có nghĩa là có ở mục khác — phải nói ra, vì grammar đang nói ngược lại |
+| Prompt nêu op gọn nhất: `add /skills/N/group` | Thay cả phần tử thì model có chỗ để nhồi field lạ |
+
+Đo lại trên đúng hồ sơ đó: **20/20 op dùng được, 0 bị loại, không cần vòng sửa.**
+
+**Bài học.** Lý do loại op *chính là* lời nhắc gửi cho model. Một lời cấm trần
+trụi chỉ đẩy model sang lỗi khác; phải nói dạng đúng, và nói bằng dữ liệu suy ra
+từ schema chứ không bằng chuỗi viết tay.
+
+### 8.3.16 Trần số op biến "gom nhóm" thành "xoá sạch"
+
+> Phát hiện khi đo lại §8.3.15 trên hồ sơ thật. M5. UC-57, BR-57.2.
+
+Sau khi §8.3.15 làm model sinh được op hợp lệ, hồ sơ 24 kỹ năng lại ra kết quả
+khác: model không có đủ 20 op để đặt nhóm cho từng kỹ năng, nên nó chọn *"xoá
+hết rồi thêm lại bản đã nhóm"* — và trần 20 op cắt mất toàn bộ phần thêm lại:
+
+```
+remove /skills/0 … remove /skills/19      ← không có op `add` nào
+summary: "Đã xoá toàn bộ 20 kỹ năng cũ để chuẩn bị thêm các kỹ năng mới"
+```
+
+Proposal này **qua sạch mọi chốt chặn cũ**: từng op `remove` riêng lẻ là hợp lệ.
+Người dùng bấm đồng ý và mất cả mục kỹ năng, còn summary hứa một việc không op
+nào thực hiện. Vi phạm BR-57.2, và tệ hơn §8.3.12 vì đây là mất dữ liệu thật.
+
+Hai lỗi trong cùng một tập op, và cả hai đều chỉ thấy được ở mức PROPOSAL:
+
+1. **Mất dữ liệu.** Xoá 20, thêm lại 0.
+2. **Lệch chỉ số.** `applyProfilePatch` áp op lần lượt, nhưng mọi chỉ số đều
+   tính trên hồ sơ TRƯỚC patch. Xoá `/skills/0` xong thì `/skills/1` đã trỏ sang
+   kỹ năng khác. Người dùng còn bỏ tick được từng op, nên không thứ tự nào cứu
+   được.
+
+`unsafeRemovals` gom các op `remove` theo mảng đích và loại cả nhóm khi có từ hai
+op trở lên, với lý do khác nhau cho hai trường hợp — thêm lại ít hơn xoá thì nói
+*"nội dung sẽ mất, muốn gom nhóm thì đặt field group"*, còn đủ số thì nói
+*"chỉ số lệch sau op đầu tiên"*. Một op `remove` đơn lẻ vẫn hợp lệ: *"xoá kỹ năng
+trùng"* là việc có thật. Prompt cũng cấm thẳng xoá-rồi-thêm-lại và dặn: nhiều
+phần tử hơn số op cho phép thì làm phần quan trọng nhất rồi DỪNG.
+
+Đo lại: 20 op `replace` đặt `group`, 0 op `remove`, 0 bị loại. Bốn kỹ năng còn
+lại chưa có nhóm và vẫn hiện ra — đúng luồng thay thế 4a của UC-57.
+
+**Bài học.** Chốt chặn từng-op không thấy được lỗi của TẬP op. Trần số op không
+phải giới hạn vô hại: khi model không diễn đạt nổi thay đổi trong hạn mức, nó
+nghĩ ra một kế hoạch phá hoại.
+
+### 8.3.17 Loại op mà không ghi log thì không ai chẩn đoán được
+
+> Phát hiện khi truy §8.3.15. M5.
+
+Ba lỗi §8.3.15/§8.3.16 đều biểu hiện y như nhau với người dùng: *"Trợ lý soạn đề
+xuất chưa dùng được… bạn thử nói cụ thể hơn"*. Còn phía server: log Next chỉ có
+dòng khởi động, log worker chỉ có `parse_cv`. **Không dòng nào ghi op nào bị loại
+vì lý do gì.** Phải bọc `gateway.run` bằng script riêng mới lần ra nguyên nhân.
+
+`ChatFlowDeps.onReject(round, rejected)` bắn ra sau mỗi vòng validate; tầng API
+ghi vào log server kèm `value` model đã viết. Không gửi ra client: người dùng chỉ
+cần biết đề xuất nào dùng được, còn người sửa cần biết model viết gì và bị loại
+vì sao.
+
+**Bài học.** Hệ thống biết chính xác nó vừa loại gì. Không kể ra là tự bịt mắt
+mình — và mọi lỗi loại này sẽ tốn đúng một lần dựng lại hiện trường bằng tay.
 
 ### 8.4 F4 — Export PDF
 

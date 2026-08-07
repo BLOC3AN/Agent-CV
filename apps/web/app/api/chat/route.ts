@@ -127,6 +127,22 @@ export async function POST(req: Request) {
             messageIds,
             // Bắn từng bước về ngay khi bắt đầu, KHÔNG chờ nó xong
             onStep: (step) => send('step', { step, label: STEP_LABEL[step] }),
+            /*
+             * Op bị loại vào LOG SERVER, không gửi ra client.
+             *
+             * Người dùng chỉ cần biết đề xuất nào dùng được; còn khi tính năng
+             * hỏng thì người sửa cần biết model đã viết gì và bị loại vì sao.
+             * Thiếu dòng log này, UC-57 hỏng mà log hoàn toàn im lặng — phải
+             * bọc `gateway.run` bằng script riêng mới lần ra được.
+             */
+            onReject: (round, rejected) => {
+              for (const r of rejected) {
+                console.warn(
+                  `[chat] vòng ${round} loại ${r.op.op} ${r.op.path}: ${r.reason} ` +
+                    `| value=${JSON.stringify(r.op.value).slice(0, 200)}`,
+                )
+              }
+            },
           },
           {
             message,

@@ -135,6 +135,69 @@ export type Project = z.infer<typeof ProjectSchema>
 export type Skill = z.infer<typeof SkillSchema>
 
 /**
+ * Field HỢP LỆ của một phần tử trong từng mục — suy ra từ chính schema.
+ *
+ * Vì sao cần: `CvItemSchema` (packages/schema/patch.ts) gộp field của MỌI loại
+ * mục vào một object để grammar chỉ phải dựng một lần. Nên grammar nói với model
+ * rằng `tech` và `highlights` là khoá hợp lệ — kể cả khi nó đang viết một kỹ
+ * năng, mà kỹ năng thì không có hai field đó.
+ *
+ * Đo thật (UC-57, hồ sơ 24 kỹ năng): model trả
+ *   replace /skills/0  {"name":"Python","group":"Programming","tech":[…],"highlights":[…]}
+ * cho cả 16 op. Chốt chặn §8.3.14 loại hết vì `tech`/`highlights` sẽ bị mất.
+ *
+ * Nói cho model biết field nào SAI thì chưa đủ — nó bỏ sang một field khác. Phải
+ * nói field nào ĐÚNG, và danh sách đó phải lấy từ schema chứ không viết tay:
+ * viết tay thì lần sau thêm field vào `SkillSchema` là lời nhắc thành sai.
+ */
+const SECTION_ITEM_SHAPE = {
+  education: EducationSchema,
+  work: WorkSchema,
+  projects: ProjectSchema,
+  skills: SkillSchema,
+  activities: ActivitySchema,
+  certifications: CertificationSchema,
+  languages: LanguageSkillSchema,
+} as const
+
+/** Tên mục tiếng Việt cho lời nhắc gửi model và hiện cho người dùng */
+const SECTION_ITEM_LABEL: Record<keyof typeof SECTION_ITEM_SHAPE, string> = {
+  education: 'một mục học vấn',
+  work: 'một chỗ làm',
+  projects: 'một dự án',
+  skills: 'một kỹ năng',
+  activities: 'một hoạt động',
+  certifications: 'một chứng chỉ',
+  languages: 'một ngoại ngữ',
+}
+
+/**
+ * Con trỏ tới một OBJECT trong Profile → danh sách field nó được có, kèm nhãn
+ * đọc được. `null` khi con trỏ không trỏ vào object nào có schema cố định
+ * (ví dụ `/work/0/highlights/1` là chuỗi, `/skills` là mảng).
+ */
+export function allowedFieldsAt(
+  pointer: string,
+): { label: string; fields: string[] } | null {
+  const parts = pointer.split('/').filter((s) => s !== '')
+
+  if (parts.length === 1 && parts[0] === 'basics') {
+    return { label: 'thông tin chung', fields: Object.keys(BasicsSchema.shape) }
+  }
+
+  // `/skills/0` hoặc `/skills/-` — một phần tử của mục
+  if (parts.length === 2) {
+    const section = parts[0] as keyof typeof SECTION_ITEM_SHAPE
+    const schema = SECTION_ITEM_SHAPE[section]
+    if (schema && (parts[1] === '-' || /^\d+$/.test(parts[1]!))) {
+      return { label: SECTION_ITEM_LABEL[section], fields: Object.keys(schema.shape) }
+    }
+  }
+
+  return null
+}
+
+/**
  * ParsedProfile — thứ MODEL được phép trả về khi đọc CV.
  *
  * TDD §15.2 R1: PII bị che bằng code TRƯỚC khi gửi model, nên model không nhìn
