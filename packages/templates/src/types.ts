@@ -61,8 +61,10 @@ export const DEFAULT_THEME: Theme = {
   accent: '#1f4e79',
   text: '#111827',
   muted: '#4b5563',
-  // Font có dấu tiếng Việt đầy đủ. Fallback hệ thống để bản ATS luôn render được.
-  fontFamily: "'Be Vietnam Pro', 'Inter', 'Segoe UI', Arial, sans-serif",
+  // Cùng biến CSS với styles.css:18 (next/font) — inline style ở render.tsx có
+  // độ ưu tiên CAO HƠN rule trong stylesheet, nên nếu để literal 'Be Vietnam
+  // Pro' ở đây thì nó THẮNG và font đã nhúng không bao giờ được dùng.
+  fontFamily: 'var(--font-be-vietnam), \'Inter\', \'Segoe UI\', Arial, sans-serif',
   scale: 1,
   lineHeight: 1.5,
   pageMargin: 14,

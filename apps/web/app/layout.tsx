@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { beVietnamPro } from '@/lib/fonts'
 import { TopNav } from '@/components/nav/TopNav'
 import { DegradeBanner } from '@/components/system/DegradeBanner'
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="vi">
+    <html lang="vi" className={beVietnamPro.variable}>
       <body className="bg-neutral-50 text-neutral-900">
         <DegradeBanner />
         <TopNav />

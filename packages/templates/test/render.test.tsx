@@ -81,6 +81,14 @@ describe('Registry — MVP có đúng 2 mẫu', () => {
   })
 })
 
+describe('DEFAULT_THEME.fontFamily — không được literal (Task 2, apps/web/lib/fonts.ts)', () => {
+  it('render.tsx đặt --cv-font qua inline style; specificity của inline THẮNG rule trong styles.css, nên literal ở đây sẽ đè mất font đã nhúng', () => {
+    const html = render('elegant')
+    expect(html).toContain('--cv-font:var(--font-be-vietnam)')
+    expect(html).not.toContain("--cv-font:'Be Vietnam Pro'")
+  })
+})
+
 describe('TC-31-01 — đổi mẫu KHÔNG mất dữ liệu (BR-31.2)', () => {
   it('cả hai mẫu render đủ mọi nội dung của Profile', () => {
     for (const id of TEMPLATE_IDS) {

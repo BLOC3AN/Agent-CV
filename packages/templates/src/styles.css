@@ -15,7 +15,7 @@
   --cv-accent: #1f4e79;
   --cv-text: #111827;
   --cv-muted: #4b5563;
-  --cv-font: 'Be Vietnam Pro', 'Inter', 'Segoe UI', Arial, sans-serif;
+  --cv-font: var(--font-be-vietnam), 'Inter', 'Segoe UI', Arial, sans-serif;
   --cv-scale: 1;
   --cv-line: 1.5;
   --cv-margin: 14mm;

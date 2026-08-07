@@ -56,7 +56,9 @@
  * thiếu là lỗi chết người với CV tiếng Việt (BR-32.3).
  */
 :root {
-  --font-ui: 'Be Vietnam Pro', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* next/font sinh --font-be-vietnam ở scope <html>; giữ chuỗi dự phòng để
+     trang vẫn đọc được nếu file font tải hỏng. */
+  --font-ui: var(--font-be-vietnam), 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 body {
