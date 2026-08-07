@@ -40,11 +40,22 @@ export function useFocusTrap(open: boolean, onClose: () => void) {
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
-    // Không lọc theo `offsetParent`: happy-dom (môi trường test) không có
-    // layout engine nên `offsetParent` luôn là null cho mọi phần tử, kể cả
-    // phần tử thật sự hiện hữu. Lọc theo `disabled` (đã nằm trong FOCUSABLE)
-    // là đủ cho mục đích bẫy focus.
-    const items = (): HTMLElement[] => Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE))
+    // Lọc hiển thị bằng `checkVisibility`, không dùng `offsetParent`:
+    // `offsetParent` chỉ bắt được `display:none` và dựa vào layout engine —
+    // nó cũng KHÔNG bắt `visibility:hidden` (phần tử vẫn chiếm layout).
+    // `checkVisibility({visibilityProperty: true})` đọc computed style trực
+    // tiếp nên bắt được cả hai, và chạy đúng trong happy-dom (môi trường
+    // test) vì không cần layout thật. Fallback `true` khi API không tồn tại
+    // (trình duyệt cũ) để không vô tình loại sạch phần tử.
+    const visible = (el: HTMLElement): boolean =>
+      typeof el.checkVisibility === 'function'
+        ? el.checkVisibility({ visibilityProperty: true })
+        : true
+
+    const items = (): HTMLElement[] =>
+      Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => visible(el) || el === document.activeElement,
+      )
 
     // Focus phần tử đầu tiên; nếu lớp phủ chưa có gì focus được thì focus
     // chính nó (nó có tabIndex={-1}) để phím Escape vẫn tới nơi.
