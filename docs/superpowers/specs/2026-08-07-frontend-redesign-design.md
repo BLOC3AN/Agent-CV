@@ -427,7 +427,8 @@ Thêm mục mới **§13 Hệ thiết kế**: token, primitive, chữ ký AI, qu
 | `/print/:cvId` | Đầu vào của file PDF người dùng nộp đi (D9) |
 | Đổi route hoặc luồng nghiệp vụ | Trộn thay đổi giao diện với thay đổi nghiệp vụ thì hỏng không biết do bên nào |
 | Thêm `company` vào `JobDescriptionSchema` | Cần để hiện tên công ty ở §6.2, nhưng là thay đổi schema — tách riêng |
-| i18n / song ngữ giao diện | Chưa có `next-intl`; là dự án riêng |
+| i18n **giao diện** (`uiLocale`) | Chưa có `next-intl`; là dự án riêng. **Không nhầm với ngôn ngữ CV** — xem §11 |
+| Công tắc ngôn ngữ **JD** (`jd.language`) | `JdForm` đang gửi cứng `'vi'`; thuộc kế hoạch 2 khi dựng lại `/analyze` |
 | Kéo thả sắp xếp section | Chưa có `@dnd-kit`; là dự án riêng |
 | Chế độ tối | Đã quyết bỏ (D4) |
 
@@ -442,3 +443,37 @@ Thêm mục mới **§13 Hệ thiết kế**: token, primitive, chữ ký AI, qu
 | `CvThumbnail` dùng `transform: scale` có thể vỡ layout với CV dài | Cắt bằng `overflow: hidden` + tỷ lệ khung cố định; test với profile nhiều section |
 | 586 lượt màu di trú thủ công dễ sót | Rule ESLint ở §7.4 bắt phần còn lại; `npm run lint` là cổng |
 | Font `.woff2` làm nặng bundle | Chỉ nạp 2 weight (400, 600), `font-display: swap`, subset Latin + Vietnamese |
+| Người dùng bấm `EN` rồi tưởng CV sẽ tự dịch | Nhãn cạnh công tắc nói thẳng "đổi tiêu đề mục — không dịch nội dung bạn đã viết"; có test khoá câu này |
+
+---
+
+## 11. Bổ sung — ngôn ngữ CV `vi | en`
+
+Thêm sau khi spec được duyệt, theo yêu cầu ngày 2026-08-07.
+
+FRONTEND §9.6 quy định **ba trục ngôn ngữ độc lập**. Phần bổ sung này chỉ làm
+trục **CV**, không đụng hai trục kia:
+
+| Trục | Phạm vi |
+|---|---|
+| `profile.language` — ngôn ngữ CV | ✅ **trong** phạm vi |
+| `jd.language` — ngôn ngữ JD | ⛔ kế hoạch 2 |
+| `uiLocale` — ngôn ngữ giao diện | ⛔ dự án riêng (§9) |
+
+Gộp ba trục làm một là sai: người Việt muốn giao diện tiếng Việt mà CV tiếng
+Anh để nộp công ty nước ngoài là trường hợp **phổ biến nhất**, không phải
+ngoại lệ.
+
+**Phần lớn đã có sẵn.** Khảo sát cho thấy mọi tầng dưới đã hoàn chỉnh từ
+trước: `LanguageSchema = z.enum(['vi','en'])`, `sectionTitle(id, lang)` có đủ
+cả hai bộ nhãn, `renderSection` đọc `profile.language`, `ProfileRepo` lưu nó,
+và `PATCH /api/profiles/:id` nhận mọi `PatchOp`. Thiếu đúng **một công tắc**
+trên giao diện.
+
+**Ràng buộc sản phẩm.** Đổi công tắc **không dịch nội dung** — nó đổi ngôn ngữ
+khai báo, tiêu đề mục do template sinh đi theo, chữ người dùng tự viết giữ
+nguyên. Giao diện phải nói rõ điều này ngay cạnh công tắc.
+
+**Đặt ở đâu.** Thanh trên của `/builder`, cạnh Hoàn tác. Đi qua `applyUser`
+như mọi thay đổi khác (FRONTEND §9.2) nên Hoàn tác dùng được, không cần cơ chế
+riêng.
