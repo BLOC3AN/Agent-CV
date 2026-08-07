@@ -687,6 +687,32 @@ curl -s -X POST http://100.68.50.41:5011/v1/chat/completions \
 
 ---
 
+## 14.5 Lớp E2E — trình duyệt thật, ứng dụng thật
+
+> `apps/web/test/e2e.int.test.ts`. Chạy: `bash scripts/dev-restart.sh && npm run test:int`
+
+Mọi lỗi giao diện trong dự án này đều do NGƯỜI DÙNG tìm ra, không phải test:
+`/act` lộ ra màn hình, chat mất khi đổi tab, "đã áp dụng" mà nội dung biến mất,
+job `match_analysis` làm Home nói *"đang đọc CV của bạn"*.
+
+Test đơn vị không bắt được nhóm đó vì chúng kiểm từng mảnh rời. Cái hỏng nằm ở
+CHỖ GHÉP: server component + client component + cookie + điều hướng.
+
+| TC | Mô tả | Mức | Kỳ vọng |
+|---|---|---|---|
+| TC-E2E-01 | Home hiện ĐÚNG MỘT trong ba màn | **P0** | Không trang trắng, không hai màn chồng nhau |
+| TC-E2E-02 | Không nút nào trên Home dẫn tới 404 | **P0** | BR-01.3 — quét mọi `<a href>` bằng HTTP thật |
+| TC-E2E-03 | Magic link: xin → đổi → thấy email mình | **P0** | UC-11 đầu-cuối qua cookie thật |
+| TC-E2E-04 | Link chỉ dùng được MỘT lần | **P0** | Lần hai nói rõ "đã dùng rồi" |
+| TC-E2E-05 | "Chưa đi làm" đổi hướng sang Dự án | **P0** | BR-05.2, kiểm trên DOM thật |
+| TC-E2E-06 | Luôn quay lại được bước trước | P0 | BR-05.1 |
+| TC-E2E-07 | `/settings` chưa đăng nhập không nổ 500 | P0 | Về `/login` hoặc hiện được trang |
+
+Dùng thư viện `playwright` có sẵn (đã dùng để xuất PDF) thay vì thêm
+`@playwright/test`: một bộ chạy test là đủ, và mọi test khác đang ở vitest.
+
+---
+
 ## 15. Nhóm test không tự động hóa được
 
 Những mục sau cần người đánh giá, ghi lại vào `eval/manual-log.md` mỗi vòng:

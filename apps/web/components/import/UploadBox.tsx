@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { intentQuery, type Intent } from '@/lib/intent'
 
 /**
  * Ô tải CV lên + màn hình chờ — UC-21, FRONTEND §3.
@@ -20,8 +21,10 @@ interface Progress {
   note?: string
 }
 
-export function UploadBox() {
+export function UploadBox({ intent = null }: { intent?: Intent | null }) {
   const router = useRouter()
+  // Ý định đi kèm suốt luồng để bước rà soát biết dẫn người dùng đi đâu tiếp
+  const carry = intentQuery(intent)
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<{ code: string; message: string } | null>(null)
   const [progress, setProgress] = useState<Progress>({ pct: 0 })
@@ -82,7 +85,7 @@ export function UploadBox() {
     })
     es.addEventListener('done', () => {
       es.close()
-      router.push(`/import/${jobId}/review`)
+      router.push(`/import/${jobId}/review${carry}`)
     })
     es.addEventListener('failed', (e) => {
       es.close()
@@ -91,7 +94,7 @@ export function UploadBox() {
       }
       // Trang rà soát biết cách giải thích từng mã lỗi và mời hành động tiếp
       // theo (BR-71.1) — đừng dựng lại logic đó ở đây
-      router.push(`/import/${jobId}/review`)
+      router.push(`/import/${jobId}/review${carry}`)
       void d
     })
     es.onerror = () => {

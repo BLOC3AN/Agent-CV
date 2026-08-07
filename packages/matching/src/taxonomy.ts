@@ -178,3 +178,29 @@ export function taxonomy(path?: string): SkillTaxonomy {
   }
   return shared
 }
+
+/**
+ * Gán `canonical` cho từng kỹ năng trong hồ sơ — X-5.
+ *
+ * ── Vì sao cần ──
+ * `SkillSchema.canonical` có từ đầu nhưng KHÔNG ai điền: đo trên dữ liệu thật,
+ * chỉ 8/140 kỹ năng có giá trị. Lớp đối chiếu vẫn chạy vì nó tự chuẩn hoá lúc
+ * so sánh, nên lỗi này im lặng — nhưng hồ sơ thì mất thông tin:
+ *
+ *   · "ReactJS", "React.js", "react" nằm ba dòng khác nhau, không gộp được
+ *   · không lọc/nhóm kỹ năng theo mảng dựa trên dữ liệu chuẩn được
+ *   · mỗi lần đối chiếu lại phải chuẩn hoá lại từ đầu
+ *
+ * KHÔNG đổi `name`: đó là chữ NGƯỜI DÙNG viết và nó hiện lên CV. Chỉ thêm
+ * `canonical` bên cạnh làm khoá máy dùng.
+ */
+export function canonicalizeSkills<T extends { name: string; canonical?: string }>(
+  skills: T[],
+  tax: SkillTaxonomy,
+): T[] {
+  return skills.map((s) => {
+    if (s.canonical) return s
+    const hit = tax.canonicalize(s.name)
+    return hit ? { ...s, canonical: hit.canonical } : s
+  })
+}

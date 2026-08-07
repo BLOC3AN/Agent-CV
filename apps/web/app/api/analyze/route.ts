@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getPool, MatchRepo } from '@hr/db'
 import { jobKey } from '@hr/worker/storage'
-import { devUserId, enqueue } from '@/lib/jobs'
+import { enqueue } from '@/lib/jobs'
+import { requireUserId } from '@/lib/auth'
 
 /**
  * POST /api/analyze — dán JD và bắt đầu đối chiếu (UC-41, UC-33).
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
 
   let userId: string
   try {
-    userId = await devUserId()
+    userId = await requireUserId()
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 401 })
   }

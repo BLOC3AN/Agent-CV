@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { SkillTaxonomy, taxonomy } from '../src/taxonomy.js'
+import { SkillTaxonomy, taxonomy, canonicalizeSkills } from '../src/taxonomy.js'
 import { normalize, tokenize, containsPhrase, deaccent } from '../src/normalize.js'
 
 /**
@@ -206,5 +206,43 @@ describe('tính toàn vẹn của file phân loại', () => {
       expect(e.display.vi, e.canonical).toBeTruthy()
       expect(e.display.en, e.canonical).toBeTruthy()
     }
+  })
+})
+
+describe('canonicalizeSkills — X-5', () => {
+  /**
+   * Trường `canonical` có từ đầu nhưng KHÔNG ai điền: đo trên dữ liệu thật chỉ
+   * 8/140 kỹ năng có giá trị. Lớp đối chiếu vẫn chạy vì nó tự chuẩn hoá lúc so
+   * sánh, nên thiếu sót này im lặng suốt.
+   */
+  it('gán canonical cho biến thể tên khác nhau', () => {
+    const tax = taxonomy()
+    const out = canonicalizeSkills<{ name: string; canonical?: string }>(
+      [{ name: 'ReactJS' }, { name: 'React.js' }, { name: 'react' }],
+      tax,
+    )
+    const set = new Set(out.map((s) => s.canonical))
+    // Ba cách viết phải quy về cùng một khoá
+    expect(set.size).toBe(1)
+    expect([...set][0]).toBeTruthy()
+  })
+
+  it('KHÔNG đổi `name` — đó là chữ người dùng viết và nó hiện lên CV', () => {
+    const out = canonicalizeSkills([{ name: 'ReactJS' }], taxonomy())
+    expect(out[0]!.name).toBe('ReactJS')
+  })
+
+  it('kỹ năng không có trong taxonomy vẫn giữ nguyên, không bị bỏ', () => {
+    const out = canonicalizeSkills<{ name: string; canonical?: string }>(
+      [{ name: 'Kỹ năng lạ chưa từng có' }],
+      taxonomy(),
+    )
+    expect(out).toHaveLength(1)
+    expect(out[0]!.canonical).toBeUndefined()
+  })
+
+  it('canonical đã có sẵn thì giữ nguyên, không ghi đè', () => {
+    const out = canonicalizeSkills([{ name: 'React', canonical: 'da-co-san' }], taxonomy())
+    expect(out[0]!.canonical).toBe('da-co-san')
   })
 })

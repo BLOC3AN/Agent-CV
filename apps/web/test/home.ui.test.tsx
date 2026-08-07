@@ -46,12 +46,19 @@ describe('Home lần đầu — bộ định tuyến ý định (UC-01)', () => 
     for (const e of ENTRIES) expect(e.title.startsWith('Tôi ')).toBe(true)
   })
 
-  it('TC-01-03 lối vào CHƯA dựng xong không phải là link', () => {
-    // Nút dẫn tới 404 còn tệ hơn không có nút: người bấm vào nghĩ hệ thống hỏng
+  it('TC-01-03 mọi lối vào đều dẫn tới màn hình CÓ THẬT', () => {
+    // Nút dẫn tới 404 còn tệ hơn không có nút: người bấm vào nghĩ hệ thống hỏng.
+    // Lối vào nào chưa dựng xong thì KHÔNG được là link (`soon`), và phải nói
+    // thẳng ra. Kiểm 404 thật nằm ở lớp E2E (apps/web/test/e2e.int.test.ts).
     render(<IntentRouter />)
     const links = screen.getAllByRole('link')
-    for (const a of links) expect(a.getAttribute('href')).not.toContain('/start/guided')
-    expect(screen.getByText(/Sắp có/)).toBeInTheDocument()
+    const ready = ENTRIES.filter((e) => !e.soon)
+    expect(links).toHaveLength(ready.length)
+
+    for (const e of ENTRIES) {
+      if (e.soon) expect(links.some((a) => a.getAttribute('href') === e.href)).toBe(false)
+      else expect(links.some((a) => a.getAttribute('href') === e.href)).toBe(true)
+    }
   })
 
   it('lối vào cho nhóm hoang mang được làm NỔI BẬT', () => {

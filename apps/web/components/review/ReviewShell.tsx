@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { destinationAfterReview, type Intent } from '@/lib/intent'
 import { buildReviewItems, reviewProgress, type Profile, type ReviewItem } from '@hr/schema'
 import { OriginalPane } from './OriginalPane'
 import { ReviewList } from './ReviewList'
@@ -17,12 +18,19 @@ import { ReviewList } from './ReviewList'
 
 interface Props {
   jobId: string
+  /**
+   * Ý định người dùng chọn ở Home — quyết định rà soát xong thì đi đâu.
+   *
+   * Người bấm "Tôi không biết CV mình dở ở đâu" mà xong lại bị quăng vào trình
+   * soạn thì câu hỏi thật của họ không được trả lời ở bất kỳ đâu (UC-01 bước 5).
+   */
+  intent?: Intent | null
   profileId: string
   initialProfile: Profile
   quality: { level: string; warning: boolean; reasons: string[]; pages: number }
 }
 
-export function ReviewShell({ jobId, profileId, initialProfile, quality }: Props) {
+export function ReviewShell({ jobId, intent = null, profileId, initialProfile, quality }: Props) {
   const router = useRouter()
   const [profile, setProfile] = useState<Profile>(initialProfile)
   const [busy, setBusy] = useState<string | null>(null)
@@ -110,7 +118,7 @@ export function ReviewShell({ jobId, profileId, initialProfile, quality }: Props
       const res = await fetch(`/api/imports/${jobId}/complete`, { method: 'POST' })
       const data = (await res.json()) as { cvId?: string; error?: string; pending?: string[] }
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
-      router.push(`/builder/${data.cvId}`)
+      router.push(destinationAfterReview(intent, data.cvId!))
     } catch (e) {
       setError((e as Error).message)
       setFinishing(false)

@@ -60,6 +60,40 @@ const LABEL: Record<ParseableSection, { vi: string; en: string }> = {
  * làm loãng các luật quan trọng khác.
  */
 const EXTRA_RULES: Partial<Record<ParseableSection, { vi: string; en: string }>> = {
+  work: {
+    // Đo trên CV-07 thật: một chỗ làm chứa nhiều dự án, mỗi dự án có tiêu đề
+    // riêng nhìn y hệt tên công ty:
+    //     SPLUS — Software          12/2025 – Present
+    //     Fullstack Developer
+    //     • …
+    //     Backend Developer — System Modernization      ← DỰ ÁN, không phải công ty
+    //     • …
+    // Model tách thành 5 "chỗ làm" trong khi CV chỉ có 2. Hồ sơ thành ra nói
+    // người này nhảy việc 5 lần — sai lệch nghiêm trọng với nhà tuyển dụng.
+    vi: `
+QUAN TRỌNG — một chỗ làm có thể chứa nhiều dự án:
+    SPLUS — Software        12/2025 – Hiện tại
+    Fullstack Developer
+    • …
+    Backend Developer — System Modernization
+    • …
+
+Khối KHÔNG CÓ mốc thời gian riêng là DỰ ÁN thuộc chỗ làm ngay phía trên, KHÔNG
+phải một chỗ làm mới. Gộp gạch đầu dòng của nó vào "highlights" của chỗ làm đó.
+Chỉ mở một mục mới khi thấy MỐC THỜI GIAN mới.`,
+    en: `
+IMPORTANT — one employer may contain several projects:
+    SPLUS — Software        12/2025 – Present
+    Fullstack Developer
+    • …
+    Backend Developer — System Modernization
+    • …
+
+A block with NO date range of its own is a PROJECT under the employer above it,
+not a new employer. Fold its bullets into that employer's "highlights".
+Open a new entry only when you see a new DATE RANGE.`,
+  },
+
   skills: {
     // Đo trên CV-07 thật: khối kỹ năng viết theo NHÓM
     //     Languages

@@ -3,6 +3,7 @@ import type { Profile } from '@hr/schema'
 import { profileRepo } from '@/lib/db'
 import { jobRepo, splitError } from '@/lib/jobs'
 import { ReviewShell } from '@/components/review/ReviewShell'
+import { parseIntent } from '@/lib/intent'
 
 /**
  * `/import/:jobId/review` — màn hình rà soát bắt buộc (UC-22).
@@ -16,10 +17,14 @@ export const dynamic = 'force-dynamic'
 
 export default async function ReviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ jobId: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { jobId } = await params
+  const sp = await searchParams
+  const intent = parseIntent(typeof sp['intent'] === 'string' ? sp['intent'] : null)
   const job = await jobRepo().get(jobId)
 
   if (!job) return <Notice title="Không tìm thấy lượt tải lên này" />
@@ -51,6 +56,7 @@ export default async function ReviewPage({
 
   return (
     <ReviewShell
+      intent={intent}
       jobId={jobId}
       profileId={profileId}
       initialProfile={profile as Profile}

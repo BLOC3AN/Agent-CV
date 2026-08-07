@@ -45,7 +45,6 @@ export const ENTRIES: Entry[] = [
     href: '/start/guided',
     title: 'Tôi chưa có CV nào',
     desc: 'Làm từ đầu, có người dẫn từng bước',
-    soon: true,
   },
 ]
 

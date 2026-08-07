@@ -7,6 +7,7 @@ import {
 } from '@hr/ai'
 import { JobError, type ProfileRepo } from '@hr/db'
 import { assembleProfile, ParsedProfileSchema, type Language } from '@hr/schema'
+import { canonicalizeSkills, taxonomy } from '@hr/matching'
 import type { JobContext } from '../runner.js'
 import type { PdfkitClient, SegmentResult, TextQuality } from '../pdfkit-client.js'
 import type { Storage } from '../storage.js'
@@ -240,6 +241,22 @@ export function makeParseCvHandler(deps: ParseCvDeps) {
       })
     }
     const profile = assembleProfile(assembled.data, identity, 'pdf_import')
+
+    /*
+     * Gán `canonical` cho kỹ năng ngay lúc import — X-5.
+     *
+     * Trường này có từ đầu nhưng không ai điền: đo trên dữ liệu thật chỉ 8/140
+     * kỹ năng có giá trị. Lớp đối chiếu vẫn chạy vì nó tự chuẩn hoá lúc so
+     * sánh, nên thiếu sót này im lặng — nhưng hồ sơ thì không gộp được
+     * "ReactJS" với "React.js", và mỗi lần đối chiếu phải chuẩn hoá lại.
+     *
+     * Không có taxonomy thì bỏ qua, KHÔNG làm hỏng cả lượt import.
+     */
+    try {
+      profile.skills = canonicalizeSkills(profile.skills, taxonomy())
+    } catch {
+      /* thiếu file taxonomy — hồ sơ vẫn dùng được, chỉ là chưa chuẩn hoá */
+    }
 
     const saved = await deps.profiles.create(ctx.job.userId, profile)
     await ctx.progress(100, 'Xong')

@@ -46,9 +46,10 @@ function when(d: Date): string {
 }
 
 async function load(): Promise<HomeData | null> {
-  // Chưa có auth (X-1): không có user thì hiện Home lần đầu, đừng làm vỡ trang.
-  const { devUserId } = await import('@/lib/jobs')
-  const userId = await devUserId().catch(() => null)
+  // Chưa đăng nhập thì hiện Home lần đầu — người lạ vẫn thấy được sản phẩm
+  // làm gì trước khi phải đăng ký (BR-01.4).
+  const { currentUser } = await import('@/lib/auth')
+  const userId = (await currentUser().catch(() => null))?.id
   if (!userId) return null
 
   const pool = getPool()

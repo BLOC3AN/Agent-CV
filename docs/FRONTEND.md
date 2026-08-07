@@ -36,23 +36,25 @@ Ba nguyên tắc sản phẩm:
 │                      · chưa có gì      → bộ định tuyến ý định      │
 │                      · đang dở dang    → tiếp tục việc đang làm    │
 │                      · đã có hồ sơ     → bảng việc cần làm         │
-│ /login               Đăng nhập (Google OAuth · magic link)         │
+│ /login               Đăng nhập bằng magic link (UC-11)             │
 └───────────────────────────────────────────────────────────────────┘
 
 ┌─ Onboarding ──────────────────────────────────────────────────────┐
-│ /start/guided        Làm CV từ đầu, có người dẫn (UC-05) — CHƯA có │
+│ /start/guided        Làm CV từ đầu, có người dẫn (UC-05)           │
 │ /import?intent=…     Tải CV lên, mang theo ý định từ Home          │
 │ /import              Tải PDF → tiến trình xử lý                    │
 │ /import/:jobId/review   ★ MÀN HÌNH RÀ SOÁT (bắt buộc)             │
 └───────────────────────────────────────────────────────────────────┘
 
 ┌─ Workspace ───────────────────────────────────────────────────────┐
+│ /diagnose/:cvId      ★ Chẩn đoán sức khoẻ CV (UC-04)              │
 │ /builder/:cvId       ★ Trình soạn CV (màn hình chính)             │
 │   ├─ panel: Chat tư vấn        (slide-over bên phải)              │
 │   ├─ modal: Duyệt đề xuất      (diff từng thay đổi)               │
 │   └─ modal: Xuất file          (chọn bản trình bày / ATS)         │
 │ /analyze/:cvId       Nhập JD → Báo cáo đối chiếu                  │
 │ /cv                  Danh sách CV của tôi                          │
+│ /cv/new              Nhập tay (UC-23)                              │
 │ /settings            Tài khoản · ngôn ngữ · quyền riêng tư         │
 └───────────────────────────────────────────────────────────────────┘
 
@@ -579,6 +581,8 @@ Thông báo lỗi phải nói **user làm gì tiếp theo**, không mô tả l�
 
 | Hạng mục | Lý do hoãn |
 |---|---|
+| Dùng thử không đăng nhập (UC-12) | BR-12.1 cấm khách gọi AI, mà AI chính là giá trị ở lần chạm đầu. Bộ định tuyến ý định đã cho người lạ thấy sản phẩm làm gì trước khi đăng ký |
+| Đăng nhập bằng Google | Cần đăng ký ứng dụng và khoá bí mật; magic link đã đủ cho giai đoạn này |
 | Sửa CV trên mobile | Trải nghiệm kém; chỉ hỗ trợ xem + chat |
 | Template mức B (2 cột) | M6 |
 | Cộng tác thời gian thực | Không có nhu cầu ở MVP |

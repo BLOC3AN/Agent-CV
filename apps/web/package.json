@@ -11,13 +11,17 @@
   "dependencies": {
     "@hr/ai": "*",
     "@hr/db": "*",
+    "@hr/kb": "*",
+    "@hr/pdf": "*",
     "@hr/schema": "*",
     "@hr/templates": "*",
-    "next": "^15.5.22",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@hr/pdf": "*",
     "@hr/worker": "*",
-    "@hr/kb": "*"
+    "next": "^15.5.22",
+    "nodemailer": "^9.0.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.1"
   }
 }

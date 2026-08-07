@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getPool } from '@hr/db'
 import { contentKey } from '@hr/worker/storage'
-import { devUserId, enqueue, storage } from '@/lib/jobs'
+import { enqueue, storage } from '@/lib/jobs'
+import { requireUserId } from '@/lib/auth'
 
 /**
  * POST /api/uploads/cv — UC-21, TDD §8.1 bước [0].
@@ -48,8 +49,6 @@ export async function POST(req: Request) {
     )
   }
 
-  // TODO(X-1 Auth): lấy userId từ session. Tới lúc đó `devUserId()` tự ném lỗi
-  // ở production, nên không thể quên gỡ nhánh này.
   const given = form.get('userId')
   let userId: string
   if (typeof given === 'string' && given) {
@@ -58,7 +57,7 @@ export async function POST(req: Request) {
     userId = given
   } else {
     try {
-      userId = await devUserId()
+      userId = await requireUserId()
     } catch (e) {
       return NextResponse.json({ error: (e as Error).message }, { status: 401 })
     }

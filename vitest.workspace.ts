@@ -63,6 +63,9 @@ export default defineWorkspace([
         'eval/**/*.test.ts',
         'packages/**/test/**/*.int.test.ts',
         'services/**/test/**/*.int.test.ts',
+        // Lớp E2E chạy trình duyệt thật — cùng nhóm với test tích hợp vì cả hai
+        // đều cần hạ tầng sống, và một bộ chạy test là đủ cho cả dự án.
+        'apps/**/test/**/*.int.test.ts',
       ],
       environment: 'node',
       testTimeout: 120_000,

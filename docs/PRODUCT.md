@@ -275,14 +275,14 @@ trên nó.
 
 Xếp theo **số người bị chặn** chia cho **công bỏ ra**.
 
-| Đợt | Việc | Vì sao ưu tiên vậy |
+| Đợt | Việc | Trạng thái |
 |---|---|---|
-| **P1** | Home lần đầu (4 lối vào) + Home quay lại + chọn Home theo trạng thái thật | Chặn mọi người dùng mới ở màn hình đầu tiên |
-| **P1** | Trạng thái "dở dang" | Mất công người dùng đã bỏ ra — lỗi tệ nhất trong ba |
-| **P2** | Màn chẩn đoán (luồng C) | Nhóm đông nhất, và `scoreRubric` đã có sẵn |
-| **P2** | Luồng D nối thẳng từ home | Đã có `/analyze`, chỉ thiếu đường dẫn vào |
-| **P3** | Luồng B có người dẫn | Giá trị cao nhưng là màn hình mới hoàn toàn |
-| **P3** | Bảng chi tiết "82%" | Tính được ngay, nhưng phải bấm vào mới thấy |
+| **P1** | Home lần đầu (4 lối vào) + Home quay lại + chọn theo trạng thái thật | ✅ xong |
+| **P1** | Trạng thái "dở dang" | ✅ xong |
+| **P2** | Màn chẩn đoán (luồng C) — `/diagnose/:cvId` | ✅ xong |
+| **P2** | Luồng D nối thẳng từ Home | ✅ xong (`lib/intent.ts`) |
+| **P3** | Luồng B có người dẫn — `/start/guided` | ✅ xong |
+| **P3** | Bảng chi tiết "82%" | ✅ xong (bấm vào con số) |
 
 **Không làm ở giai đoạn này:** gợi ý việc làm thật (cần nguồn dữ liệu tuyển
 dụng), so sánh với người khác (cần dữ liệu tổng hợp), chấm điểm bằng người thật.

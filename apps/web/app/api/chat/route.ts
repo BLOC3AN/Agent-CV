@@ -4,7 +4,7 @@ import { Gateway, runChatTurn, STEP_LABEL } from '@hr/ai'
 import { ChatRepo, MatchRepo, getPool } from '@hr/db'
 import { SqlFilterSelector, toClarifyQuestions, toPromptChunks } from '@hr/kb'
 import { profileRepo } from '@/lib/db'
-import { devUserId } from '@/lib/jobs'
+import { requireUserId } from '@/lib/auth'
 
 /**
  * POST /api/chat — một lượt trò chuyện với trợ lý (UC-51/52/53).
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
   let userId: string
   try {
-    userId = await devUserId()
+    userId = await requireUserId()
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 401 })
   }

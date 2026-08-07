@@ -67,36 +67,6 @@ export async function enqueue(input: {
   }
 }
 
-/**
- * Tài khoản tạm để chạy thử tay — X-1 (Auth) chưa làm.
- *
- * Phải BẬT TƯỜNG MINH bằng `ALLOW_DEV_USER=true`, không suy từ `NODE_ENV`:
- * `next start` luôn đặt NODE_ENV=production kể cả khi chạy trên máy dev, nên
- * dựa vào nó thì hoặc chặn luôn việc chạy thử cục bộ, hoặc (nếu đảo điều kiện)
- * mở toang ở production thật. Một biến riêng thì ý định rõ ràng và production
- * chỉ cần KHÔNG đặt nó.
- *
- * Không có rào này thì một route quên kiểm session sẽ lặng lẽ gán mọi hồ sơ
- * vào cùng một tài khoản, và không ai phát hiện cho tới khi hai người dùng
- * thấy CV của nhau.
- */
-const DEV_EMAIL = 'dev@local'
-
-export async function devUserId(): Promise<string> {
-  if (process.env.ALLOW_DEV_USER !== 'true') {
-    throw new Error(
-      'Chưa đăng nhập. Đặt ALLOW_DEV_USER=true để chạy thử tay khi X-1 Auth chưa xong.',
-    )
-  }
-  const { rows } = await getPool().query<{ id: string }>(
-    `INSERT INTO users (email) VALUES ($1)
-     ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-     RETURNING id`,
-    [DEV_EMAIL],
-  )
-  return rows[0]!.id
-}
-
 /** Tách mã lỗi khỏi chuỗi `"CODE: thông điệp"` mà JobRepo ghi xuống. */
 export function splitError(error: string | null): { code: string; message: string } | null {
   if (!error) return null
