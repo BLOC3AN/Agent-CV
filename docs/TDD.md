@@ -1031,6 +1031,53 @@ User dán JD (hoặc URL)
 
 Nếu `embedder` chết → bỏ lớp 2, `degraded = true`, UI hiện: *"Đang dùng đối chiếu từ khóa. Phân tích ngữ nghĩa tạm không khả dụng."*
 
+### 8.2.1 Lớp rỗng bị BỎ QUA, không được cho điểm tuyệt đối
+
+> Bổ sung sau khi đo trên 5 JD thật (M3-1).
+
+Điểm tổng là trung bình có trọng số của ba lớp (hard 0.6 · soft 0.2 · ats 0.2).
+Bản đầu cho lớp KHÔNG CÓ YÊU CẦU 100 điểm, với lý lẽ "JD không đòi gì thì không
+trừ điểm ai". Đo trên JD-04 — một JD cố tình mơ hồ, không nêu kỹ năng cứng nào —
+cách đó cho ra **83 điểm**:
+
+| | cũ | mới |
+|---|---|---|
+| lớp `hard` (0 yêu cầu) | 100 → đóng góp 60 | bỏ qua |
+| lớp `ats` (0 từ khoá) | 100 → đóng góp 20 | bỏ qua |
+| lớp `soft` (1/4) | 14 → đóng góp 3 | 14, là lớp duy nhất |
+| **điểm tổng** | **83** | **14** |
+
+"83% phù hợp" với một tin tuyển dụng chẳng đòi hỏi gì là con số vô nghĩa nhưng
+trông đáng tin — dạng sai nguy hiểm nhất. Lớp rỗng nay bị loại khỏi trung bình:
+nó không giúp cũng không hại, và điểm chỉ phản ánh những gì thật sự đo được.
+
+Kèm theo: `noHardRequirements` để UI nói rõ *"JD này không nêu yêu cầu kỹ thuật
+cụ thể, điểm chỉ mang tính tham khảo"*.
+
+### 8.2.2 Quan hệ cha–con trong phân loại kỹ năng là bắt buộc
+
+Đo trên JD-01 thật: một CV có **cả MySQL lẫn PostgreSQL** vẫn bị báo *"thiếu
+SQL"* vì phân loại chưa khai `parent: sql`. Sau khi khai, điểm 35 → 41.
+
+Quy tắc: mọi kỹ năng cụ thể phải trỏ `parent` tới khái niệm bao hàm mà JD hay
+hỏi chung chung — `mysql → sql`, `mongodb → nosql`, `nextjs → react → javascript`.
+Chiều khớp là MỘT CHIỀU: biết Next.js nghĩa là biết React, nhưng biết React
+không có nghĩa là biết Next.js.
+
+Test `mọi \`parent\` đều trỏ tới kỹ năng CÓ THẬT` chặn lỗi gõ sai — parent sai
+làm `ancestors` im lặng trả thiếu, không có lỗi nào hiện ra.
+
+### 8.2.3 Không khẳng định ngưỡng điểm tuyệt đối trong test
+
+Test tích hợp từng có `expect(score).toBeGreaterThan(50)` — con số 50 hoàn toàn
+bịa ra. Đo thực tế cho 41, và phân tích thành phần cho thấy 41 ĐÚNG: CV mẫu
+thiếu thật 4/11 kỹ năng cứng và 8/9 từ khoá ATS.
+
+Hạ ngưỡng cho test xanh là uốn test theo code; chỉnh fixture cho tới khi vượt
+ngưỡng còn tệ hơn. Thứ CÓ ý nghĩa là **thứ tự tương đối**: cùng một CV, JD đúng
+ngành phải cao điểm hơn JD trái ngành. Đo được: 41 (Fullstack) > 36 (Web) >
+30 (Java Backend) — đúng thứ tự.
+
 ### 8.3 F3 — Chat editing & Patch
 
 ```

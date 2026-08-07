@@ -17,6 +17,7 @@
       "@hr/ai": ["./packages/ai/src/index.ts"],
       "@hr/db": ["./packages/db/src/index.ts"],
       "@hr/pdf": ["./packages/pdf/src/index.ts"],
+      "@hr/matching": ["./packages/matching/src/index.ts"],
       "@hr/worker": ["./services/worker/src/index.ts"],
       "@hr/worker/queues": ["./services/worker/src/queues.ts"],
       "@hr/worker/pdfkit": ["./services/worker/src/pdfkit-client.ts"],

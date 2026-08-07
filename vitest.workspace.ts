@@ -10,6 +10,7 @@ const alias = {
   '@hr/templates': path.resolve(root, 'packages/templates/src/index.ts'),
   '@hr/db': path.resolve(root, 'packages/db/src/index.ts'),
   '@hr/pdf': path.resolve(root, 'packages/pdf/src/index.ts'),
+  '@hr/matching': path.resolve(root, 'packages/matching/src/index.ts'),
   '@hr/worker/queues': path.resolve(root, 'services/worker/src/queues.ts'),
   '@hr/worker/pdfkit': path.resolve(root, 'services/worker/src/pdfkit-client.ts'),
   '@hr/worker/storage': path.resolve(root, 'services/worker/src/storage.ts'),

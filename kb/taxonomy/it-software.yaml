@@ -1,0 +1,340 @@
+# Phân loại kỹ năng ngành IT/Software — TDD §9.2, §8.2 lớp 1.
+#
+# Vì sao là DỮ LIỆU chứ không phải code: danh sách này thay đổi liên tục (mỗi
+# framework mới là một dòng), còn logic khớp thì không. Người không biết lập
+# trình cũng bổ sung được.
+#
+# Vì sao cần: JD viết "ReactJS", CV viết "React.js", ATS viết "React" — cùng
+# một thứ. Không chuẩn hoá thì lớp keyword báo "thiếu React" trên một CV đầy
+# React, và toàn bộ phân tích phía sau sai theo.
+#
+# `aliases` phải có CẢ tiếng Việt lẫn tiếng Anh, và cả dạng không dấu: người
+# dùng Việt gõ không dấu rất nhiều (TDD §9.2).
+#
+# Quy ước:
+#   canonical  khoá nội bộ, snake_case, KHÔNG hiển thị cho user
+#   display    chuỗi hiển thị, đúng cách viết hoa của cộng đồng
+#   kind       language | framework | database | tool | platform | practice | soft
+#   parent     canonical của kỹ năng bao hàm (react → javascript)
+#   weight     độ quan trọng khi tính điểm; mặc định 1.0
+
+version: 1
+industry: it_software
+
+skills:
+  # ── Ngôn ngữ lập trình ────────────────────────────────────────────────────
+  - canonical: javascript
+    display: { vi: JavaScript, en: JavaScript }
+    kind: language
+    aliases: [javascript, java script, js, es6, es2015, ecmascript, javascrip]
+  - canonical: typescript
+    display: { vi: TypeScript, en: TypeScript }
+    kind: language
+    parent: javascript
+    aliases: [typescript, type script, ts]
+  - canonical: python
+    display: { vi: Python, en: Python }
+    kind: language
+    aliases: [python, python3, py]
+  - canonical: java
+    display: { vi: Java, en: Java }
+    kind: language
+    # "java" KHÔNG được khớp bên trong "javascript" — xem `matchesToken` ở code
+    aliases: [java, jdk, java se, core java]
+  - canonical: csharp
+    display: { vi: "C#", en: "C#" }
+    kind: language
+    aliases: ["c#", csharp, "c sharp", dotnet c#]
+  - canonical: php
+    display: { vi: PHP, en: PHP }
+    kind: language
+    aliases: [php, php7, php8]
+  - canonical: golang
+    display: { vi: Go, en: Go }
+    kind: language
+    aliases: [go, golang, go lang]
+  - canonical: cpp
+    display: { vi: "C++", en: "C++" }
+    kind: language
+    aliases: ["c++", cpp, "c plus plus"]
+  - canonical: c_lang
+    display: { vi: C, en: C }
+    kind: language
+    aliases: [c]
+  - canonical: ruby
+    display: { vi: Ruby, en: Ruby }
+    kind: language
+    aliases: [ruby]
+  - canonical: kotlin
+    display: { vi: Kotlin, en: Kotlin }
+    kind: language
+    aliases: [kotlin]
+  - canonical: swift
+    display: { vi: Swift, en: Swift }
+    kind: language
+    aliases: [swift]
+  - canonical: rust
+    display: { vi: Rust, en: Rust }
+    kind: language
+    aliases: [rust]
+  - canonical: sql
+    display: { vi: SQL, en: SQL }
+    kind: language
+    aliases: [sql, t-sql, pl/sql, plsql, ansi sql]
+  - canonical: html
+    display: { vi: HTML, en: HTML }
+    kind: language
+    aliases: [html, html5]
+  - canonical: css
+    display: { vi: CSS, en: CSS }
+    kind: language
+    aliases: [css, css3, scss, sass, less]
+
+  # ── Framework & thư viện ──────────────────────────────────────────────────
+  - canonical: react
+    display: { vi: ReactJS, en: React }
+    kind: framework
+    parent: javascript
+    aliases: [react, reactjs, "react.js", react js, react hooks]
+  - canonical: nextjs
+    display: { vi: Next.js, en: Next.js }
+    kind: framework
+    parent: react
+    aliases: ["next.js", nextjs, next js]
+  - canonical: vue
+    display: { vi: VueJS, en: Vue }
+    kind: framework
+    parent: javascript
+    aliases: [vue, vuejs, "vue.js", vue 3, vue3, composition api]
+  - canonical: nuxt
+    display: { vi: Nuxt, en: Nuxt }
+    kind: framework
+    parent: vue
+    aliases: [nuxt, "nuxt.js", nuxtjs]
+  - canonical: angular
+    display: { vi: Angular, en: Angular }
+    kind: framework
+    parent: typescript
+    aliases: [angular, angularjs, "angular.js"]
+  - canonical: nodejs
+    display: { vi: NodeJS, en: Node.js }
+    kind: framework
+    parent: javascript
+    aliases: [node, nodejs, "node.js", node js]
+  - canonical: express
+    display: { vi: ExpressJS, en: Express }
+    kind: framework
+    parent: nodejs
+    aliases: [express, expressjs, "express.js"]
+  - canonical: nestjs
+    display: { vi: NestJS, en: NestJS }
+    kind: framework
+    parent: nodejs
+    aliases: [nest, nestjs, "nest.js"]
+  - canonical: spring
+    display: { vi: Spring Boot, en: Spring Boot }
+    kind: framework
+    parent: java
+    aliases: [spring, spring boot, springboot, spring framework, spring mvc]
+  - canonical: laravel
+    display: { vi: Laravel, en: Laravel }
+    kind: framework
+    parent: php
+    aliases: [laravel, laravel blade]
+  - canonical: django
+    display: { vi: Django, en: Django }
+    kind: framework
+    parent: python
+    aliases: [django, django rest framework, drf]
+  - canonical: flask
+    display: { vi: Flask, en: Flask }
+    kind: framework
+    parent: python
+    aliases: [flask]
+  - canonical: fastapi
+    display: { vi: FastAPI, en: FastAPI }
+    kind: framework
+    parent: python
+    aliases: [fastapi, fast api]
+  - canonical: dotnet
+    display: { vi: .NET, en: .NET }
+    kind: framework
+    parent: csharp
+    aliases: [".net", dotnet, "asp.net", aspnet, ".net core", entity framework]
+  - canonical: tailwind
+    display: { vi: Tailwind CSS, en: Tailwind CSS }
+    kind: framework
+    parent: css
+    aliases: [tailwind, tailwindcss, tailwind css]
+  - canonical: bootstrap
+    display: { vi: Bootstrap, en: Bootstrap }
+    kind: framework
+    parent: css
+    aliases: [bootstrap]
+
+  # ── Cơ sở dữ liệu ─────────────────────────────────────────────────────────
+  # Mọi CSDL quan hệ đều KẾ THỪA `sql`: JD hỏi "SQL" mà CV ghi "PostgreSQL"
+  # thì đó là khớp, không phải thiếu. Đo trên JD-01 thật: thiếu quan hệ này,
+  # một CV có cả MySQL lẫn PostgreSQL vẫn bị báo "thiếu SQL".
+  - canonical: mysql
+    display: { vi: MySQL, en: MySQL }
+    kind: database
+    parent: sql
+    aliases: [mysql, mariadb]
+  - canonical: postgresql
+    parent: sql
+    display: { vi: PostgreSQL, en: PostgreSQL }
+    kind: database
+    aliases: [postgresql, postgres, psql, pgsql]
+  - canonical: nosql
+    display: { vi: NoSQL, en: NoSQL }
+    kind: database
+    aliases: [nosql, no sql, "non-relational", phi quan he, phi quan hệ]
+  - canonical: mongodb
+    display: { vi: MongoDB, en: MongoDB }
+    kind: database
+    parent: nosql
+    aliases: [mongodb, mongo, mongoose]
+  - canonical: redis
+    display: { vi: Redis, en: Redis }
+    kind: database
+    parent: nosql
+    aliases: [redis]
+  - canonical: elasticsearch
+    display: { vi: Elasticsearch, en: Elasticsearch }
+    kind: database
+    parent: nosql
+    aliases: [elasticsearch, elastic search, opensearch, elk]
+  - canonical: sqlserver
+    parent: sql
+    display: { vi: SQL Server, en: SQL Server }
+    kind: database
+    aliases: [sql server, mssql, "microsoft sql server"]
+  - canonical: oracle_db
+    parent: sql
+    display: { vi: Oracle Database, en: Oracle Database }
+    kind: database
+    aliases: [oracle, oracle db, oracle database]
+
+  # ── Hạ tầng & công cụ ─────────────────────────────────────────────────────
+  - canonical: docker
+    display: { vi: Docker, en: Docker }
+    kind: tool
+    aliases: [docker, docker compose, containerization, container hoá]
+  - canonical: kubernetes
+    display: { vi: Kubernetes, en: Kubernetes }
+    kind: tool
+    parent: docker
+    aliases: [kubernetes, k8s, kubectl, helm]
+  - canonical: git
+    display: { vi: Git, en: Git }
+    kind: tool
+    aliases: [git, github, gitlab, bitbucket, git flow, gitflow, version control]
+  - canonical: cicd
+    display: { vi: CI/CD, en: CI/CD }
+    kind: practice
+    aliases: [ci/cd, cicd, "ci cd", continuous integration, continuous deployment,
+              github actions, gitlab ci, jenkins, circleci]
+  - canonical: aws
+    display: { vi: AWS, en: AWS }
+    kind: platform
+    aliases: [aws, amazon web services, ec2, s3, lambda, rds]
+  - canonical: azure
+    display: { vi: Azure, en: Azure }
+    kind: platform
+    aliases: [azure, microsoft azure]
+  - canonical: gcp
+    display: { vi: Google Cloud, en: Google Cloud }
+    kind: platform
+    aliases: [gcp, google cloud, google cloud platform]
+  - canonical: linux
+    display: { vi: Linux, en: Linux }
+    kind: platform
+    aliases: [linux, ubuntu, centos, debian, bash, shell script]
+  - canonical: terraform
+    display: { vi: Terraform, en: Terraform }
+    kind: tool
+    aliases: [terraform, iac, infrastructure as code]
+  - canonical: jira
+    display: { vi: Jira, en: Jira }
+    kind: tool
+    aliases: [jira, confluence, atlassian]
+  - canonical: figma
+    display: { vi: Figma, en: Figma }
+    kind: tool
+    aliases: [figma, adobe xd, sketch]
+
+  # ── Thực hành kỹ thuật ────────────────────────────────────────────────────
+  - canonical: rest_api
+    display: { vi: RESTful API, en: RESTful API }
+    kind: practice
+    aliases: [rest, restful, rest api, restful api, api, web api, http api]
+  - canonical: graphql
+    display: { vi: GraphQL, en: GraphQL }
+    kind: practice
+    aliases: [graphql, apollo]
+  - canonical: microservices
+    display: { vi: Microservices, en: Microservices }
+    kind: practice
+    aliases: [microservice, microservices, micro service, kiến trúc microservice]
+  - canonical: unit_test
+    display: { vi: Unit Test, en: Unit Testing }
+    kind: practice
+    aliases: [unit test, unit testing, jest, pytest, junit, vitest, testing,
+              kiem thu, kiểm thử, tdd, test driven]
+  - canonical: agile
+    display: { vi: Agile/Scrum, en: Agile/Scrum }
+    kind: practice
+    aliases: [agile, scrum, kanban, sprint, quy trình agile]
+  - canonical: oop
+    display: { vi: Lập trình hướng đối tượng, en: OOP }
+    kind: practice
+    aliases: [oop, object oriented, huong doi tuong, hướng đối tượng]
+  - canonical: design_pattern
+    display: { vi: Design Pattern, en: Design Patterns }
+    kind: practice
+    aliases: [design pattern, design patterns, mvc, mvvm, repository pattern,
+              solid, clean architecture, clean code]
+  - canonical: message_queue
+    display: { vi: Message Queue, en: Message Queue }
+    kind: practice
+    aliases: [kafka, rabbitmq, message queue, mq, bullmq, celery, pub/sub]
+
+  # ── Kỹ năng mềm ───────────────────────────────────────────────────────────
+  # Nhóm này khớp bằng từ khoá rất kém — CV nào cũng ghi "teamwork". Trọng số
+  # thấp có chủ đích: điểm phải phản ánh bằng chứng, không phản ánh tính từ.
+  - canonical: teamwork
+    display: { vi: Làm việc nhóm, en: Teamwork }
+    kind: soft
+    weight: 0.4
+    aliases: [teamwork, team work, lam viec nhom, làm việc nhóm, phối hợp,
+              collaboration, team player]
+  - canonical: communication
+    display: { vi: Giao tiếp, en: Communication }
+    kind: soft
+    weight: 0.4
+    aliases: [communication, giao tiep, giao tiếp, thuyet trinh, thuyết trình,
+              presentation]
+  - canonical: problem_solving
+    display: { vi: Giải quyết vấn đề, en: Problem Solving }
+    kind: soft
+    weight: 0.4
+    aliases: [problem solving, giai quyet van de, giải quyết vấn đề,
+              critical thinking, tu duy phan bien, tư duy phản biện]
+  - canonical: english
+    display: { vi: Tiếng Anh, en: English }
+    kind: soft
+    weight: 0.8
+    aliases: [english, tieng anh, tiếng anh, ielts, toeic, toefl, anh van,
+              anh văn]
+  - canonical: japanese
+    display: { vi: Tiếng Nhật, en: Japanese }
+    kind: soft
+    weight: 0.8
+    aliases: [japanese, tieng nhat, tiếng nhật, jlpt, nat-test, nhat ngu]
+  - canonical: self_learning
+    display: { vi: Tự học, en: Self-learning }
+    kind: soft
+    weight: 0.4
+    aliases: [self learning, self-taught, tu hoc, tự học, ham hoc hoi,
+              ham học hỏi, continuous learning]

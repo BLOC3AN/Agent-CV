@@ -43,6 +43,7 @@ export type GatewayErrorCode =
   | 'BUDGET_EXCEEDED'
   | 'PII_GUARD'
   | 'PROVIDER_DISABLED'
+  | 'BAD_INPUT'
   | 'RATE_LIMITED'
   | 'UNKNOWN'
 

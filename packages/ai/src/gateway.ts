@@ -231,7 +231,12 @@ export class Gateway {
         lastError = ge
 
         // Lỗi schema/ngân sách KHÔNG phải lỗi hạ tầng → không tính vào breaker
-        if (ge.code !== 'SCHEMA_INVALID' && ge.code !== 'BUDGET_EXCEEDED') {
+        if (
+          ge.code !== 'SCHEMA_INVALID' &&
+          ge.code !== 'BUDGET_EXCEEDED' &&
+          ge.code !== 'BAD_INPUT' &&
+          ge.code !== 'PII_GUARD'
+        ) {
           breaker.onFailure()
         }
 
@@ -239,7 +244,13 @@ export class Gateway {
         if (ge.code === 'SCHEMA_INVALID' && route.onSchemaFail !== 'retry_then_escalate') {
           break
         }
-        if (ge.code === 'BUDGET_EXCEEDED' || ge.code === 'PII_GUARD') break
+        if (
+          ge.code === 'BUDGET_EXCEEDED' ||
+          ge.code === 'PII_GUARD' ||
+          ge.code === 'BAD_INPUT'
+        ) {
+          break
+        }
       }
     }
 
@@ -269,6 +280,7 @@ export class Gateway {
 
       // ── Bước 3: dựng prompt + ép ngân sách ───────────────────────────
       const sections = await task.buildSections(input)
+      guardPlaceholders(sections, task.name)
       this.guardPII(sections, task.name)
 
       const fit = await fitBudget(sections, task.budget, this.counterFor(modelRef))
@@ -389,6 +401,43 @@ export class Gateway {
 }
 
 /** Bóc object JSON đầu tiên cân bằng ngoặc từ output của model */
+/**
+ * Chặn prompt chứa placeholder của JavaScript — "undefined", "null", "[object Object]".
+ *
+ * Vì sao cần: `buildSections` nội suy field của input vào chuỗi. Gõ sai tên
+ * field (`text` thay vì `rawText`) cho ra chuỗi "Mô tả công việc:\n\nundefined".
+ * Model nhận được một prompt vô nghĩa, và vì có constrained decoding, nó vẫn
+ * trả về JSON HỢP LỆ nhưng rỗng hoặc lặp lại tên field:
+ *
+ *     { "title": "", "domain": "yearsRequired", "education": "undefined" }
+ *
+ * Task báo `ok: true`. Không có lỗi nào ở đâu cả. Kết quả rỗng đó chảy xuống
+ * lớp chấm điểm và trở thành một điểm số trông có vẻ hợp lý.
+ *
+ * Đây là kiểu hỏng tệ nhất — im lặng và trông giống thành công.
+ */
+const PLACEHOLDER = /(?:^|\n\n|:\s)(undefined|null|\[object Object\]|NaN)\s*$/
+
+export function guardPlaceholders(sections: PromptSection[], taskName: string): void {
+  for (const s of sections) {
+    const m = PLACEHOLDER.exec(s.content.trimEnd())
+    if (m) {
+      throw new GatewayError(
+        'BAD_INPUT',
+        `Task "${taskName}" section "${s.key}" kết thúc bằng "${m[1]}" — ` +
+          'nhiều khả năng buildSections nội suy một field không tồn tại. ' +
+          'Payload KHÔNG được gửi.',
+      )
+    }
+    // Chỉ chặn RỖNG HẲN. Từng thử ngưỡng "dưới 10 ký tự" nhưng nó chặn cả
+    // đầu vào ngắn hợp lệ — một tin nhắn chat "sửa giúp em" chỉ có 11 ký tự.
+    // Suy đoán quá tay ở guard còn tệ hơn không có guard: nó chặn việc thật.
+    if (s.role === 'user' && s.content.trim() === '') {
+      throw new GatewayError('BAD_INPUT', `Task "${taskName}" section "${s.key}" rỗng.`)
+    }
+  }
+}
+
 export function extractJson(raw: string): string | null {
   const text = raw.trim()
   const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)

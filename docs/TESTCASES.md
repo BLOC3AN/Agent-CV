@@ -229,6 +229,26 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-42-06 | Rubric áp dụng đúng | U | P0 | CV có 1 dự án + rubric `min: 2` → sinh gap `project_count` |
 | TC-42-07 | Trọng số cộng bằng 1.0 | U | P0 | Validate mọi rubric trong `kb_rubrics` |
 
+### 6.1.1 Phân loại kỹ năng & lớp keyword (M3-1)
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-41-20 | "java" KHÔNG khớp trong "javascript" | U | **P0** | Sai theo hướng THỔI PHỒNG điểm — nguy hiểm hơn bỏ sót |
+| TC-41-21 | "c" KHÔNG khớp trong "c++" | U | P0 | `\b` của regex vô dụng với `+`/`#`, phải kiểm ranh giới thủ công |
+| TC-41-22 | Khớp qua kỹ năng con | U | **P0** | JD cần React, CV ghi Next.js → khớp, và ghi rõ `viaDescendant` |
+| TC-41-23 | Chiều ngược lại KHÔNG khớp | U | P0 | Biết React không có nghĩa là biết Next.js |
+| TC-41-24 | CSDL quan hệ kế thừa `sql` | U | **P0** | CV có MySQL/PostgreSQL → khớp yêu cầu "SQL" |
+| TC-41-25 | Mọi `parent` trỏ tới kỹ năng có thật | U | P0 | Gõ sai parent làm `ancestors` im lặng trả thiếu |
+| TC-41-26 | Lớp rỗng bị BỎ QUA | U | **P0** | Không được cho 100 điểm — JD-04 từng ra 83 điểm vô nghĩa |
+| TC-41-27 | JD không có yêu cầu → gắn cờ | U | **P0** | `noRequirements` / `noHardRequirements`, không lặng lẽ chấm điểm |
+| TC-41-28 | Khớp phải có bằng chứng | U | **P0** | Khớp → evidence không rỗng; thiếu → evidence rỗng tuyệt đối |
+| TC-41-29 | Kỹ năng thừa không tăng điểm | U | P0 | 40 kỹ năng ngoài JD = 1 kỹ năng đúng JD |
+| TC-41-30 | Deterministic | U | **P0** | Chạy 5 lần cùng đầu vào → cùng điểm |
+| TC-41-31 | Không dấu vẫn khớp | U | P0 | "lam viec nhom" ≡ "Làm việc nhóm" |
+| TC-41-32 | Thứ tự tương đối trên JD thật | I | **P0** | CV Fullstack: JD Fullstack > JD Java Backend |
+| TC-41-33 | Không khẳng định ngưỡng tuyệt đối | I | P0 | Test kiểm thứ tự và tính chất, không kiểm con số bịa ra |
+| TC-41-34 | Chèn lệnh qua JD không đổi điểm | I | **P0** | Điểm tính bằng code nên miễn nhiễm |
+
 ### 6.2 Song ngữ
 
 | TC | Mô tả | Loại | Mức | Kỳ vọng |

@@ -39,6 +39,9 @@
       ],
       "@hr/worker/pdfkit": [
         "../../services/worker/src/pdfkit-client.ts"
+      ],
+      "@hr/matching": [
+        "../../packages/matching/src/index.ts"
       ]
     },
     "lib": [
