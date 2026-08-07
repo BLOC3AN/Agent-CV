@@ -155,9 +155,9 @@ describe('propose_patch trên model thật', () => {
       console.log(`  model sinh ${r.data.ops.length} op, ${raw.length} op có số bịa`)
       for (const op of raw) console.log(`    ⚠ ${op.path} [${op.grounding.type}]`)
 
-      // Không có câu trả lời nào → messageIds rỗng → mọi dẫn nguồn user_message
-      // bị chặn
-      const { valid } = validateOps(r.data.ops, profile, new Set())
+      // Không có câu trả lời nào → mọi dẫn nguồn user_message bị chặn, và mọi
+      // số không có trong hồ sơ bị hạ xuống `inference`
+      const { valid } = validateOps(r.data.ops, profile, new Set(), [])
       const leaked = valid.filter(
         (op) =>
           numbers.test(typeof op.value === 'string' ? op.value : JSON.stringify(op.value ?? '')) &&

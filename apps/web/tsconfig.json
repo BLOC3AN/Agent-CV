@@ -42,6 +42,9 @@
       ],
       "@hr/matching": [
         "../../packages/matching/src/index.ts"
+      ],
+      "@hr/kb": [
+        "../../packages/kb/src/index.ts"
       ]
     },
     "lib": [

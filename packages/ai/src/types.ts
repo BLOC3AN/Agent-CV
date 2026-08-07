@@ -84,6 +84,21 @@ export interface PromptSection {
   droppable: boolean
   /** Hàm nén khi vượt `max` */
   compactor?: (content: string, targetTokens: number) => Promise<string> | string
+  /**
+   * Nội dung đã được NGƯỜI duyệt, không phải dữ liệu người dùng.
+   *
+   * Guard PII bỏ qua section này. Lý do: guard tồn tại để chặn PII CỦA NGƯỜI
+   * DÙNG rời khỏi hệ thống. Tri thức HR là nội dung biên soạn, có curator ký
+   * tên và duyệt trước khi kích hoạt (UC-62) — áp guard dữ liệu người dùng lên
+   * nó là nhầm phạm trù.
+   *
+   * Đo thật: một đoạn KB viết "Đổi sang email dạng họtên@gmail.com" (ví dụ mẫu,
+   * không phải email ai cả) làm guard nổ và CHẶN HẲN toàn bộ tính năng tư vấn.
+   *
+   * Bù lại, PII trong KB được kiểm ở LÚC NẠP (`ingestKbFile`) — một lần, đúng
+   * chỗ, và curator thấy cảnh báo trước khi kích hoạt.
+   */
+  trusted?: boolean
 }
 
 export interface BudgetSpec {

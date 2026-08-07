@@ -23,7 +23,8 @@
     "db:migrate": "tsx db/migrate.ts",
     "db:reset": "docker compose down -v postgres && docker compose up -d postgres && sleep 8 && npm run db:migrate",
     "dev:restart": "bash scripts/dev-restart.sh",
-    "build:web": "cd apps/web && next build"
+    "build:web": "cd apps/web && next build",
+    "kb:ingest": "tsx scripts/kb-ingest.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -53,9 +53,17 @@ const REASON: Record<string, string> = {
   below_threshold: 'Chưa đạt mức HR kỳ vọng',
 }
 
+interface Citation {
+  chunkId: string
+  authorName: string
+  authorTitle: string | null
+  excerpt: string
+}
+
 export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
   const [report, setReport] = useState<Report | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [citations, setCitations] = useState<Record<string, Citation>>({})
 
   // Poll cho tới khi lời khuyên soạn xong. Poll chứ không SSE: dữ liệu này là
   // ảnh chụp toàn phần, không phải luồng sự kiện — tải lại cả bản đơn giản hơn
@@ -84,6 +92,33 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
       stop = true
     }
   }, [cvId])
+
+  // Nạp trích dẫn cho những lời khuyên CÓ nguồn (§10.4). Tách khỏi lượt poll
+  // chính: trích dẫn chỉ đổi khi lời khuyên đổi, không cần tải lại mỗi 2 giây.
+  useEffect(() => {
+    const refs = [...new Set((report?.gaps ?? []).flatMap((g) => g.kbRefs))]
+    const missing = refs.filter((r) => !(r in citations))
+    if (missing.length === 0) return
+
+    let stop = false
+    void fetch('/api/kb/citations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chunkIds: missing }),
+    })
+      .then((r) => r.json() as Promise<{ citations: Citation[] }>)
+      .then((d) => {
+        if (stop) return
+        setCitations((c) => ({
+          ...c,
+          ...Object.fromEntries(d.citations.map((x) => [x.chunkId, x])),
+        }))
+      })
+      .catch(() => {})
+    return () => {
+      stop = true
+    }
+  }, [report, citations])
 
   if (error) {
     return (
@@ -208,14 +243,38 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
                 </div>
 
                 {g.advice ? (
-                  <p className="mt-2 text-sm text-neutral-700 dark:text-neutral-300">
-                    💬 {g.advice}
-                    {g.kbRefs.length === 0 && (
-                      // §10.4: lời khuyên không có nguồn phải hiện khác đi —
-                      // vừa tạo niềm tin, vừa là công cụ gỡ lỗi
-                      <span className="ml-2 text-xs text-neutral-400">(gợi ý chung của AI)</span>
+                  <div className="mt-2">
+                    <p className="text-sm text-neutral-700 dark:text-neutral-300">💬 {g.advice}</p>
+
+                    {/*
+                      §10.4 — ranh giới giữa "có nguồn" và "AI tự nghĩ" phải
+                      KHÁC NHAU RÕ RỆT bằng mắt (TC-63-02). Nó vừa tạo niềm tin,
+                      vừa là công cụ gỡ lỗi: lời khuyên sai thì biết ngay nó
+                      đến từ đâu.
+                    */}
+                    {g.kbRefs.length > 0 ? (
+                      <div className="mt-1.5 space-y-1">
+                        {g.kbRefs.map((ref) => {
+                          const c = citations[ref]
+                          return (
+                            <details key={ref} className="text-xs">
+                              <summary className="cursor-pointer text-emerald-700 dark:text-emerald-400">
+                                📖 Theo {c?.authorName ?? '…'}
+                                {c?.authorTitle ? ` — ${c.authorTitle}` : ''}
+                              </summary>
+                              <p className="mt-1 whitespace-pre-wrap border-l-2 border-emerald-300 pl-2 text-neutral-600 dark:text-neutral-400">
+                                {c?.excerpt ?? 'Đang tải trích đoạn…'}
+                              </p>
+                            </details>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="mt-1.5 inline-block rounded border border-dashed border-neutral-300 bg-neutral-50 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-600 dark:bg-neutral-800/50">
+                        ⚡ Gợi ý chung của AI — chưa dựa trên tri thức HR nào
+                      </p>
                     )}
-                  </p>
+                  </div>
                 ) : (
                   <div
                     className="mt-2 h-4 w-3/4 animate-pulse rounded bg-neutral-100 dark:bg-neutral-800"

@@ -2,6 +2,7 @@ import { Worker, type Job } from 'bullmq'
 import { Gateway, loadConfig } from '@hr/ai'
 import { JobRepo, MatchRepo, ProfileRepo, getPool, closePool, type JobKind } from '@hr/db'
 import { closeBrowser } from '@hr/pdf'
+import { SqlFilterSelector, toPromptChunks } from '@hr/kb'
 import {
   CONCURRENCY,
   QUEUE,
@@ -99,6 +100,20 @@ function buildHandlers(): Record<string, JobHandler> {
       // đúng tinh thần "suy giảm, đừng sập" (A7).
       embedder: optional(() => gateway.registry.embed()),
       reranker: optional(() => gateway.registry.rerank()),
+      // Tri thức HR cho `gap_analysis`. Ngân sách 3.500 token khớp với `max`
+      // của section `kb` trong task — chọn nhiều hơn cũng bị cắt ở đó.
+      selectKb: async (ctx) => {
+        const k = await new SqlFilterSelector(pool).select(
+          {
+            industry: ctx.industry,
+            roleFamily: ctx.roleFamily,
+            seniority: ctx.seniority,
+            language: ctx.language === 'en' ? 'en' : 'vi',
+          },
+          3_500,
+        )
+        return toPromptChunks(k)
+      },
     }),
   }
 }

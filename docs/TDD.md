@@ -1424,6 +1424,60 @@ UI hiển thị: **"Theo [Tên HR] — [Chức danh]"** kèm trích đoạn gố
 
 Lời khuyên **không có `kbRefs`** → gắn nhãn *"gợi ý chung của AI"*, hiển thị khác màu. Ranh giới này vừa tạo niềm tin, vừa là công cụ debug: lời khuyên sai → biết ngay chunk nào sai.
 
+### 10.4.1 Mã trích dẫn phải NGƯỜI ĐỌC ĐƯỢC, không phải UUID
+
+> Đo trên model thật (M5).
+
+`kb_chunks.id` là UUID. Đưa UUID vào prompt và yêu cầu model chép lại vào
+`kbRefs` cho kết quả **0/11 lời khuyên có trích dẫn** — chép chính xác 36 ký tự
+hex là việc model 4B làm rất tệ, và sai một ký tự thì trích dẫn thành vô nghĩa.
+
+Dùng `breadcrumb` (`g_bullet_formula`) làm mã trích dẫn: ngắn, có nghĩa, model
+chép đúng, và người đọc log hiểu ngay lời khuyên đến từ đâu. UUID vẫn là khoá
+chính trong DB; `citations()` nhận cả hai dạng.
+
+Kèm theo: `citations()` phải LỌC NGÔN NGỮ. Mỗi đoạn được nạp thành hai bản
+(vi + en) cùng breadcrumb, nên thiếu điều kiện đó thì báo cáo hiện trích dẫn
+trùng — một bản tiếng Việt, một bản tiếng Anh, cho cùng một lời khuyên.
+
+### 10.4.2 Guard PII không áp lên nội dung ĐÃ QUA DUYỆT
+
+Guard `detectPII` chạy trên mọi section trước khi gửi prompt. Một đoạn KB viết
+*"Đổi sang email dạng họtên@gmail.com"* — ví dụ mẫu, không phải email của ai —
+làm guard nổ và **chặn hẳn toàn bộ tính năng tư vấn**.
+
+Đây là nhầm phạm trù: guard tồn tại để chặn PII **của người dùng** rời khỏi hệ
+thống. Tri thức HR là nội dung biên soạn, có curator ký tên và duyệt trước khi
+kích hoạt (UC-62).
+
+**Cách sửa:** `PromptSection.trusted` — section nội dung đã duyệt được guard bỏ
+qua. Bù lại, PII trong KB được kiểm ở **lúc nạp** (`ingestKbFile`): một lần,
+đúng chỗ, và curator thấy cảnh báo trước khi kích hoạt. Cảnh báo chứ không
+chặn — phần lớn báo động là ví dụ mẫu, thứ chỉ NGƯỜI mới phân biệt được.
+
+### 10.4.3 BR-52.1 phải cưỡng chế ở tầng CODE, không chỉ ở prompt
+
+Guard `validateOps` ban đầu chặn được số bịa gán nguồn `user_message` (kiểm
+messageId có thật không). Nhưng model chuyển sang gán `existing_field` trỏ vào
+một bullet **có thật nhưng không chứa số nào** — đường dẫn hợp lệ, guard cho
+qua, và giao diện **tick sẵn** vì op "có nguồn".
+
+Hiện tượng này xuất hiện KHÔNG ĐỀU giữa các lần chạy (temperature 0.3), nên nó
+lọt qua rất dễ và test đỏ-xanh thất thường.
+
+**Quy tắc cưỡng chế:** con số kèm đơn vị trong giá trị đề xuất phải tìm được
+trong hồ sơ hoặc trong câu trả lời của người dùng. Không tìm thấy → op bị **hạ
+xuống `inference`**, không bị loại hẳn:
+
+| | |
+|---|---|
+| Loại hẳn | mất cả phần diễn đạt tốt của op |
+| Giữ nguyên nguồn | giao diện tick sẵn một con số bịa |
+| **Hạ xuống `inference`** | giao diện cảnh báo, không tick sẵn, user tự quyết |
+
+So khớp theo CHỮ SỐ chứ không theo cả cụm: hồ sơ viết "800ms", đề xuất viết
+"800 mili giây" — vẫn là cùng một số liệu.
+
 ### 10.5 Bảo vệ
 
 | Rủi ro | Xử lý |

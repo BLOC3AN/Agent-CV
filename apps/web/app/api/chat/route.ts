@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { Gateway, runChatTurn } from '@hr/ai'
 import { ChatRepo, getPool } from '@hr/db'
+import { SqlFilterSelector, toClarifyQuestions, toPromptChunks } from '@hr/kb'
 import { profileRepo } from '@/lib/db'
 import { devUserId } from '@/lib/jobs'
 
@@ -71,6 +72,21 @@ export async function POST(req: Request) {
   const history = await chat.recentMessages(sessionId, HISTORY_LIMIT)
   const messageIds = new Set(history.map((m) => m.id))
 
+  // Tri thức HR: hướng dẫn cho `propose_patch`, câu hỏi mẫu cho `insight_mining`.
+  // Thiếu KB thì trợ lý vẫn chạy, chỉ là lời khuyên chung chung hơn và không
+  // trích dẫn được nguồn (§10.4).
+  const kb = await new SqlFilterSelector(getPool())
+    .select(
+      {
+        industry: 'it_software',
+        roleFamily: 'all',
+        seniority: 'all',
+        language: profile.language === 'en' ? 'en' : 'vi',
+      },
+      2_500,
+    )
+    .catch(() => null)
+
   const result = await runChatTurn(
     { gateway: new Gateway(), messageIds },
     {
@@ -80,6 +96,8 @@ export async function POST(req: Request) {
         .filter((m) => m.role !== 'system')
         .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       answers: answerRefs,
+      kbChunks: kb ? toPromptChunks(kb) : [],
+      kbQuestions: kb ? toClarifyQuestions(kb) : [],
     },
   )
 

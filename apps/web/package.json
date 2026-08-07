@@ -17,6 +17,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "@hr/pdf": "*",
-    "@hr/worker": "*"
+    "@hr/worker": "*",
+    "@hr/kb": "*"
   }
 }

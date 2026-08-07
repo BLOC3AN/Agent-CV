@@ -15,7 +15,8 @@
     "@hr/schema": "*",
     "bullmq": "^5.34.0",
     "ioredis": "^5.4.2",
-    "@hr/matching": "*"
+    "@hr/matching": "*",
+    "@hr/kb": "*"
   },
   "types": "./src/index.ts",
   "exports": {

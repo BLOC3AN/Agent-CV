@@ -146,6 +146,102 @@ describe('validateOps — dẫn nguồn (BR-53.2)', () => {
   })
 })
 
+describe('validateOps — số liệu chỉ được đến từ hồ sơ hoặc người dùng (BR-52.1)', () => {
+  const cv = profile({
+    work: [
+      {
+        org: 'Cty X',
+        role: 'Dev',
+        highlights: ['Giảm thời gian phản hồi từ 800ms xuống 120ms'],
+      },
+    ],
+  })
+
+  it('số BỊA gán nguồn `existing_field` bị HẠ xuống `inference`', () => {
+    // Lỗ hổng thật: kiểm đường dẫn thôi là chưa đủ. Model bịa "30%" rồi trỏ vào
+    // một bullet CÓ THẬT — đường dẫn hợp lệ, guard cho qua, giao diện TICK SẴN.
+    const { valid } = validateOps(
+      [
+        op({
+          path: '/work/0/highlights/0',
+          value: 'Tối ưu hệ thống, giảm 30% thời gian xử lý',
+          grounding: { type: 'existing_field', ref: '/work/0/highlights/0' },
+        }),
+      ],
+      cv,
+      MSG_IDS,
+    )
+
+    expect(valid).toHaveLength(1)
+    expect(valid[0]!.grounding.type, 'số bịa vẫn được coi là có nguồn').toBe('inference')
+    expect(valid[0]!.rationale).toMatch(/chưa có trong hồ sơ/)
+  })
+
+  it('số CÓ THẬT trong hồ sơ thì giữ nguyên nguồn', () => {
+    const { valid } = validateOps(
+      [
+        op({
+          path: '/work/0/highlights/0',
+          value: 'Giảm thời gian phản hồi từ 800ms xuống 120ms bằng bộ nhớ đệm',
+          grounding: { type: 'existing_field', ref: '/work/0/highlights/0' },
+        }),
+      ],
+      cv,
+      MSG_IDS,
+    )
+    expect(valid[0]!.grounding.type).toBe('existing_field')
+  })
+
+  it('số từ CÂU TRẢ LỜI của người dùng được chấp nhận', () => {
+    const { valid } = validateOps(
+      [
+        op({
+          path: '/work/0/highlights/0',
+          value: 'Xây dựng hệ thống phục vụ 10.000 người dùng',
+          grounding: { type: 'user_message', ref: 'msg-1' },
+        }),
+      ],
+      cv,
+      MSG_IDS,
+      [{ answer: 'Hệ thống có khoảng 10.000 người dùng' }],
+    )
+    expect(valid[0]!.grounding.type).toBe('user_message')
+  })
+
+  it('KHÔNG loại hẳn op có số bịa — lời khuyên vẫn có thể hữu ích', () => {
+    // Loại hẳn sẽ làm mất cả phần diễn đạt tốt; hạ nguồn để user tự quyết
+    const { valid, rejected } = validateOps(
+      [
+        op({
+          path: '/work/0/highlights/0',
+          value: 'Cải thiện hiệu năng 45%',
+          grounding: { type: 'existing_field', ref: '/work/0/highlights/0' },
+        }),
+      ],
+      cv,
+      MSG_IDS,
+    )
+    expect(valid).toHaveLength(1)
+    expect(rejected).toHaveLength(0)
+  })
+
+  it('chữ số KHÔNG kèm đơn vị không bị coi là số liệu', () => {
+    // "React 18" là tên phiên bản, không phải thành tích
+    const { valid } = validateOps(
+      [
+        op({
+          path: '/work/0/highlights/0',
+          value: 'Xây dựng giao diện bằng React 18 và TypeScript 5',
+          grounding: { type: 'existing_field', ref: '/work/0/highlights/0' },
+        }),
+      ],
+      cv,
+      MSG_IDS,
+    )
+    expect(valid[0]!.grounding.type).toBe('existing_field')
+  })
+})
+
 describe('validateOps — lọc từng op, không bỏ cả lô', () => {
   it('op hỏng bị loại riêng, op tốt vẫn qua', () => {
     // Bỏ cả lô vì một op hỏng sẽ khiến user mất hết đề xuất đúng (UC-53 6a)

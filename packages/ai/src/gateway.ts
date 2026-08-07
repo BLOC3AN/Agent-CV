@@ -348,6 +348,8 @@ export class Gateway {
    */
   private guardPII(sections: PromptSection[], taskName: string): void {
     for (const s of sections) {
+      // Nội dung đã qua duyệt của người — xem chú thích `trusted` ở types.ts
+      if (s.trusted) continue
       const leaks = detectPII(s.content)
       if (leaks.length > 0) {
         throw new GatewayError(

@@ -53,9 +53,12 @@ export function validateOps(
   ops: PatchOp[],
   profile: Profile,
   validMessageIds: Set<string>,
+  /** Câu trả lời của người dùng trong lượt này — nguồn số liệu hợp lệ thứ hai */
+  answers: { answer: string }[] = [],
 ): { valid: PatchOp[]; rejected: RejectedOp[] } {
   const valid: PatchOp[] = []
   const rejected: RejectedOp[] = []
+  const answerText = answers.map((a) => a.answer).join(' ')
 
   for (const op of ops) {
     const parsed = PatchOpSchema.safeParse(op)
@@ -82,10 +85,57 @@ export function validateOps(
       continue
     }
 
+    // BR-52.1 ở tầng CODE: con số chỉ được đến từ hồ sơ hoặc từ câu trả lời
+    // của người dùng.
+    //
+    // Kiểm tra đường dẫn thôi là chưa đủ. Model có thể bịa "giảm 30% thời gian"
+    // rồi gán `existing_field` trỏ vào một bullet CÓ THẬT nhưng không hề chứa
+    // con số nào — đường dẫn hợp lệ, guard cho qua, và giao diện TICK SẴN vì
+    // op "có nguồn". Đo thật: hiện tượng này xuất hiện không đều giữa các lần
+    // chạy, nên nó lọt qua rất dễ.
+    const invented = inventedNumbers(op, profile, answerText)
+    if (invented.length > 0) {
+      // KHÔNG loại hẳn: lời khuyên có thể vẫn hữu ích, chỉ là con số chưa được
+      // xác nhận. Hạ xuống `inference` để giao diện cảnh báo và KHÔNG tick sẵn
+      // — người dùng tự quyết định.
+      valid.push({
+        ...op,
+        grounding: { type: 'inference', ref: op.grounding.ref },
+        rationale:
+          `${op.rationale} (Số liệu ${invented.join(', ')} chưa có trong hồ sơ — ` +
+          'bạn kiểm lại giúp nhé.)',
+      })
+      continue
+    }
+
     valid.push(op)
   }
 
   return { valid, rejected }
+}
+
+/** Con số kèm đơn vị — thứ nhà tuyển dụng đọc là thành tích. */
+const METRIC =
+  /\d[\d.,]*\s*(%|phần trăm|người dùng|user|khách|bản ghi|record|request|ms|giây|phút|giờ|ngày|tuần|tháng|năm|lần|triệu|nghìn|tỷ|thành viên|dự án|ticket|đơn)/gi
+
+/**
+ * Số liệu trong giá trị đề xuất mà KHÔNG tìm thấy ở hồ sơ hay câu trả lời.
+ *
+ * So khớp theo CHỮ SỐ chứ không theo cả cụm: hồ sơ viết "800ms" mà đề xuất viết
+ * "800 mili giây" thì vẫn là cùng một số liệu, không phải bịa.
+ */
+function inventedNumbers(op: PatchOp, profile: Profile, answerText: string): string[] {
+  const value = typeof op.value === 'string' ? op.value : JSON.stringify(op.value ?? '')
+  const found = value.match(METRIC)
+  if (!found) return []
+
+  const haystack = `${JSON.stringify(profile)} ${answerText}`
+  const known = new Set(haystack.match(/\d[\d.,]*/g) ?? [])
+
+  return found.filter((m) => {
+    const digits = /\d[\d.,]*/.exec(m)?.[0]
+    return digits !== undefined && !known.has(digits)
+  })
 }
 
 /**
@@ -212,7 +262,12 @@ export async function runChatTurn(
     }
   }
 
-  const { valid, rejected } = validateOps(res.data.ops, input.profile, deps.messageIds)
+  const { valid, rejected } = validateOps(
+    res.data.ops,
+    input.profile,
+    deps.messageIds,
+    input.answers ?? [],
+  )
   if (valid.length === 0) {
     return {
       kind: 'error',
