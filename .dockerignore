@@ -1,0 +1,43 @@
+# Build context gửi TOÀN BỘ thư mục cho Docker daemon trước khi chạy dòng
+# COPY đầu tiên. Không lọc thì `var/storage` (CV THẬT của người dùng, TDD §15)
+# và `eval/cv/*.pdf` đi thẳng vào context, và mọi layer cache sau đó giữ chúng.
+
+node_modules
+**/node_modules
+
+# Build output — sinh lại trong image, copy vào chỉ tổ lệch phiên bản
+.next
+**/.next
+dist
+**/dist
+out
+*.tsbuildinfo
+
+# ── DỮ LIỆU THẬT — tuyệt đối không vào image (TDD §15) ──────────────────────
+var/
+storage/
+eval/cv/
+eval/golden/
+eval/jd/*.txt
+eval/manual-log.md
+
+# Bí mật
+.env
+.env.local
+
+# Python bytecode của services/pdfkit
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+**/.pytest_cache/
+.venv/
+
+.git
+.gitignore
+coverage/
+playwright-report/
+test-results/
+.tmp/
+*.log
+.DS_Store

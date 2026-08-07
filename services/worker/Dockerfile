@@ -21,12 +21,18 @@ ENV NODE_ENV=production
 
 # Cài phụ thuộc trước, copy nguồn sau: sửa code không phải cài lại npm.
 COPY package.json package-lock.json ./
+COPY apps/web/package.json         apps/web/
 COPY packages/schema/package.json  packages/schema/
 COPY packages/ai/package.json      packages/ai/
 COPY packages/db/package.json      packages/db/
+COPY packages/kb/package.json      packages/kb/
+COPY packages/matching/package.json packages/matching/
 COPY packages/pdf/package.json     packages/pdf/
 COPY packages/templates/package.json packages/templates/
 COPY services/worker/package.json  services/worker/
+# Phải copy package.json của MỌI workspace trong package-lock, kể cả workspace
+# worker không dùng: thiếu một file thì npm coi lock là lệch và dừng. Trước đây
+# thiếu `kb` và `matching` — đúng hai package worker gọi trong match_analysis.
 RUN npm ci --omit=dev --ignore-scripts
 
 # Các package dùng `main: ./src/index.ts` — chạy thẳng TypeScript bằng tsx,
