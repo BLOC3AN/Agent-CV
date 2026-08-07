@@ -140,6 +140,9 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-21-09 | Quá 5 lần import/ngày | I | P1 | Lần thứ 6 bị từ chối, thông báo rõ |
 | TC-21-10 | `ocr` chết, `reasoner` sống | I | P1 | Fallback sang `reasoner` (multimodal), job vẫn xong |
 | TC-21-11 | Schema fail 3 lần liên tiếp | I | P0 | Sau 2 retry → job `failed`, giữ text thô cho user copy, gợi ý nhập tay |
+| TC-21-12 | CV nhiều trang: đọc ĐỦ số chỗ làm | I | **P0** | Đo trên CV thật 5 chỗ làm / 5.301 ký tự. Chia mục đúng KHÔNG có nghĩa model đọc ra đủ — giữa hai điều đó là lượt gọi model, và đó chính là chỗ hỏng ban đầu |
+| TC-21-13 | Không khúc nào hỏng | I | **P0** | Một khúc hỏng là mất nguyên một chỗ làm; số lượng vẫn "gần đúng" nên rất dễ lọt |
+| TC-21-14 | Đúng NHỮNG NƠI LÀM VIỆC có thật | I | P0 | Đếm số lượng thôi chưa đủ: model tách nhầm một chỗ làm thành hai thì vẫn đủ số |
 | TC-22-01 | Không thể bỏ qua rà soát | E | P0 | Truy cập thẳng `/builder/:id` khi chưa rà soát → **redirect về màn hình rà soát** |
 | TC-22-02 | Nút "Tiếp" bị khóa | E | P0 | Còn mục chưa xác nhận → nút `disabled` |
 | TC-22-03 | Xác nhận đủ mở khóa | E | P0 | Xác nhận hết → nút mở, bấm vào ghi Profile với `verified` đầy đủ |
@@ -587,7 +590,7 @@ curl -s -X POST http://100.68.50.41:5011/v1/chat/completions \
 | UC-11 Đăng nhập | TC-11-01..05 | 5 |
 | UC-12 Dùng thử | TC-12-01..03 | 3 |
 | UC-13 Xóa tài khoản | TC-13-01..03, TC-SEC-04 | 4 |
-| UC-21 Import CV | TC-21-01..11, TC-SEC-01..06 | 17 |
+| UC-21 Import CV | TC-21-01..14, TC-SEC-01..06 | 20 |
 | UC-22 Rà soát | TC-22-01..07 | 7 |
 | UC-23 Nhập tay | TC-23-01..03 | 3 |
 | UC-24 Sửa Profile | TC-24-01..06 | 6 |
