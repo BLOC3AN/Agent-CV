@@ -78,8 +78,9 @@ export function validateOps(
       continue
     }
 
-    if (!pathExists(profile, op.path, op.op)) {
-      rejected.push({ op, reason: `Đường dẫn "${op.path}" không có trong hồ sơ` })
+    const invalidPath = invalidPathReason(profile, op)
+    if (invalidPath) {
+      rejected.push({ op, reason: invalidPath })
       continue
     }
 
@@ -118,6 +119,10 @@ export function validateOps(
       const mismatch = typeMismatch(before, op.value)
       if (mismatch) {
         rejected.push({ op, reason: mismatch })
+        continue
+      }
+      if (sameJsonValue(before, op.value)) {
+        rejected.push({ op, reason: 'Nội dung không thay đổi' })
         continue
       }
     }
@@ -187,6 +192,46 @@ export function validateOps(
   }
 
   return { valid, rejected }
+}
+
+function invalidPathReason(profile: Profile, op: PatchOp): string | null {
+  if (pathExists(profile, op.path, op.op)) return null
+
+  const appendPath = missingArrayAppendPath(profile, op.path)
+  if (appendPath) {
+    return (
+      `Đường dẫn "${op.path}" không có trong hồ sơ; nếu muốn thêm mục mới ` +
+      `vào cuối mảng, dùng "add ${appendPath}"`
+    )
+  }
+  return `Đường dẫn "${op.path}" không có trong hồ sơ`
+}
+
+function missingArrayAppendPath(profile: Profile, pointer: string): string | null {
+  const parts = pointer.split('/').slice(1).map(unescapePointer)
+  let node: unknown = profile
+  const path: string[] = []
+
+  for (const key of parts) {
+    if (Array.isArray(node)) {
+      const idx = Number(key)
+      if (Number.isInteger(idx) && idx >= node.length) {
+        return `/${path.map(escapePointer).join('/')}/-`
+      }
+      node = node[idx]
+      path.push(key)
+      continue
+    }
+
+    if (node === null || typeof node !== 'object') return null
+    node = (node as Record<string, unknown>)[key]
+    path.push(key)
+  }
+  return null
+}
+
+function sameJsonValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
 }
 
 /** Giá trị tại một JSON Pointer, hoặc `undefined` nếu không có. */
@@ -269,11 +314,20 @@ function wouldBreakProfile(profile: Profile, op: PatchOp): string | null {
  * trong modal duyệt — cả hai đều là chữ model viết, và cả hai đều đã lộ con
  * trỏ ra màn hình. Cùng lý do với `reason` của câu hỏi làm rõ.
  */
-function cleanProposal(proposal: PatchProposal): PatchProposal {
+function cleanProposal(proposal: PatchProposal, rejectedCount = 0): PatchProposal {
   return {
-    summary: humanizePointers(proposal.summary),
+    summary: humanizePointers(
+      rejectedCount > 0 ? summarizeValidatedProposal(proposal.ops) : proposal.summary,
+    ),
     ops: proposal.ops.map((o) => ({ ...o, rationale: humanizePointers(o.rationale) })),
   }
+}
+
+function summarizeValidatedProposal(ops: PatchOp[]): string {
+  const count = ops.length
+  const labels = [...new Set(ops.map((o) => sectionLabel(o.path)).filter(Boolean))]
+  const where = labels.length > 0 ? `: cập nhật ${labels.join(', ')}` : ''
+  return `Trợ lý còn ${count} thay đổi có thể áp dụng sau khi kiểm tra${where}.`
 }
 
 /** `/work/-` → `/work/2` sau khi đã thêm; `null` nếu chỗ đó không phải mảng. */
@@ -330,7 +384,7 @@ function pathExists(profile: Profile, pointer: string, op: PatchOp['op']): boole
     if (Array.isArray(node)) {
       const idx = Number(key)
       if (!Number.isInteger(idx) || idx < 0) return false
-      if (idx >= node.length) return op === 'add' && last && idx === node.length
+      if (idx >= node.length) return false
       node = node[idx]
       continue
     }
@@ -348,6 +402,10 @@ function pathExists(profile: Profile, pointer: string, op: PatchOp['op']): boole
 
 function unescapePointer(s: string): string {
   return s.replace(/~1/g, '/').replace(/~0/g, '~')
+}
+
+function escapePointer(s: string): string {
+  return s.replace(/~/g, '~0').replace(/\//g, '~1')
 }
 
 /** Các bước người dùng CHỜ — mỗi bước là một lượt gọi model. */
@@ -539,7 +597,10 @@ export async function runChatTurn(
       if (second.valid.length > 0) {
         return {
           kind: 'patch',
-          proposal: cleanProposal({ ops: second.valid, summary: retry.data.summary }),
+          proposal: cleanProposal(
+            { ops: second.valid, summary: retry.data.summary },
+            second.rejected.length,
+          ),
           rejected: second.rejected,
           intent,
         }
@@ -589,7 +650,7 @@ export async function runChatTurn(
 
   return {
     kind: 'patch',
-    proposal: cleanProposal({ ops: valid, summary: res.data.summary }),
+    proposal: cleanProposal({ ops: valid, summary: res.data.summary }, rejected.length),
     rejected,
     intent,
   }

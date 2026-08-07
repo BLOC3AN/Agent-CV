@@ -1632,6 +1632,33 @@ KHÔNG phải *"thay đổi của tôi có nằm trong đó không"*. Với sche
 biết. Cùng dạng với §5.4.2/§5.4.3: hỏi sai câu thì luôn nhận được câu trả lời
 đáng tin mà vô nghĩa.
 
+### 8.3.12 Proposal sau validate phải còn là đề xuất thật
+
+> Phát hiện từ người dùng. M5.
+
+Model sinh một proposal có summary nói đã chuyển 3 dự án từ Hoạt động sang
+Kinh nghiệm, nhưng 3 op chính đều bị loại vì hồ sơ chưa có `/work/0`, `/work/1`,
+`/work/2`. Op còn lại là `replace /basics/summary` với giá trị **giống hệt**
+hiện tại. UI vẫn hiện:
+
+```
+Trợ lý đề xuất 1 thay đổi
+Đã chuyển toàn bộ nội dung chi tiết từ mục Hoạt động sang mục Kinh nghiệm...
+```
+
+Đây là hai lỗi khác nhau cùng làm người dùng mất niềm tin:
+
+| Lỗi | Quy tắc mới |
+|---|---|
+| `replace` không đổi dữ liệu | Loại no-op trước khi hiện modal |
+| `summary` mô tả op đã bị loại | Rebuild summary từ op còn hợp lệ sau validate |
+| Thêm item bằng `/work/0` khi mảng rỗng | Loại và đưa correction rõ: dùng `add /work/-` |
+
+Summary là chữ người dùng đọc để quyết định có mở/duyệt proposal hay không, nên
+không được lấy nguyên văn từ model sau khi danh sách op đã thay đổi. Nếu validate
+loại bớt op, summary phải là summary của phần **còn áp dụng được**; nếu không còn
+op thật, trả lỗi/hỏi lại thay vì hiện modal rỗng hoặc no-op.
+
 ### 8.4 F4 — Export PDF
 
 ```

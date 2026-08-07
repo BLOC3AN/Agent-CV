@@ -340,6 +340,9 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 | TC-53-44b | `value` object có hình dạng ĐÓNG trong grammar | I | **P0** | `additionalProperties: {}` cho model viết `{"$ref": …}`; ba cách sửa bằng prompt đều thất bại 100% (TDD §8.3.10) |
 | TC-53-45b | Op bị Zod LƯỢC BỎ phải bị loại | U | **P0** | `add /summary` được duyệt, báo "đã áp dụng 1 thay đổi", nội dung biến mất. Mất dữ liệu mà báo thành công thì không ai đi tìm (TDD §8.3.11) |
 | TC-53-46b | `summary`/`rationale` không lộ con trỏ | U | P0 | Hai chuỗi này hiện thẳng cho người đọc, cùng lý do với `reason` |
+| TC-53-47b | `replace` no-op bị loại | U | **P0** | `replace /basics/summary` với value giống hệt hiện tại → loại kèm lý do, không hiện thành thay đổi thật |
+| TC-53-48b | Summary được cập nhật sau khi lọc op | U | **P0** | Model sinh 4 op, 3 op bị loại; summary hiển thị chỉ nói về 1 op còn hợp lệ, không nói “đã chuyển 3 dự án” |
+| TC-53-49b | Thêm item vào mảng phải dùng `/-` | U | **P0** | `profile.work` rỗng, model trả `/work/0` → loại; retry/correction phải hướng model dùng `add /work/-` |
 | TC-51-13 | `recentMessages` trả tin nhắn MỚI nhất | I | **P0** | `ORDER BY created_at LIMIT n` lấy n tin CŨ nhất. Phiên ngắn hơn `limit` thì hai cách giống nhau → chạy đúng cho tới khi phiên dài ra (TDD §8.3.8) |
 | TC-51-14 | Câu VỪA GÕ luôn có trong ngữ cảnh | I | **P0** | Thiếu nó thì `messageIds` thiếu id câu hiện tại → mọi dẫn nguồn tới nó bị coi là bịa |
 | TC-53-23 | `replace` lên field chưa tồn tại bị chặn | U | P0 | RFC 6902 đòi đường dẫn có sẵn |

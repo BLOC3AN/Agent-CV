@@ -87,13 +87,24 @@ describe('validateOps — đường dẫn', () => {
     expect(rejected).toHaveLength(1)
   })
 
-  it('cho phép `add` thêm phần tử ngay sau cuối mảng', () => {
-    const { valid } = validateOps(
+  it('CHẶN `add` vào index chưa tồn tại — thêm vào mảng phải dùng `/-`', () => {
+    const { valid, rejected } = validateOps(
       [op({ op: 'add', path: '/work/1', value: { org: 'Y', role: 'Dev', highlights: [] } })],
       profile(),
       MSG_IDS,
     )
-    expect(valid).toHaveLength(1)
+    expect(valid).toHaveLength(0)
+    expect(rejected[0]!.reason).toMatch(/\/-|cuối mảng/)
+  })
+
+  it('CHẶN `/work/0` khi mảng work rỗng — phải dùng `add /work/-`', () => {
+    const { valid, rejected } = validateOps(
+      [op({ op: 'add', path: '/work/0', value: { org: 'Y', role: 'Dev', highlights: [] } })],
+      profile({ work: [] }),
+      MSG_IDS,
+    )
+    expect(valid).toHaveLength(0)
+    expect(rejected[0]!.reason).toMatch(/\/-|cuối mảng/)
   })
 
   it('đường dẫn rỗng bị chặn', () => {
@@ -156,6 +167,17 @@ describe('validateOps — op phải ĐẦY ĐỦ theo RFC 6902', () => {
     // Xoá nội dung một dòng là thao tác hợp lệ
     const empty = op({ value: '' })
     expect(validateOps([empty], profile(), MSG_IDS).valid).toHaveLength(1)
+  })
+
+  it('TC-53-47b CHẶN `replace` no-op vì không tạo thay đổi thật', () => {
+    const { valid, rejected } = validateOps(
+      [op({ path: '/basics/summary', value: 'AI Engineer' })],
+      profile({ basics: { name: 'Nguyễn Văn A', summary: 'AI Engineer', links: [] } }),
+      MSG_IDS,
+    )
+
+    expect(valid).toHaveLength(0)
+    expect(rejected[0]!.reason).toMatch(/không thay đổi/)
   })
 })
 
@@ -532,6 +554,38 @@ describe('runChatTurn', () => {
       expect(r.proposal.ops).toHaveLength(1)
       expect(r.rejected).toHaveLength(1)
     }
+  })
+
+  it('TC-53-48b summary được cập nhật sau khi lọc op hỏng', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'rewrite_section', targetPath: '/work', needsInfo: [] },
+      propose_patch: {
+        ops: [
+          op({
+            op: 'add',
+            path: '/basics/headline',
+            value: 'AI Engineer',
+            grounding: { type: 'inference', ref: 'suy-luan' },
+          }),
+          op({ path: '/work/0', value: { org: 'A', role: 'AI Engineer', highlights: [] } }),
+          op({ path: '/work/1', value: { org: 'B', role: 'AI Engineer', highlights: [] } }),
+          op({ path: '/work/2', value: { org: 'C', role: 'AI Engineer', highlights: [] } }),
+        ],
+        summary: 'Đã chuyển toàn bộ nội dung chi tiết từ mục Hoạt động sang mục Kinh nghiệm, bao gồm 3 dự án.',
+      },
+    })
+
+    const r = await runChatTurn(deps(g), {
+      message: 'chuyển hoạt động sang kinh nghiệm',
+      profile: profile({ work: [], basics: { name: 'Nguyễn Văn A', links: [] } }),
+      history: [],
+    })
+
+    expect(r.kind).toBe('patch')
+    if (r.kind !== 'patch') return
+    expect(r.proposal.ops).toHaveLength(1)
+    expect(r.proposal.summary).toMatch(/1 thay đổi/)
+    expect(r.proposal.summary).not.toMatch(/3 dự án|chuyển toàn bộ/i)
   })
 
   it('KHÔNG op nào hợp lệ → báo lỗi có ích, không đưa danh sách rỗng', async () => {

@@ -457,11 +457,14 @@ Trước UC này, mọi CV trỏ chung một hồ sơ: sửa một chỗ là m�
 - 4a. UC bỏ chọn tất cả → nút "Áp dụng" vô hiệu.
 - 5a. UC bấm "Bỏ qua tất cả" → `status = 'rejected'`, không ghi gì vào Profile.
 - 6a. Một op không hợp lệ → bỏ riêng op đó, áp dụng phần còn lại, báo cho UC.
+- 6b. Sau khi bỏ op không hợp lệ, phần tóm tắt đề xuất phải được cập nhật theo các op còn hiển thị; không được mô tả những thay đổi đã bị loại.
 
 **Quy tắc**
 - BR-53.1 **AI không bao giờ ghi trực tiếp vào Profile.** Mọi thay đổi qua modal này.
 - BR-53.2 Op thêm fact mới mà không có `grounding` hợp lệ → bị chặn ở tầng validate, không hiển thị.
 - BR-53.3 Áp dụng một phần được ghi `status = 'partial'`, lưu `applied_ops`.
+- BR-53.4 Op `replace` mà giá trị mới giống hệt giá trị hiện tại là no-op → bị loại, không hiển thị như một thay đổi.
+- BR-53.5 Thêm phần tử vào mảng rỗng/phần cuối mảng phải dùng path append `/-`; không được sửa index chưa tồn tại như `/work/0`.
 
 ---
 
