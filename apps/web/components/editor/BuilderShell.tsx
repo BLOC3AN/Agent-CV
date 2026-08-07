@@ -5,6 +5,7 @@ import type { Profile } from '@hr/schema'
 import { FieldProvider, getTemplate, type Layout, type Theme } from '@hr/templates'
 import { useEditor } from '@/lib/editor-store'
 import { editableRenderer } from './Editable'
+import { CvLanguageSwitch } from './CvLanguageSwitch'
 import { SectionOutline } from './SectionOutline'
 import { UndoRedo, SaveStatus } from './UndoRedo'
 import { ThemePicker } from './ThemePicker'
@@ -79,6 +80,7 @@ export function BuilderShell(props: Props) {
         <SaveStatus />
         <div className="flex-1" />
         <UndoRedo />
+        <CvLanguageSwitch />
         <button
           type="button"
           onClick={() => setDrawer((d) => (d === 'history' ? null : 'history'))}
