@@ -173,6 +173,91 @@ export class ProfileRepo {
     }))
   }
 
+  /**
+   * Dựng lại hồ sơ TẠI một mốc lịch sử — UC-34, để XEM TRƯỚC khi khôi phục.
+   *
+   * Trả về cả `before` và `after` của chính mốc đó, kèm patch đã áp. Không có
+   * `before` thì không nói được "thay đổi gì": danh sách op chỉ có giá trị MỚI,
+   * còn giá trị cũ nằm ở ảnh chụp trước đó.
+   *
+   * Cách dựng: đi ngược từ bản hiện tại, áp patch nghịch đảo của mọi mốc SAU nó.
+   * Cùng đường với `revertTo` nhưng KHÔNG ghi gì — người dùng phải xem được bản
+   * cũ mà không phải đánh đổi bằng việc mất các bản mới hơn.
+   */
+  async snapshotAt(
+    profileId: string,
+    revisionId: string,
+  ): Promise<{
+    revisionId: string
+    author: PatchAuthor
+    createdAt: Date
+    ops: PatchOp[]
+    /** Hồ sơ ngay SAU khi mốc này được áp */
+    after: Profile
+    /** Hồ sơ ngay TRƯỚC mốc này — null khi không dựng lại được */
+    before: Profile | null
+    /** Số mốc mới hơn sẽ bị bỏ nếu khôi phục về đây */
+    newerCount: number
+  } | null> {
+    const client = await this.pool.connect()
+    try {
+      // Đọc nhất quán: một lượt patch chen vào giữa hai câu SELECT sẽ cho ảnh
+      // chụp sai — người dùng xem một bản chưa từng tồn tại.
+      await client.query('BEGIN READ ONLY')
+
+      const rev = await client.query<{
+        id: string; patch: PatchOp[]; inverse: Operation[]; author: PatchAuthor; created_at: Date
+      }>(
+        `SELECT id, patch, inverse, author, created_at FROM profile_revisions
+         WHERE profile_id = $1 AND id = $2`,
+        [profileId, revisionId],
+      )
+      if (rev.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return null
+      }
+
+      const newer = await client.query<{ inverse: Operation[] }>(
+        `SELECT inverse FROM profile_revisions
+         WHERE profile_id = $1 AND id > $2 ORDER BY id DESC`,
+        [profileId, revisionId],
+      )
+      const cur = await client.query<{ data: unknown }>(
+        'SELECT data FROM profiles WHERE id = $1',
+        [profileId],
+      )
+      await client.query('COMMIT')
+
+      if (cur.rows.length === 0) return null
+      const current = ProfileSchema.parse(cur.rows[0]!.data)
+      const after = replay(current, newer.rows.map((r) => r.inverse))
+
+      // Mốc đầu tiên có thể lùi về một hồ sơ chưa hợp schema (chưa có tên…).
+      // Không dựng được `before` thì vẫn cho xem `after`, chỉ mất phần "giá trị cũ".
+      let before: Profile | null = null
+      try {
+        before = replay(after, [rev.rows[0]!.inverse])
+      } catch {
+        before = null
+      }
+
+      return {
+        revisionId: rev.rows[0]!.id,
+        author: rev.rows[0]!.author,
+        createdAt: rev.rows[0]!.created_at,
+        ops: Array.isArray(rev.rows[0]!.patch) ? rev.rows[0]!.patch : [],
+        after,
+        before,
+        newerCount: newer.rows.length,
+      }
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {})
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
   /** Undo: áp patch nghịch đảo của revision gần nhất (BR-54.1) */
   async undoLast(profileId: string): Promise<Profile | null> {
     const client = await this.pool.connect()

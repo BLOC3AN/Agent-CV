@@ -188,3 +188,57 @@ describe('TC-54-05 — quay về một mốc bất kỳ', () => {
     expect(back.skills).toHaveLength(1)
   })
 })
+
+describe('UC-34 — xem lại một mốc mà KHÔNG khôi phục', () => {
+  it('dựng đúng hai phía của mốc và không ghi gì', async () => {
+    const r1 = await repo.patch(
+      profileId,
+      [op({ op: 'replace', path: '/basics/headline', value: 'V1' })],
+      'user',
+    )
+    const r2 = await repo.patch(
+      profileId,
+      [op({ op: 'replace', path: '/basics/headline', value: 'V2' })],
+      'ai',
+    )
+    await repo.patch(
+      profileId,
+      [op({ op: 'add', path: '/skills/-', value: { name: 'Docker' } })],
+      'user',
+    )
+
+    const snap = await repo.snapshotAt(profileId, r2.revisionId)
+    expect(snap).not.toBeNull()
+    expect(snap!.author).toBe('ai')
+    expect(snap!.ops).toHaveLength(1)
+    // Ngay sau r2 thì headline là V2 và CHƯA có Docker
+    expect(snap!.after.basics.headline).toBe('V2')
+    expect(snap!.after.skills).toHaveLength(1)
+    // Ngay trước r2 thì vẫn là V1
+    expect(snap!.before!.basics.headline).toBe('V1')
+    // Còn một mốc mới hơn — con số này hiện lên UI trước khi user bấm khôi phục
+    expect(snap!.newerCount).toBe(1)
+
+    // XEM là chỉ đọc: hồ sơ và lịch sử không được đổi
+    expect((await repo.get(profileId))!.basics.headline).toBe('V2')
+    expect((await repo.get(profileId))!.skills).toHaveLength(2)
+    expect(await repo.revisions(profileId)).toHaveLength(3)
+    expect(r1.revisionId).not.toBe(r2.revisionId)
+  })
+
+  it('mốc không tồn tại → null, không ném lỗi', async () => {
+    expect(await repo.snapshotAt(profileId, '999999999')).toBeNull()
+  })
+
+  it('mốc mới nhất: after là bản hiện tại, không còn mốc nào mới hơn', async () => {
+    const r = await repo.patch(
+      profileId,
+      [op({ op: 'replace', path: '/basics/headline', value: 'Mới nhất' })],
+      'user',
+    )
+    const snap = await repo.snapshotAt(profileId, r.revisionId)
+    expect(snap!.after.basics.headline).toBe('Mới nhất')
+    expect(snap!.before!.basics.headline).toBe('Backend Developer')
+    expect(snap!.newerCount).toBe(0)
+  })
+})

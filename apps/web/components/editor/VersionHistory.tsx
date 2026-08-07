@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { Profile } from '@hr/schema'
+import { RevisionPreview } from './RevisionPreview'
 
 /**
  * Lịch sử phiên bản — UC-34.
@@ -12,6 +13,10 @@ import type { Profile } from '@hr/schema'
  *
  * Phân biệt rõ AI sửa và người sửa: người dùng cần biết thay đổi nào là của
  * mình để tin vào lịch sử của chính họ.
+ *
+ * XEM đi trước KHÔI PHỤC: khôi phục là thao tác phá (bỏ mọi mốc mới hơn), nên
+ * không được là cách duy nhất để biết một mốc chứa gì. Bấm vào một mốc mở
+ * `RevisionPreview` — bản CV của mốc đó, chỗ đổi tô sáng.
  */
 
 interface Revision {
@@ -46,6 +51,8 @@ export function VersionHistory({
   const [items, setItems] = useState<Revision[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Mốc đang xem trước — null là chưa mở hộp thoại nào */
+  const [previewing, setPreviewing] = useState<{ rev: Revision; isCurrent: boolean } | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -74,6 +81,7 @@ export function VersionHistory({
       if (!res.ok || !data.profile) throw new Error(data.error ?? `HTTP ${res.status}`)
 
       onRestored(data.profile)
+      setPreviewing(null)
       // Khôi phục cũng là một thay đổi → lịch sử dài thêm một mốc
       await load()
     } catch (e) {
@@ -120,20 +128,46 @@ export function VersionHistory({
               {i === 0 && ' · bản hiện tại'}
             </p>
 
-            {/* Bản hiện tại không có gì để khôi phục về */}
-            {i > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {/*
+                "Xem lại" có ở MỌI mốc, kể cả bản hiện tại: người dùng thường
+                muốn biết lượt sửa vừa rồi đã đổi gì, chứ không phải để quay lại.
+              */}
               <button
                 type="button"
-                onClick={() => void restore(r.id)}
-                disabled={busy !== null}
-                className="mt-1.5 rounded border border-neutral-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-neutral-600"
+                onClick={() => setPreviewing({ rev: r, isCurrent: i === 0 })}
+                className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800"
               >
-                {busy === r.id ? 'Đang khôi phục…' : 'Khôi phục về đây'}
+                Xem lại bản này
               </button>
-            )}
+
+              {/* Bản hiện tại không có gì để khôi phục về */}
+              {i > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void restore(r.id)}
+                  disabled={busy !== null}
+                  className="rounded border border-neutral-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-neutral-600"
+                >
+                  {busy === r.id ? 'Đang khôi phục…' : 'Khôi phục về đây'}
+                </button>
+              )}
+            </div>
           </li>
         ))}
       </ol>
+
+      {previewing && (
+        <RevisionPreview
+          profileId={profileId}
+          revisionId={previewing.rev.id}
+          when={when(previewing.rev.createdAt)}
+          canRestore={!previewing.isCurrent}
+          restoring={busy === previewing.rev.id}
+          onClose={() => setPreviewing(null)}
+          onRestore={() => restore(previewing.rev.id)}
+        />
+      )}
     </section>
   )
 }
