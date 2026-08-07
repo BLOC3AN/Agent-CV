@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import type { PatchOp, Profile } from '@hr/schema'
-import { PatchReviewModal, type ProposalData } from './PatchReviewModal'
-import { ClarifyForm, type ClarifyData } from './ClarifyForm'
+import { useEffect } from 'react'
+import type { Profile } from '@hr/schema'
+import { PatchReviewModal } from './PatchReviewModal'
+import { ClarifyForm } from './ClarifyForm'
+import { useChat } from '@/lib/chat-store'
 
 /**
  * Khung chat với trợ lý — UC-51, FRONTEND §4.
@@ -12,59 +13,11 @@ import { ClarifyForm, type ClarifyData } from './ClarifyForm'
  * → đề xuất thay đổi → user duyệt từng mục → áp dụng.
  *
  * Trợ lý KHÔNG BAO GIỜ tự sửa hồ sơ (BR-53.1).
- */
-
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-  /**
-   * Việc làm tiếp được, kèm theo câu trả lời (UC-56 bước 5).
-   *
-   * Hiện thành NÚT chứ không phải chữ thường: mỗi mục vốn là một câu gõ lại
-   * được vào ô chat, in ra dạng chữ thì người dùng phải tự gõ lại y hệt.
-   */
-  nextSteps?: string[]
-}
-
-/**
- * Đọc luồng SSE, gọi `onStep` cho mỗi bước và trả về sự kiện `result` cuối.
  *
- * Viết tay thay vì dùng `EventSource` vì EventSource chỉ hỗ trợ GET, còn lượt
- * chat cần gửi hồ sơ và câu trả lời qua body.
+ * Trạng thái hội thoại nằm ở `@/lib/chat-store`, KHÔNG ở đây: component này bị
+ * unmount mỗi lần người dùng chuyển sang tab Lịch sử, và state trong component
+ * sẽ mất theo (xem chú thích trong chat-store.ts).
  */
-async function readSse(
-  body: ReadableStream<Uint8Array>,
-  onStep: (label: string) => void,
-): Promise<Record<string, unknown> | null> {
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let result: Record<string, unknown> | null = null
-
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-
-    // Mỗi sự kiện SSE kết thúc bằng một dòng trống
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop() ?? ''
-
-    for (const part of parts) {
-      const event = /^event:\s*(.+)$/m.exec(part)?.[1]?.trim()
-      const raw = /^data:\s*([\s\S]+)$/m.exec(part)?.[1]
-      if (!event || !raw) continue
-      try {
-        const data = JSON.parse(raw) as Record<string, unknown>
-        if (event === 'step') onStep(String(data['label'] ?? ''))
-        else if (event === 'result') result = data
-      } catch {
-        /* gói vỡ — bỏ qua, gói sau vẫn dùng được */
-      }
-    }
-  }
-  return result
-}
 
 /**
  * Gợi ý dựng từ HỒ SƠ THẬT, không phải danh sách cố định.
@@ -98,83 +51,24 @@ interface Props {
 }
 
 export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  /** Bước model đang chạy — bắn về qua SSE trong lúc chờ */
-  const [step, setStep] = useState<string | null>(null)
-  const [proposal, setProposal] = useState<ProposalData | null>(null)
-  const [clarify, setClarify] = useState<ClarifyData | null>(null)
+  const attach = useChat((s) => s.attach)
+  const messages = useChat((s) => s.messages)
+  const input = useChat((s) => s.input)
+  const busy = useChat((s) => s.busy)
+  const step = useChat((s) => s.step)
+  const proposal = useChat((s) => s.proposal)
+  const clarify = useChat((s) => s.clarify)
+  const setInput = useChat((s) => s.setInput)
+  const setProposal = useChat((s) => s.setProposal)
+  const setClarify = useChat((s) => s.setClarify)
+  const say = useChat((s) => s.say)
+  const send = useChat((s) => s.send)
+
+  useEffect(() => {
+    attach(profileId)
+  }, [attach, profileId])
+
   const suggestions = suggestionsFor(profile)
-
-  const send = async (
-    text: string,
-    answers: { question: string; answer: string }[] = [],
-  ): Promise<void> => {
-    if (!text.trim()) return
-    setBusy(true)
-    setStep(null)
-    setClarify(null)
-    setMessages((m) => [...m, { role: 'user', content: text }])
-    setInput('')
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId, message: text, answers }),
-      })
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
-
-      // Đọc SSE thủ công thay vì EventSource: EventSource chỉ làm được GET,
-      // mà lượt chat cần gửi cả hồ sơ và câu trả lời qua body.
-      const data = await readSse(res.body, (s) => setStep(s))
-      if (!data) throw new Error('Máy chủ đóng kết nối giữa chừng')
-
-      const parsed = data as {
-        kind: string
-        message?: string
-        text?: string
-        request?: ClarifyData['request']
-        proposalId?: string
-        summary?: string
-        ops?: PatchOp[]
-        rejected?: { path: string; reason: string }[]
-        nextSteps?: string[]
-        error?: string
-      }
-
-      if (parsed.kind === 'clarify' && parsed.request) {
-        setMessages((m) => [...m, { role: 'assistant', content: parsed.request!.reason }])
-        setClarify({ originalMessage: text, request: parsed.request })
-      } else if (parsed.kind === 'patch' && parsed.proposalId) {
-        setMessages((m) => [...m, { role: 'assistant', content: parsed.summary ?? '' }])
-        setProposal({
-          proposalId: parsed.proposalId,
-          summary: parsed.summary ?? '',
-          ops: parsed.ops ?? [],
-          rejected: parsed.rejected ?? [],
-        })
-      } else {
-        setMessages((m) => [
-          ...m,
-          {
-            role: 'assistant',
-            content: parsed.text ?? parsed.message ?? 'Chưa xử lý được.',
-            nextSteps: parsed.nextSteps ?? [],
-          },
-        ])
-      }
-    } catch (e) {
-      setMessages((m) => [
-        ...m,
-        { role: 'assistant', content: `Chưa gửi được: ${(e as Error).message}` },
-      ])
-    } finally {
-      setBusy(false)
-      setStep(null)
-    }
-  }
 
   return (
     <section aria-label="Trợ lý CV" className="flex h-full flex-col">
@@ -293,14 +187,11 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           onApplied={(p, applied) => {
             setProposal(null)
             onProfileChange(p)
-            setMessages((m) => [
-              ...m,
-              { role: 'assistant', content: `Đã áp dụng ${applied} thay đổi.` },
-            ])
+            say({ role: 'assistant', content: `Đã áp dụng ${applied} thay đổi.` })
           }}
           onDismiss={() => {
             setProposal(null)
-            setMessages((m) => [...m, { role: 'assistant', content: 'Đã bỏ qua các đề xuất.' }])
+            say({ role: 'assistant', content: 'Đã bỏ qua các đề xuất.' })
           }}
         />
       )}

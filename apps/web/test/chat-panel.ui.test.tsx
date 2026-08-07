@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ProfileSchema, type Profile } from '@hr/schema'
 import { ChatPanel } from '@/components/chat/ChatPanel'
+import { resetChat } from '@/lib/chat-store'
 
 /**
  * TC-51-* — khung chat, kiểm ở tầng GIAO DIỆN.
@@ -21,8 +22,12 @@ function profile(over: Partial<Profile> = {}): Profile {
   })
 }
 
-const render_ = (p: Profile) =>
-  render(<ChatPanel profileId="p-1" profile={p} onProfileChange={vi.fn()} />)
+const render_ = (p: Profile, profileId = 'p-1') =>
+  render(<ChatPanel profileId={profileId} profile={p} onProfileChange={vi.fn()} />)
+
+// Phiên chat sống ở store mức module (để giữ qua việc chuyển tab), nên nó cũng
+// sống qua các test trong file này. Xoá trước mỗi test.
+beforeEach(() => resetChat())
 
 describe('gợi ý dựng từ hồ sơ thật', () => {
   it('CV KHÔNG có dự án → KHÔNG gợi ý sửa dự án', () => {
@@ -150,6 +155,92 @@ describe('UC-56 — hỏi trợ lý', () => {
       (fetchMock.mock.calls[1] as unknown as [string, { body: string }])[1].body,
     ) as { message: string }
     expect(body.message).toBe('Làm gọn mục kinh nghiệm')
+  })
+
+  it('hội thoại CÒN NGUYÊN sau khi chuyển tab rồi quay lại', async () => {
+    /*
+     * HỒI QUY: BuilderShell chỉ mount một slide-over, nên bấm "Lịch sử" là
+     * ChatPanel unmount. Khi state nằm trong component, mở lại "Trợ lý" thấy
+     * hội thoại trắng trơn.
+     */
+    const user = userEvent.setup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => sseResponse([['result', { kind: 'reply', text: 'Câu trả lời cũ' }]])),
+    )
+    const p = profile({ work: [{ org: 'X', role: 'D', highlights: ['a'] }] })
+    const view = render_(p)
+
+    await user.type(screen.getByLabelText(/Tin nhắn cho trợ lý/), 'câu hỏi thứ nhất')
+    await user.click(screen.getByRole('button', { name: 'Gửi' }))
+    expect(await screen.findByText('Câu trả lời cũ')).toBeInTheDocument()
+
+    // Sang tab Lịch sử → ChatPanel bị unmount
+    view.unmount()
+    // Quay lại tab Trợ lý
+    render_(p)
+
+    expect(screen.getByText('câu hỏi thứ nhất')).toBeInTheDocument()
+    expect(screen.getByText('Câu trả lời cũ')).toBeInTheDocument()
+  })
+
+  it('đổi sang hồ sơ KHÁC thì bắt đầu hội thoại mới', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => sseResponse([['result', { kind: 'reply', text: 'Trả lời hồ sơ 1' }]])),
+    )
+    const p = profile({ work: [{ org: 'X', role: 'D', highlights: ['a'] }] })
+    const view = render_(p, 'p-1')
+
+    await user.type(screen.getByLabelText(/Tin nhắn cho trợ lý/), 'hỏi về hồ sơ 1')
+    await user.click(screen.getByRole('button', { name: 'Gửi' }))
+    expect(await screen.findByText('Trả lời hồ sơ 1')).toBeInTheDocument()
+
+    view.unmount()
+    render_(p, 'p-2')
+
+    expect(screen.queryByText('hỏi về hồ sơ 1')).not.toBeInTheDocument()
+  })
+
+  it('câu trả lời về ĐÚNG chỗ dù người dùng chuyển tab lúc đang chờ', async () => {
+    /*
+     * Lượt chat mất 20–60s và người dùng hay bấm sang tab khác trong lúc chờ.
+     * `send` nằm ở store nên kết quả vẫn được ghi lại, không rơi vào một
+     * component đã chết.
+     */
+    const user = userEvent.setup()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((r) => (release = r))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const body = new ReadableStream<Uint8Array>({
+          async start(c) {
+            const enc = new TextEncoder()
+            await gate
+            c.enqueue(
+              enc.encode(
+                `event: result\ndata: ${JSON.stringify({ kind: 'reply', text: 'trả lời muộn' })}\n\n`,
+              ),
+            )
+            c.close()
+          },
+        })
+        return { ok: true, body } as unknown as Response
+      }),
+    )
+    const p = profile({ work: [{ org: 'X', role: 'D', highlights: ['a'] }] })
+    const view = render_(p)
+
+    await user.type(screen.getByLabelText(/Tin nhắn cho trợ lý/), 'hỏi rồi bỏ đi')
+    await user.click(screen.getByRole('button', { name: 'Gửi' }))
+
+    view.unmount() // chuyển sang tab Lịch sử trong lúc chờ
+    release()
+
+    render_(p) // quay lại tab Trợ lý
+    expect(await screen.findByText('trả lời muộn')).toBeInTheDocument()
   })
 
   it('báo BƯỚC đang chạy chứ không chỉ "đang suy nghĩ" (TC-51-11)', async () => {
