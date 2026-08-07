@@ -1,6 +1,6 @@
 import { Worker, type Job } from 'bullmq'
 import { Gateway, loadConfig } from '@hr/ai'
-import { JobRepo, ProfileRepo, getPool, closePool, type JobKind } from '@hr/db'
+import { JobRepo, MatchRepo, ProfileRepo, getPool, closePool, type JobKind } from '@hr/db'
 import { closeBrowser } from '@hr/pdf'
 import {
   CONCURRENCY,
@@ -15,6 +15,7 @@ import { PdfkitClient } from './pdfkit-client.js'
 import { LocalStorage } from './storage.js'
 import { makeParseCvHandler } from './handlers/parse-cv.js'
 import { makeExportPdfHandler } from './handlers/export-pdf.js'
+import { makeMatchAnalysisHandler } from './handlers/match-analysis.js'
 import { purgeExpiredFiles } from './retention.js'
 
 /**
@@ -29,6 +30,16 @@ function log(level: 'info' | 'warn' | 'error', msg: string, meta?: unknown): voi
   if (level === 'error') console.error(line, meta ?? '')
   else if (level === 'warn') console.warn(line, meta ?? '')
   else console.log(line)
+}
+
+/** Lấy dịch vụ tuỳ chọn; thiếu thì `null` chứ không làm sập cả worker. */
+function optional<T>(get: () => T): T | null {
+  try {
+    return get()
+  } catch (err) {
+    log('warn', `dịch vụ tuỳ chọn không khả dụng: ${(err as Error).message}`)
+    return null
+  }
 }
 
 function buildHandlers(): Record<string, JobHandler> {
@@ -79,6 +90,16 @@ function buildHandlers(): Record<string, JobHandler> {
       ocrEnabled,
     }),
     export_pdf: makeExportPdfHandler({ pool, storage }),
+    match_analysis: makeMatchAnalysisHandler({
+      gateway,
+      repo: new MatchRepo(pool),
+      // `registry.embed()` NÉM lỗi khi chưa cấu hình — gọi trần ở đây sẽ làm
+      // worker không khởi động nổi vì thiếu một dịch vụ vốn chỉ là tuỳ chọn.
+      // Không có nó thì `analyze` bỏ lớp ngữ nghĩa và đánh dấu `degraded`,
+      // đúng tinh thần "suy giảm, đừng sập" (A7).
+      embedder: optional(() => gateway.registry.embed()),
+      reranker: optional(() => gateway.registry.rerank()),
+    }),
   }
 }
 
@@ -178,4 +199,5 @@ export { PdfkitClient } from './pdfkit-client.js'
 export { LocalStorage, contentKey, jobKey } from './storage.js'
 export { makeParseCvHandler, decideRoute } from './handlers/parse-cv.js'
 export { makeExportPdfHandler } from './handlers/export-pdf.js'
+export { makeMatchAnalysisHandler } from './handlers/match-analysis.js'
 export { purgeExpiredFiles, RETENTION_MS } from './retention.js'

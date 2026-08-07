@@ -1,3 +1,4 @@
+import { getQueue } from '@hr/worker/queues'
 import { jobRepo, splitError } from '@/lib/jobs'
 
 /**
@@ -9,6 +10,10 @@ import { jobRepo, splitError } from '@/lib/jobs'
  * Vì sao poll DB thay vì nghe sự kiện BullMQ: bảng `jobs` là nguồn sự thật
  * (xem `JobRepo`). Nghe BullMQ sẽ bỏ sót job do worker khác xử lý và mất tin
  * khi Redis restart. Poll 1s là rẻ so với một job kéo dài hàng chục giây.
+ *
+ * TRẠNG THÁI lấy từ Postgres, TIẾN ĐỘ lấy từ Redis. Cố ý tách đôi: trạng thái
+ * phải bền vững, còn tiến độ là thông tin phù du — mất cũng không sao, và ghi
+ * nó xuống Postgres mỗi vài giây chỉ tạo tải ghi vô ích.
  */
 
 export const dynamic = 'force-dynamic'
@@ -53,6 +58,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
       const deadline = Date.now() + MAX_MS
       let lastStatus = ''
+      let lastPct = -1
 
       while (!closed && Date.now() < deadline) {
         const j = await repo.get(id).catch(() => null)
@@ -64,6 +70,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         if (j.status !== lastStatus) {
           lastStatus = j.status
           send('status', { status: j.status, attempts: j.attempts })
+        }
+
+        // BullMQ dùng CHÍNH id của bảng jobs làm jobId (xem `lib/jobs.ts`),
+        // nên tra được trực tiếp không cần bảng ánh xạ.
+        if (j.status === 'running') {
+          const p = await getQueue(j.kind)
+            .getJob(id)
+            .then((bj) => bj?.progress as { pct?: number; note?: string } | undefined)
+            .catch(() => undefined)
+          if (typeof p?.pct === 'number' && p.pct !== lastPct) {
+            lastPct = p.pct
+            send('progress', { pct: p.pct, note: p.note })
+          }
         }
 
         if (j.status === 'done') {

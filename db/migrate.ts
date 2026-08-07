@@ -39,10 +39,22 @@ for (const f of files) {
   }
   process.stdout.write(`  → ${version} ... `)
   try {
+    // Một TRANSACTION cho cả migration + bản ghi version.
+    //
+    // Hai lỗi của bản đầu, cả hai đều im lặng:
+    //   1. Chạy SQL nhưng KHÔNG ghi `schema_migrations`. Migration chạy lại
+    //      mỗi lượt; lần đầu qua được vì `CREATE TABLE` chưa va vào gì, lần
+    //      sau mới nổ "column already exists" — rất lâu sau khi gây ra lỗi.
+    //   2. Không có transaction. Migration hỏng giữa chừng để lại nửa lược đồ
+    //      đã đổi, và không có cách nào biết đã tới đâu.
+    await client.query('BEGIN')
     await client.query(readFileSync(join(DIR, f), 'utf8'))
+    await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [version])
+    await client.query('COMMIT')
     console.log('✓')
     applied++
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
     console.log('✗')
     console.error(`\n${(err as Error).message}\n`)
     await client.end()

@@ -158,6 +158,9 @@ rubrics:
         type: page_count
         max: 2
         weight: 0.20
+        advice_when_above:
+          vi: "Junior có 1-2 năm kinh nghiệm thì 2 trang là trần. Dài hơn nghĩa là đang liệt kê thay vì chắt lọc — cắt bớt mục không liên quan tới vị trí ứng tuyển, gộp các dự án nhỏ cùng loại lại."
+          en: "Two pages is the ceiling for a junior with 1-2 years of experience. Longer means listing rather than curating — cut items unrelated to the target role and merge similar small projects."
 
 # ============================================================================
 # PHẦN 2 — GUIDELINE (văn xuôi, đưa vào prompt, có trích dẫn)

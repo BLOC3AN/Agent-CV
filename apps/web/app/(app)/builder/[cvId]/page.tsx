@@ -22,13 +22,18 @@ export default async function BuilderPage({
 
   const { rows } = await getPool().query<{
     profile_id: string
-    profile_snapshot: unknown
+    profile_data: unknown
     template_id: string
     theme: unknown
     layout: unknown
     title: string | null
   }>(
-    `SELECT c.profile_id, p.data AS profile_snapshot, c.template_id,
+    // Đọc hồ sơ SỐNG (`p.data`), KHÔNG phải `c.profile_snapshot`.
+    // Snapshot là ảnh chụp lúc tạo CV, dùng để đối chiếu "lúc nộp trông thế
+    // nào" (TDD §8.5) — render từ nó thì mọi chỉnh sửa sẽ không hiện ra.
+    // Bí danh cũ `p.data AS profile_snapshot` đọc như đang dùng snapshot,
+    // khiến người đọc tưởng phần tách bản đã xong.
+    `SELECT c.profile_id, p.data AS profile_data, c.template_id,
             c.theme, c.layout, c.title
      FROM cv_documents c
      JOIN profiles p ON p.id = c.profile_id
@@ -38,7 +43,7 @@ export default async function BuilderPage({
   if (rows.length === 0) notFound()
 
   const row = rows[0]!
-  const profile = ProfileSchema.parse(row.profile_snapshot)
+  const profile = ProfileSchema.parse(row.profile_data)
 
   return (
     <BuilderShell

@@ -274,6 +274,71 @@ UC-3x  CV & xuất file     UC-6x  Knowledge Base
 
 # UC-4x — Đối chiếu JD
 
+## UC-33 · Tạo bản CV riêng cho một JD `P0` ⭐
+
+| | |
+|---|---|
+| **Tác nhân** | UC |
+| **Kích hoạt** | UC dán JD để đối chiếu (UC-41) |
+| **Tiền điều kiện** | Đã có ít nhất một CV đã rà soát |
+| **Hậu điều kiện** | CV mới tồn tại, gắn `jd_id`, hồ sơ TÁCH HẲN khỏi bản gốc |
+
+**Vấn đề cần giải**
+
+Người dùng thật ứng tuyển nhiều nơi, và mỗi nơi cần một bản CV khác nhau —
+"làm gọn mục kinh nghiệm cho JD này" không được phép làm hỏng bản đầy đủ đang
+dùng cho nơi khác.
+
+Trước UC này, mọi CV trỏ chung một hồ sơ: sửa một chỗ là mọi CV đổi theo.
+
+**Luồng chính**
+1. UC đang ở một CV, dán JD để đối chiếu (UC-41).
+2. SYS **nhân bản hồ sơ**: `INSERT INTO profiles ... SELECT data FROM profiles`.
+3. SYS tạo `cv_documents` mới trỏ hồ sơ vừa nhân bản, gắn `jd_id`, đặt tên theo
+   công ty/vị trí trong JD.
+4. SYS chuyển UC sang CV mới. **Không hỏi gì cả** — UC chỉ thấy mình đang sửa CV.
+5. Mọi thay đổi sau đó (chat, sửa tay, duyệt patch) chỉ động tới bản này.
+
+**Luồng thay thế**
+- 1a. UC đối chiếu lại CÙNG JD đó → dùng lại CV đã tạo, không nhân bản lần hai.
+- 2a. Hồ sơ gốc chưa rà soát xong (UC-22) → chặn, mời rà soát trước.
+
+**Quy tắc**
+- BR-33.1 Nhân bản là **im lặng**. UC không phải hiểu khái niệm "hồ sơ" và
+  "tài liệu CV" — họ chỉ đang sửa CV của mình.
+- BR-33.2 Một `(cv gốc, jd)` chỉ sinh **một** CV. Cùng JD dán lại → mở CV cũ.
+- BR-33.3 CV gốc **không bao giờ** bị sửa qua đường này. Nó là bản đầy đủ.
+- BR-33.4 Tên CV mới lấy từ JD (`"Everlastify — Fullstack"`), không phải
+  `"CV (bản sao 2)"` — người dùng cần nhận ra ngay bản nào cho nơi nào.
+- BR-33.5 Sau khi tách, hai hồ sơ **độc lập hoàn toàn**. Sửa thông tin cá nhân
+  ở bản này KHÔNG lan sang bản kia — đây là cái giá đã chấp nhận để đổi lấy sự
+  an toàn của bản gốc (xem TDD §8.5).
+
+---
+
+## UC-34 · Xem và khôi phục phiên bản `P1`
+
+| | |
+|---|---|
+| **Tác nhân** | UC |
+| **Mục đích** | Mỗi lần thông tin thay đổi là một phiên bản xem lại được |
+
+**Luồng chính**
+1. UC mở "Lịch sử thay đổi" trong `/builder`.
+2. SYS liệt kê `profile_revisions`: thời điểm, ai sửa (bạn / AI), tóm tắt op.
+3. UC bấm một mốc → xem trước nội dung tại thời điểm đó.
+4. UC bấm "Khôi phục về đây" → `revertTo(revisionId)`.
+
+**Luồng thay thế**
+- 4a. Khôi phục cũng là một thay đổi → sinh revision mới, hoàn tác được tiếp.
+
+**Quy tắc**
+- BR-34.1 Mọi thay đổi đều sinh revision, kể cả thay đổi của người dùng
+  (BR-24.1) — một lịch sử duy nhất, không hai cơ chế song song.
+- BR-34.2 Khôi phục KHÔNG xoá lịch sử phía sau. Hoàn tác phải hoàn tác được.
+
+---
+
 ## UC-41 · Nhập & phân tích JD `P0`
 
 **Luồng chính**

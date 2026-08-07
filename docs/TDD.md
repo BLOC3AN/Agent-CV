@@ -1125,6 +1125,61 @@ export const PatchProposalSchema = z.object({
 
 `grounding.type === 'inference'` → UI tô màu cảnh báo và **mặc định không tick chọn**.
 
+### 8.5 F5 — Bản CV riêng cho từng JD (UC-33)
+
+> Bổ sung sau khi rà lại thiết kế: A2 tách Profile khỏi CVDocument, nhưng
+> KHÔNG trả lời được câu "làm gọn mục kinh nghiệm cho JD này mà đừng đụng bản
+> đầy đủ".
+
+**Lỗ hổng của bản đầu.** Mọi `cv_documents` trỏ về một `profiles` chung. Sửa
+nội dung ở CV này thì CV kia đổi theo. Cột `cv_documents.profile_snapshot` có
+trong lược đồ nhưng KHÔNG được dùng để render — câu SQL của builder còn đặt bí
+danh `p.data AS profile_snapshot`, đọc như đang dùng snapshot trong khi thực ra
+dùng bản sống. Dễ tưởng là đã xong.
+
+**Vì sao "chỉ đổi phần hiển thị" không đủ.** Rút gọn CV có hai loại thao tác:
+
+| Thao tác | Bản chất | Đổi hiển thị đủ chưa? |
+|---|---|---|
+| Ẩn bớt dự án, đảo thứ tự mục | trình bày | ✔ đủ |
+| **Viết lại bullet cho ngắn gọn** | **nội dung** | ✘ phải sửa dữ liệu |
+| Đổi headline theo JD | nội dung | ✘ |
+
+Nhu cầu thật nằm ở nhóm thứ hai, nên không thể giải bằng `layout`/`theme`.
+
+**Quyết định D12 — nhân bản hồ sơ khi đối chiếu JD.**
+
+```
+profiles(gốc) ──┬── cv_documents "Bản đầy đủ"
+                │
+   dán JD-A ────┼──► profiles(bản sao A) ── cv_documents "Everlastify — Fullstack"  jd_id=A
+   dán JD-B ────┴──► profiles(bản sao B) ── cv_documents "Finhay — Backend"         jd_id=B
+```
+
+Nhân bản là **im lặng** (BR-33.1). Người dùng chỉ thấy mình đang sửa CV; họ
+không phải hiểu khái niệm "hồ sơ" và "tài liệu CV" — đó là chi tiết cài đặt.
+
+**Đánh đổi đã chấp nhận:** sau khi tách, sửa email ở bản này không lan sang bản
+kia. Phương án "một hồ sơ gốc, CV chỉ chọn phần hiển thị" tránh được điều đó
+nhưng không làm nổi việc viết lại nội dung — mà đó mới là nhu cầu chính.
+
+**Phiên bản trong một CV.** Mỗi lần thông tin thay đổi đều sinh một
+`profile_revisions` — cơ chế này ĐÃ CHẠY từ M1 (`ProfileRepo.patch`, `undoLast`,
+`revertTo`). Hai khái niệm khác nhau, đừng lẫn:
+
+| | Sinh ra khi | Dùng để |
+|---|---|---|
+| **Tài liệu CV** | đối chiếu một JD mới | ứng tuyển nhiều nơi cùng lúc |
+| **Phiên bản** | mỗi lần thông tin đổi | xem lại, hoàn tác, khôi phục |
+
+Cái còn thiếu chỉ là GIAO DIỆN lịch sử (UC-34) — API `revisions`, `undo`,
+`revertTo` đã có và có test.
+
+**Ảnh hưởng tới lược đồ:** không cần migration. `cv_documents` đã có `profile_id`
+và `jd_id`. Cột `profile_snapshot` được dùng đúng mục đích ban đầu: ảnh chụp
+tại thời điểm tạo, phục vụ đối chiếu "CV này lúc nộp trông thế nào", KHÔNG phải
+nguồn render.
+
 ### 8.4 F4 — Export PDF
 
 ```

@@ -1,3 +1,7 @@
 export * from './normalize.js'
 export * from './taxonomy.js'
 export * from './keyword.js'
+export * from './semantic.js'
+export * from './rubric.js'
+export * from './kb-load.js'
+export * from './analyze.js'

@@ -23,6 +23,8 @@ export APP_URL="http://localhost:$PORT"
 # next start chạy trong apps/web nên cwd khác worker — ép tuyệt đối để hai bên
 # trỏ cùng một thư mục file upload
 export STORAGE_ROOT="${STORAGE_ROOT:-$ROOT/var/storage}"
+# Chạy thử tay khi chưa có auth — xem apps/web/lib/jobs.ts
+export ALLOW_DEV_USER="${ALLOW_DEV_USER:-true}"
 
 echo "→ khởi động"
 setsid npx next start -p "$PORT" > /tmp/next.log 2>&1 < /dev/null &

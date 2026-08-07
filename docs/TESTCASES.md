@@ -215,6 +215,23 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 
 ---
 
+## 5.1 UC-33/34 — Bản CV theo JD & phiên bản
+
+| TC | Mô tả | Loại | Mức | Kỳ vọng |
+|---|---|---|---|---|
+| TC-33-01 | Đối chiếu JD sinh CV mới | I | **P0** | Hồ sơ được nhân bản, `cv_documents` mới có `jd_id`, hồ sơ gốc không đổi |
+| TC-33-02 | Sửa bản mới KHÔNG đụng bản gốc | I | **P0** | Đổi bullet ở bản JD → hồ sơ gốc giữ nguyên từng byte |
+| TC-33-03 | Cùng JD dán lại → không nhân bản lần hai | I | P0 | BR-33.2, trả về CV đã tạo |
+| TC-33-04 | Tên CV lấy từ JD | I | P1 | `"Everlastify — Fullstack"`, không phải `"CV (bản sao 2)"` |
+| TC-33-05 | Hồ sơ chưa rà soát → chặn | I | P0 | Mời rà soát trước (BR-22.1 vẫn có hiệu lực) |
+| TC-33-06 | Nhân bản im lặng | E | P1 | Không hộp thoại nào hỏi "bạn có muốn tạo bản sao?" |
+| TC-34-01 | Mỗi thay đổi là một phiên bản | I | **P0** | Sửa tay và AI sửa đều sinh `profile_revisions` |
+| TC-34-02 | Khôi phục về mốc cũ | I | P0 | `revertTo` dựng đúng nội dung tại mốc đó |
+| TC-34-03 | Khôi phục cũng hoàn tác được | I | P0 | Sinh revision mới, không xoá lịch sử phía sau |
+| TC-34-04 | Lịch sử phân biệt người và AI | I | P1 | Cột `author` hiện đúng trong danh sách |
+
+---
+
 ## 6. UC-41/42 — Đối chiếu JD ⭐
 
 ### 6.1 Scoring engine (thuần code — phải deterministic)

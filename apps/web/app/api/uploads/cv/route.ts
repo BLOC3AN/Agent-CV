@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getPool } from '@hr/db'
 import { contentKey } from '@hr/worker/storage'
-import { enqueue, storage } from '@/lib/jobs'
+import { devUserId, enqueue, storage } from '@/lib/jobs'
 
 /**
  * POST /api/uploads/cv — UC-21, TDD §8.1 bước [0].
@@ -48,13 +48,21 @@ export async function POST(req: Request) {
     )
   }
 
-  // TODO(X-1 Auth): lấy userId từ session thay vì body
-  const userId = form.get('userId')
-  if (typeof userId !== 'string' || !userId) {
-    return NextResponse.json({ error: 'Thiếu userId' }, { status: 400 })
+  // TODO(X-1 Auth): lấy userId từ session. Tới lúc đó `devUserId()` tự ném lỗi
+  // ở production, nên không thể quên gỡ nhánh này.
+  const given = form.get('userId')
+  let userId: string
+  if (typeof given === 'string' && given) {
+    const { rows } = await getPool().query('SELECT 1 FROM users WHERE id = $1', [given])
+    if (rows.length === 0) return NextResponse.json({ error: 'Không có user' }, { status: 404 })
+    userId = given
+  } else {
+    try {
+      userId = await devUserId()
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 401 })
+    }
   }
-  const { rows } = await getPool().query('SELECT 1 FROM users WHERE id = $1', [userId])
-  if (rows.length === 0) return NextResponse.json({ error: 'Không có user' }, { status: 404 })
 
   const key = contentKey(bytes)
   await storage().put(key, bytes)
