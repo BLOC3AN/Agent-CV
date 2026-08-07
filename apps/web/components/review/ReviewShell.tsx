@@ -123,7 +123,7 @@ export function ReviewShell({ jobId, intent = null, profileId, initialProfile, q
       setError((e as Error).message)
       setFinishing(false)
     }
-  }, [jobId, router])
+  }, [jobId, router, intent])
 
   return (
     <div className="mx-auto max-w-[1400px] p-4">

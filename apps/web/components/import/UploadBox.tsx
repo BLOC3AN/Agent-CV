@@ -109,7 +109,7 @@ export function UploadBox({ intent = null }: { intent?: Intent | null }) {
     }
 
     return () => es.close()
-  }, [jobId, phase, router])
+  }, [jobId, phase, router, carry])
 
   if (phase === 'working') {
     return (

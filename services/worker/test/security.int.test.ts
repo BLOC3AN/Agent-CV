@@ -27,7 +27,7 @@ const CV_NAMES = ['CV-01', 'CV-02', 'CV-04', 'CV-06', 'CV-07', 'CV-10']
 
 let pool: pg.Pool
 let pdfkit: PdfkitClient
-let available: string[] = []
+const available: string[] = []
 let dbUp = false
 
 beforeAll(async () => {
