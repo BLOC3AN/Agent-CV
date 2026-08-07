@@ -142,6 +142,8 @@ export const planAgentStepTask = defineTask<PlanInput, AgentPlan>({
 export interface InsightInput {
   /** Câu cần bổ sung thông tin, lấy nguyên văn từ CV */
   targetPath: string
+  /** Tên mục bằng tiếng Việt — thứ ĐƯA VÀO PROMPT thay cho con trỏ JSON */
+  targetLabel?: string | null
   targetContent: string
   /** Điều còn thiếu, do `plan_agent_step` xác định */
   needsInfo: string[]
@@ -162,6 +164,9 @@ Quy tắc:
 - Nếu có câu hỏi mẫu phù hợp, DÙNG LẠI nguyên văn.
 - "placeholder" là ví dụ câu trả lời ngắn, giúp người dùng biết cần điền gì.
 - "reason" giải thích trong MỘT câu vì sao cần hỏi, viết cho người dùng đọc.
+- Trong "reason" và trong câu hỏi, gọi tên mục bằng TIẾNG VIỆT (Kinh nghiệm, Dự án,
+  Hoạt động, Học vấn, Kỹ năng). TUYỆT ĐỐI không viết tên field JSON hay đường dẫn
+  như "/act", "/exp/0" — người dùng không nhìn thấy JSON.
 - Giọng thân thiện, không dạy đời.`
 
 const INSIGHT_EN = `You write questions to obtain facts from the user — never invent facts for them.
@@ -173,7 +178,9 @@ Rules:
 - One fact per question, specific, answerable in one line.
 - Reuse a matching sample question verbatim when one is provided.
 - "placeholder" shows a short example answer.
-- "reason" explains in ONE sentence why you are asking, written for the user.`
+- "reason" explains in ONE sentence why you are asking, written for the user.
+- Name sections in plain words. Never write JSON paths like "/act" or "/exp/0" —
+  the user never sees the JSON.`
 
 export const insightMiningTask = defineTask<InsightInput, ClarifyRequest>({
   name: 'insight_mining',
@@ -211,7 +218,9 @@ export const insightMiningTask = defineTask<InsightInput, ClarifyRequest>({
       key: 'target',
       role: 'user',
       content:
-        `Vị trí cần bổ sung: ${input.targetPath}\n` +
+        // Nhãn tiếng Việt, KHÔNG phải con trỏ JSON: model hay chép nguyên con
+        // trỏ vào `reason`, và `reason` hiện thẳng lên màn hình.
+        `Mục cần bổ sung: ${input.targetLabel ?? input.targetPath}\n` +
         `Nội dung hiện tại: ${input.targetContent}\n\n` +
         `Còn thiếu:\n${input.needsInfo.map((n) => `- ${n}`).join('\n')}`,
       max: 1_500,
@@ -232,6 +241,14 @@ export interface ProposePatchInput {
   answers: { messageId: string; question: string; answer: string }[]
   kbChunks: { id: string; text: string }[]
   language: Language
+  /**
+   * Lỗi của LƯỢT TRƯỚC, nói lại cho model biết nó sai ở đâu.
+   *
+   * Đo trên hồ sơ thật: model 4B lặp lại đúng một lỗi (`{"$ref": …}` ở chỗ
+   * đáng lẽ là chuỗi) dù prompt đã cấm hẳn kèm ví dụ. Cấm chung chung không ăn
+   * thua; chỉ ra ĐÚNG op vừa hỏng thì có.
+   */
+  corrections?: string[]
 }
 
 const PATCH_VI = `Bạn đề xuất thay đổi cho CV dưới dạng JSON Patch (RFC 6902). Trả về DUY NHẤT một object JSON.
@@ -252,7 +269,14 @@ QUY TẮC CỨNG:
 - "path" phải trỏ tới vị trí CÓ THẬT trong hồ sơ, dùng ĐÚNG tên field như trong
   JSON được cung cấp. Ví dụ hợp lệ: "/work/0/highlights/0", "/projects/1/name",
   "/basics/headline". KHÔNG dùng cú pháp ngoặc vuông như "/work[0]/highlights[0]".
-- Thêm phần tử vào cuối mảng thì dùng "/-", ví dụ "/projects/-".
+- Thêm phần tử vào cuối mảng thì dùng "/-", ví dụ "/projects/-". "value" khi đó
+  phải là một object ĐẦY ĐỦ, dùng đúng tên field như các phần tử đã có trong
+  hồ sơ. Ví dụ với "/activities/-":
+    {"name": "CLB Tin học", "role": "Trưởng nhóm", "highlights": ["Tổ chức workshop 80 người"]}
+- "value" phải là DỮ LIỆU THẬT: chuỗi, số, danh sách, object. TUYỆT ĐỐI không
+  được là tham chiếu như {"$ref": "/activities/0/name"} — hồ sơ không có kiểu
+  dữ liệu đó, và op sẽ bị loại.
+- Không thêm field mà hồ sơ không có (ví dụ "period", "duration").
 - Tối đa 20 op. Ưu tiên ít mà đúng.
 - Viết lại nội dung bằng TIẾNG VIỆT tự nhiên, giữ nguyên tên riêng và tên công nghệ.
 
@@ -276,7 +300,10 @@ HARD RULES:
 - "path" must point at a real location using the EXACT field names from the JSON
   given to you: "/work/0/highlights/0", "/projects/1/name", "/basics/headline".
   Never bracket syntax like "/work[0]/highlights[0]".
-- Use "/-" to append to an array, e.g. "/projects/-".
+- Use "/-" to append to an array, e.g. "/projects/-". Then "value" must be a
+  COMPLETE object using the exact field names of existing elements.
+- "value" must be REAL DATA — never a reference like {"$ref": "/activities/0/name"}.
+- Never add fields the profile does not have (e.g. "period", "duration").
 - 20 ops maximum. Fewer and correct beats many and sloppy.
 
 "summary" — one sentence on what you proposed.`
@@ -354,6 +381,22 @@ export const proposePatchTask = defineTask<ProposePatchInput, PatchProposal>({
         input.targetPath ? `\nMục liên quan: ${input.targetPath}` : ''
       }`,
       max: 800,
+      droppable: false,
+    },
+    {
+      key: 'corrections',
+      role: 'user',
+      content: input.corrections?.length
+        ? (input.language === 'vi'
+            ? 'Lượt trước bạn trả về đề xuất KHÔNG DÙNG ĐƯỢC:\n'
+            : 'Your previous attempt was UNUSABLE:\n') +
+          input.corrections.map((c) => `- ${c}`).join('\n') +
+          (input.language === 'vi'
+            ? '\n\nLần này sửa đúng những chỗ đó. "value" phải là dữ liệu thật ' +
+              '(chuỗi, số, danh sách, object đầy đủ field), không phải tham chiếu.'
+            : '\n\nFix exactly those. "value" must be real data, not a reference.')
+        : '',
+      max: 600,
       droppable: false,
     },
   ],

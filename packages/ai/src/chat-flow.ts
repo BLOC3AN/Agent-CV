@@ -1,5 +1,7 @@
+import fastJsonPatch from 'fast-json-patch'
 import {
   PatchOpSchema,
+  ProfileSchema,
   type ClarifyRequest,
   type Language,
   type PatchOp,
@@ -10,6 +12,7 @@ import type { Gateway } from './gateway.js'
 import { planAgentStepTask, insightMiningTask, proposePatchTask } from './tasks/agent.js'
 import { answerQuestionTask, type AnswerInput } from './tasks/answer.js'
 import { redactKeepShape, stripPII } from './pii.js'
+import { expandCompactPath, humanizePointers, sectionLabel } from './paths.js'
 
 /**
  * Điều phối một lượt chat — TDD §8.3, UC-51/52/53.
@@ -119,11 +122,36 @@ export function validateOps(
       }
     }
 
+    // Chốt chặn HÌNH DẠNG: thử áp op lên bản sao rồi kiểm lại bằng ProfileSchema.
+    //
+    // `typeMismatch` chỉ so được khi đã có giá trị cũ, nên op `add` thêm phần
+    // tử mới lọt hết. Đo thật: model trả
+    //   add /activities/- {"name": {"$ref": "/activities/0/name"}, "period": …}
+    // — một object kiểu JSON Schema nằm ở chỗ đáng lẽ là chuỗi, cộng thêm field
+    // `period` không có trong Profile. Đường dẫn hợp lệ, `value` có mặt, mọi
+    // guard cũ cho qua; người dùng tick, bấm Áp dụng, rồi mới vỡ ở tầng dưới.
+    //
+    // Kiểm bằng chính schema là cách duy nhất bao được mọi hình dạng sai.
+    const shapeError = wouldBreakProfile(profile, op)
+    if (shapeError) {
+      rejected.push({ op, reason: shapeError })
+      continue
+    }
+
     // `grounding.ref` trỏ tới tin nhắn KHÔNG có thật nghĩa là model bịa nguồn.
     // Nguy hiểm hơn cả bịa nội dung: giao diện sẽ tick sẵn op đó vì nó "có
     // nguồn từ người dùng".
     if (op.grounding.type === 'user_message' && !validMessageIds.has(op.grounding.ref)) {
-      rejected.push({ op, reason: 'Dẫn nguồn tới tin nhắn không tồn tại' })
+      // HẠ xuống `inference`, KHÔNG loại — cùng cách xử lý với số bịa ở dưới.
+      //
+      // Điều phải bảo đảm là "thứ model bịa không bao giờ hiện ra như đã được
+      // xác nhận", và hạ cấp làm đúng việc đó: giao diện không tick sẵn, viền
+      // vàng, người dùng tự quyết. Loại hẳn thì bảo đảm thêm được gì đâu, mà
+      // lại giết cả lượt: đo thật, model gán `user_message` cho MỌI op khi
+      // người dùng gõ một yêu cầu mới thay vì trả lời form, nên cả lô bị loại
+      // và họ nhận đúng câu "dẫn nguồn tới tin nhắn không tồn tại" — một lời
+      // trách về lỗi của model, phát cho người dùng.
+      valid.push({ ...op, grounding: { type: 'inference', ref: op.grounding.ref } })
       continue
     }
 
@@ -182,6 +210,35 @@ function typeMismatch(before: unknown, after: unknown): string | null {
   const b = kind(after)
   if (a === b) return null
   return `Chỗ này đang là ${a} nhưng đề xuất thay bằng ${b}`
+}
+
+/**
+ * Áp thử một op lên bản sao hồ sơ; trả lý do nếu kết quả không còn là Profile hợp lệ.
+ *
+ * Chạy trên BẢN SAO nên hồ sơ thật không bị đụng tới (BR-53.1). Mỗi op kiểm
+ * độc lập với hồ sơ gốc chứ không cộng dồn: người dùng có thể bỏ tick bất kỳ
+ * op nào, nên op này không được phép dựa vào op kia đã áp trước đó.
+ */
+function wouldBreakProfile(profile: Profile, op: PatchOp): string | null {
+  const { applyOperation, deepClone } = fastJsonPatch
+  let next: unknown
+  try {
+    next = applyOperation(
+      deepClone(profile) as Profile,
+      { op: op.op, path: op.path, value: op.value, from: op.from } as never,
+      /* validateOperation */ false,
+      /* mutateDocument */ true,
+    ).newDocument
+  } catch {
+    return 'Không áp được vào hồ sơ'
+  }
+
+  const parsed = ProfileSchema.safeParse(next)
+  if (parsed.success) return null
+
+  const issue = parsed.error.issues[0]
+  const where = issue?.path.join('/')
+  return where ? `Giá trị không đúng dạng ở "${where}"` : 'Giá trị không đúng dạng'
 }
 
 /** Con số kèm đơn vị — thứ nhà tuyển dụng đọc là thành tích. */
@@ -311,7 +368,10 @@ export async function runChatTurn(
     }
   }
 
-  const { intent, targetPath, needsInfo } = plan.data
+  const { intent, needsInfo } = plan.data
+  // `plan_agent_step` đọc CompactProfile nên trả con trỏ RÚT GỌN (`/act`).
+  // Dịch về không gian tên thật trước khi dùng ở bất cứ đâu — xem `paths.ts`.
+  const targetPath = expandCompactPath(plan.data.targetPath)
 
   // ── [1b] Người dùng đang HỎI → TRẢ LỜI (UC-56) ─────────────────────
   //
@@ -345,17 +405,37 @@ export async function runChatTurn(
 
   // ── [2] Thiếu thông tin → HỎI, không bịa (BR-52.1) ─────────────────
   const hasAnswers = (input.answers?.length ?? 0) > 0
-  if (needsInfo.length > 0 && !hasAnswers) {
+  // Hỏi lại y hệt câu vừa hỏi là ngõ cụt.
+  //
+  // Đo thật: người dùng gõ lại NGUYÊN VĂN yêu cầu cũ thay vì điền form —
+  // nghĩa là họ không có gì để bổ sung, hoặc form không hỏi trúng. Hỏi tiếp
+  // thì họ gõ lại tiếp, và vòng lặp không có lối ra.
+  //
+  // Lần thứ hai thì đề xuất bằng những gì đang có. Phần suy diễn sẽ mang
+  // `inference` nên giao diện không tick sẵn — người dùng vẫn nắm quyền quyết.
+  const askedBefore =
+    input.history.filter((m) => m.role === 'user' && m.content.trim() === input.message.trim())
+      .length > 1
+  if (needsInfo.length > 0 && !hasAnswers && !askedBefore) {
     deps.onStep?.('asking')
     const target = targetPath ?? '/work'
     const res = await deps.gateway.run(insightMiningTask, {
       targetPath: target,
+      targetLabel: sectionLabel(target),
       targetContent: readPath(input.profile, target),
       needsInfo,
       kbQuestions: input.kbQuestions ?? [],
       language,
     })
-    if (res.ok) return { kind: 'clarify', request: res.data, intent }
+    if (res.ok) {
+      return {
+        kind: 'clarify',
+        // Chốt chặn cuối: `reason` là chuỗi model viết cho NGƯỜI ĐỌC, và nó đã
+        // lộ `/act` ra màn hình thật. Prompt dặn rồi vẫn lộ, nên chặn ở đây.
+        request: { ...res.data, reason: humanizePointers(res.data.reason) },
+        intent,
+      }
+    }
     // Không soạn được câu hỏi thì vẫn đi tiếp — trợ lý sẽ đề xuất phần làm
     // được và đánh dấu phần suy diễn, còn hơn là không giúp gì
   }
@@ -381,12 +461,78 @@ export async function runChatTurn(
   }
 
   deps.onStep?.('validating')
-  const { valid, rejected } = validateOps(
+  let { valid, rejected } = validateOps(
     res.data.ops,
     input.profile,
     deps.messageIds,
     input.answers ?? [],
   )
+  // Không op nào dùng được → NÓI CHO MODEL BIẾT NÓ SAI Ở ĐÂU rồi thử lại một lần.
+  //
+  // Prompt cấm chung chung không ăn thua: đo trên hồ sơ thật, model lặp lại
+  // đúng một lỗi (`{"$ref": …}` ở chỗ đáng lẽ là chuỗi) dù prompt đã cấm hẳn
+  // kèm ví dụ. Chỉ ra ĐÚNG op vừa hỏng thì có. Một lần thôi — thêm lượt gọi là
+  // thêm 5-10 giây người dùng ngồi chờ.
+  if (valid.length === 0 && rejected.length > 0) {
+    deps.onStep?.('proposing')
+    const retry = await deps.gateway.run(proposePatchTask, {
+      message: input.message,
+      intent,
+      targetPath,
+      compactProfile: shapedProfile,
+      answers: input.answers ?? [],
+      kbChunks: input.kbChunks ?? [],
+      language,
+      corrections: rejected.slice(0, 5).map((r) => `${r.op.op} ${r.op.path}: ${r.reason}`),
+    })
+    if (retry.ok) {
+      deps.onStep?.('validating')
+      const second = validateOps(
+        retry.data.ops,
+        input.profile,
+        deps.messageIds,
+        input.answers ?? [],
+      )
+      if (second.valid.length > 0) {
+        return {
+          kind: 'patch',
+          proposal: { ops: second.valid, summary: retry.data.summary },
+          rejected: second.rejected,
+          intent,
+        }
+      }
+      // Lượt sửa cũng hỏng → giữ lý do của lượt sửa, nó sát thực tế hơn
+      rejected = second.rejected.length > 0 ? second.rejected : rejected
+    }
+  }
+
+  // Vẫn không có gì dùng được, mà bước hỏi đã bị bỏ qua → HỎI, đừng báo lỗi.
+  //
+  // Bỏ qua bước hỏi là để tránh vòng lặp (người dùng gõ lại y hệt). Nhưng nếu
+  // đề xuất soạn ra không dùng được, thì thứ còn thiếu chính là thông tin —
+  // và hỏi vẫn hơn là trả về một câu lỗi không có lối đi tiếp.
+  // `!hasAnswers` là điều kiện thiết yếu: người dùng vừa điền form xong mà lại
+  // nhận thêm một form nữa thì công họ bỏ ra thành vô ích.
+  if (valid.length === 0 && askedBefore && !hasAnswers && needsInfo.length > 0) {
+    deps.onStep?.('asking')
+    const target = targetPath ?? '/work'
+    const ask = await deps.gateway.run(insightMiningTask, {
+      targetPath: target,
+      targetLabel: sectionLabel(target),
+      targetContent: readPath(input.profile, target),
+      needsInfo,
+      kbQuestions: input.kbQuestions ?? [],
+      language,
+    })
+    if (ask.ok) {
+      return {
+        kind: 'clarify',
+        request: { ...ask.data, reason: humanizePointers(ask.data.reason) },
+        intent,
+      }
+    }
+  }
+
   if (valid.length === 0) {
     return {
       kind: 'error',

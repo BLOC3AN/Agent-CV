@@ -119,9 +119,13 @@ describe('validateOps — op phải ĐẦY ĐỦ theo RFC 6902', () => {
     expect(validateOps([bad], profile(), MSG_IDS).rejected).toHaveLength(1)
   })
 
+  /** Hồ sơ có hai gạch đầu dòng — xoá/di chuyển một cái không làm vỡ schema. */
+  const twoHighlights = () =>
+    profile({ work: [{ org: 'Cty X', role: 'Dev', highlights: ['Một', 'Hai'] }] } as never)
+
   it('`remove` KHÔNG cần giá trị', () => {
-    const rm = { ...op({ op: 'remove', path: '/work/0/role' }), value: undefined }
-    expect(validateOps([rm], profile(), MSG_IDS).valid).toHaveLength(1)
+    const rm = { ...op({ op: 'remove', path: '/work/0/highlights/1' }), value: undefined }
+    expect(validateOps([rm], twoHighlights(), MSG_IDS).valid).toHaveLength(1)
   })
 
   it('CHẶN `move` thiếu đường dẫn nguồn', () => {
@@ -135,8 +139,17 @@ describe('validateOps — op phải ĐẦY ĐỦ theo RFC 6902', () => {
   })
 
   it('`move` hợp lệ được qua', () => {
-    const ok = op({ op: 'move', path: '/work/0/org', from: '/work/0/role' })
-    expect(validateOps([ok], profile(), MSG_IDS).valid).toHaveLength(1)
+    const ok = op({ op: 'move', path: '/work/0/highlights/0', from: '/work/0/highlights/1' })
+    expect(validateOps([ok], twoHighlights(), MSG_IDS).valid).toHaveLength(1)
+  })
+
+  it('CHẶN `remove` xoá mất field BẮT BUỘC', () => {
+    // Xoá `role` thì mục kinh nghiệm không còn là mục kinh nghiệm hợp lệ —
+    // ProfileSchema từ chối, nên op phải bị loại TRƯỚC khi hiện lên modal
+    const rm = { ...op({ op: 'remove', path: '/work/0/role' }), value: undefined }
+    const { valid, rejected } = validateOps([rm], profile(), MSG_IDS)
+    expect(valid).toHaveLength(0)
+    expect(rejected[0]!.reason).toMatch(/không đúng dạng|áp được/)
   })
 
   it('giá trị RỖNG khác với THIẾU giá trị', () => {
@@ -147,16 +160,32 @@ describe('validateOps — op phải ĐẦY ĐỦ theo RFC 6902', () => {
 })
 
 describe('validateOps — dẫn nguồn (BR-53.2)', () => {
-  it('CHẶN op dẫn nguồn tới tin nhắn KHÔNG có thật', () => {
-    // Nguy hiểm hơn cả bịa nội dung: giao diện sẽ TICK SẴN op đó vì nó "có
-    // nguồn từ người dùng"
+  it('TC-53-22 dẫn nguồn tới tin nhắn KHÔNG có thật → HẠ xuống `inference`', () => {
+    // Nguy hiểm hơn cả bịa nội dung: giao diện TICK SẴN op "có nguồn từ người
+    // dùng". Hạ cấp gỡ đúng nguy hiểm đó — không tick sẵn, viền vàng.
+    //
+    // KHÔNG loại hẳn: đo thật, khi người dùng gõ yêu cầu mới thay vì trả lời
+    // form, model gán `user_message` cho MỌI op → cả lô bị loại và người dùng
+    // nhận một lời trách về lỗi của model (TDD §8.3.7).
     const { valid, rejected } = validateOps(
       [op({ grounding: { type: 'user_message', ref: 'msg-bia-ra' } })],
       profile(),
       MSG_IDS,
     )
-    expect(valid).toHaveLength(0)
-    expect(rejected[0]!.reason).toMatch(/không tồn tại/)
+    expect(valid).toHaveLength(1)
+    expect(valid[0]!.grounding.type).toBe('inference')
+    expect(rejected).toHaveLength(0)
+  })
+
+  it('cả lô dẫn nguồn bịa vẫn ra đề xuất dùng được, không phải lỗi', () => {
+    const ops = [
+      op({ grounding: { type: 'user_message', ref: 'bia-1' } }),
+      op({ path: '/work/0/org', grounding: { type: 'user_message', ref: 'bia-2' } }),
+    ]
+    const { valid } = validateOps(ops, profile(), MSG_IDS)
+    expect(valid).toHaveLength(2)
+    // Không op nào được tick sẵn — an toàn vẫn giữ nguyên
+    expect(valid.every((o) => o.grounding.type === 'inference')).toBe(true)
   })
 
   it('nhận op dẫn nguồn tới tin nhắn có thật', () => {
@@ -348,7 +377,7 @@ describe('lỗi NO_VALID_OPS nói RÕ nguyên nhân', () => {
     const g = fakeGateway({
       plan_agent_step: { intent: 'rewrite_section', targetPath: '/work', needsInfo: [] },
       propose_patch: {
-        ops: [op({ grounding: { type: 'user_message', ref: 'msg-bia' } })],
+        ops: [op({ path: '/work/0/salary' })],
         summary: 's',
       },
     })
@@ -357,7 +386,7 @@ describe('lỗi NO_VALID_OPS nói RÕ nguyên nhân', () => {
       profile: profile(),
       history: [],
     })
-    if (r.kind === 'error') expect(r.message).toMatch(/dẫn nguồn|không tồn tại/i)
+    if (r.kind === 'error') expect(r.message.length).toBeGreaterThan(30)
   })
 })
 
@@ -728,5 +757,290 @@ describe('runChatTurn — UC-56 hỏi trợ lý', () => {
       { message: 'CV ổn chưa?', profile: profile(), history: [] },
     )
     expect(steps).toEqual(['planning', 'answering'])
+  })
+})
+
+// ── TDD §8.3.6 · ba không gian tên đường dẫn ───────────────────────────────
+
+describe('con trỏ rút gọn không được lọt xuống dưới hay ra ngoài', () => {
+  it('TC-53-36 `plan_agent_step` trả `/act` → dịch về `/activities`', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'add_content', targetPath: '/act', needsInfo: ['vai trò'] },
+      insight_mining: {
+        reason: 'Cần biết vai trò cụ thể',
+        targetPath: '/activities',
+        questions: [{ id: 'q1', question: 'Bạn làm vai trò gì?' }],
+      },
+    })
+    await runChatTurn(deps(g), {
+      message: 'Thêm mục Hoạt động mới',
+      profile: profile({ activities: [{ name: 'CLB', highlights: ['a'] }] } as never),
+      history: [],
+    })
+
+    const call = (
+      g.run as unknown as { mock: { calls: [unknown, { targetPath: string; targetContent: string }][] } }
+    ).mock.calls[1]!
+    // `/act` không tồn tại trong Profile — `readPath` sẽ trả rỗng mà không báo gì
+    expect(call[1].targetPath).toBe('/activities')
+    expect(call[1].targetContent).not.toBe('')
+  })
+
+  it('TC-53-37 câu hỏi làm rõ KHÔNG lộ con trỏ JSON ra màn hình', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'add_content', targetPath: '/act', needsInfo: ['vai trò'] },
+      insight_mining: {
+        // Model đã viết đúng câu này ra màn hình thật
+        reason: 'Để xác định đúng hướng đi cho vị trí /act, cần biết bạn muốn gì.',
+        targetPath: '/activities',
+        questions: [{ id: 'q1', question: 'Bạn muốn mở rộng dự án cũ hay thêm mới?' }],
+      },
+    })
+    const r = await runChatTurn(deps(g), {
+      message: 'Thêm mục Hoạt động mới',
+      profile: profile(),
+      history: [],
+    })
+
+    expect(r.kind).toBe('clarify')
+    if (r.kind !== 'clarify') return
+    expect(r.request.reason).not.toMatch(/\/act|\/exp|\/work|\/proj/)
+    expect(r.request.reason).toContain('Hoạt động')
+  })
+
+  it('nhãn tiếng Việt đi vào prompt thay cho con trỏ', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'add_content', targetPath: '/exp/0', needsInfo: ['số liệu'] },
+      insight_mining: { reason: 'x', targetPath: '/work/0', questions: [{ id: 'q', question: 'y' }] },
+    })
+    await runChatTurn(deps(g), { message: 'thêm gì đó', profile: profile(), history: [] })
+
+    const call = (g.run as unknown as { mock: { calls: [unknown, { targetLabel: string }][] } }).mock
+      .calls[1]!
+    expect(call[1].targetLabel).toBe('Kinh nghiệm')
+  })
+})
+
+describe('gõ lại y hệt yêu cầu cũ → không hỏi lại nữa', () => {
+  it('lần đầu thì HỎI', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'add_content', targetPath: '/act', needsInfo: ['vai trò'] },
+      insight_mining: { reason: 'r', targetPath: '/activities', questions: [{ id: 'q', question: 'c' }] },
+      propose_patch: { ops: [op()], summary: 's' },
+    })
+    const r = await runChatTurn(deps(g), {
+      message: 'Thêm mục Hoạt động mới',
+      profile: profile(),
+      history: [{ role: 'user', content: 'Thêm mục Hoạt động mới' }],
+    })
+    expect(r.kind).toBe('clarify')
+  })
+
+  it('lần thứ hai thì ĐỀ XUẤT luôn, không hỏi lại y hệt', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'add_content', targetPath: '/act', needsInfo: ['vai trò'] },
+      insight_mining: { reason: 'r', targetPath: '/activities', questions: [{ id: 'q', question: 'c' }] },
+      propose_patch: { ops: [op()], summary: 's' },
+    })
+    const r = await runChatTurn(deps(g), {
+      message: 'Thêm mục Hoạt động mới',
+      profile: profile(),
+      history: [
+        { role: 'user', content: 'Thêm mục Hoạt động mới' },
+        { role: 'assistant', content: 'r' },
+        { role: 'user', content: 'Thêm mục Hoạt động mới' },
+      ],
+    })
+
+    expect(r.kind).toBe('patch')
+    // Gõ lại nguyên văn nghĩa là họ không có gì bổ sung — hỏi tiếp là vòng lặp
+    expect(calledTasks(g)).not.toContain('insight_mining')
+  })
+})
+
+describe('TC-53-39 chốt chặn HÌNH DẠNG — áp thử rồi kiểm bằng ProfileSchema', () => {
+  it('CHẶN `add` phần tử sai hình dạng', () => {
+    // Model đã trả đúng thứ này trên hồ sơ thật: object kiểu JSON Schema nằm ở
+    // chỗ đáng lẽ là chuỗi. Đường dẫn hợp lệ, `value` có mặt — guard cũ cho qua.
+    const { valid, rejected } = validateOps(
+      [
+        op({
+          op: 'add',
+          path: '/activities/-',
+          value: { name: { $ref: '/activities/0/name' }, period: { $ref: '/work/0' } },
+        }),
+      ],
+      profile(),
+      MSG_IDS,
+    )
+    expect(valid).toHaveLength(0)
+    expect(rejected[0]!.reason).toMatch(/không đúng dạng/)
+  })
+
+  it('CHO QUA `add` phần tử đúng hình dạng', () => {
+    const { valid, rejected } = validateOps(
+      [
+        op({
+          op: 'add',
+          path: '/activities/-',
+          value: { name: 'CLB Tin học', role: 'Trưởng nhóm', highlights: ['Tổ chức workshop'] },
+        }),
+      ],
+      profile(),
+      MSG_IDS,
+    )
+    expect(rejected).toHaveLength(0)
+    expect(valid).toHaveLength(1)
+  })
+
+  it('CHẶN giá trị sai kiểu ở chỗ đã có sẵn', () => {
+    const { valid } = validateOps(
+      [op({ path: '/work/0/role', value: { $ref: '/work/0/org' } })],
+      profile(),
+      MSG_IDS,
+    )
+    expect(valid).toHaveLength(0)
+  })
+
+  it('KHÔNG đụng vào hồ sơ gốc khi áp thử (BR-53.1)', () => {
+    const p = profile()
+    const before = JSON.stringify(p)
+    validateOps(
+      [op({ op: 'add', path: '/activities/-', value: { name: 'X', highlights: [] } })],
+      p,
+      MSG_IDS,
+    )
+    expect(JSON.stringify(p)).toBe(before)
+  })
+
+  it('mỗi op kiểm ĐỘC LẬP — user bỏ tick op nào cũng được', () => {
+    // Hai op cùng thêm vào cuối mảng: op thứ hai không được coi là phụ thuộc
+    // op thứ nhất, vì người dùng có thể chỉ tick một trong hai
+    const add = (n: string) =>
+      op({ op: 'add', path: '/activities/-', value: { name: n, highlights: [] } })
+    const { valid } = validateOps([add('A'), add('B')], profile(), MSG_IDS)
+    expect(valid).toHaveLength(2)
+  })
+})
+
+describe('không op nào dùng được mà đã bỏ qua bước hỏi → HỎI, không báo lỗi', () => {
+  it('quay lại hỏi thay vì trả về ngõ cụt', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'add_content', targetPath: '/act', needsInfo: ['vai trò cụ thể'] },
+      // Model trả đúng thứ nó đã trả trên hồ sơ thật
+      propose_patch: {
+        ops: [op({ op: 'add', path: '/activities/-', value: { name: { $ref: '/activities/0/name' } } })],
+        summary: 's',
+      },
+      insight_mining: {
+        reason: 'Cần biết bạn làm vai trò gì',
+        targetPath: '/activities',
+        questions: [{ id: 'q', question: 'Vai trò của bạn trong dự án là gì?' }],
+      },
+    })
+    const msg = 'Thêm mục Hoạt động mới'
+    const r = await runChatTurn(deps(g), {
+      message: msg,
+      profile: profile(),
+      history: [
+        { role: 'user', content: msg },
+        { role: 'assistant', content: 'r' },
+        { role: 'user', content: msg },
+      ],
+    })
+
+    // Thứ còn thiếu là THÔNG TIN — hỏi vẫn hơn một câu lỗi không lối đi tiếp
+    expect(r.kind).toBe('clarify')
+  })
+
+  it('người dùng ĐÃ trả lời thì KHÔNG hỏi lại, dù không op nào dùng được', async () => {
+    const g = fakeGateway({
+      plan_agent_step: { intent: 'add_content', targetPath: '/act', needsInfo: ['vai trò'] },
+      propose_patch: { ops: [op({ path: '/khong/ton/tai' })], summary: 's' },
+      insight_mining: { reason: 'r', targetPath: '/activities', questions: [{ id: 'q', question: 'c' }] },
+    })
+    const msg = 'Thêm mục Hoạt động mới'
+    const r = await runChatTurn(deps(g), {
+      message: msg,
+      profile: profile(),
+      history: [
+        { role: 'user', content: msg },
+        { role: 'assistant', content: 'r' },
+        { role: 'user', content: msg },
+      ],
+      answers: [{ messageId: 'msg-1', question: 'Vai trò?', answer: 'Trưởng nhóm 4 người' }],
+    })
+
+    // Vừa điền form xong mà lại nhận thêm form nữa thì công họ bỏ ra thành vô ích
+    expect(r.kind).not.toBe('clarify')
+    expect(calledTasks(g)).not.toContain('insight_mining')
+  })
+})
+
+describe('không op nào dùng được → nói cho model biết SAI Ở ĐÂU rồi thử lại', () => {
+  /** Gateway trả kết quả KHÁC NHAU cho lần gọi thứ nhất và thứ hai của cùng task. */
+  function twoShot(first: unknown, second: unknown): Gateway {
+    const seen: Record<string, number> = {}
+    return {
+      run: vi.fn(async (task: { name: string }, input: unknown) => {
+        void input
+        seen[task.name] = (seen[task.name] ?? 0) + 1
+        if (task.name === 'plan_agent_step') {
+          return {
+            ok: true as const,
+            data: { intent: 'add_content', targetPath: '/act', needsInfo: [] },
+            meta: {} as never,
+          }
+        }
+        if (task.name === 'propose_patch') {
+          return {
+            ok: true as const,
+            data: seen['propose_patch'] === 1 ? first : second,
+            meta: {} as never,
+          }
+        }
+        return { ok: false as const, error: { code: 'UNKNOWN' }, meta: {} as never }
+      }),
+    } as unknown as Gateway
+  }
+
+  const bad = {
+    ops: [op({ op: 'add', path: '/activities/-', value: { name: { $ref: '/activities/0/name' } } })],
+    summary: 's',
+  }
+  const good = {
+    ops: [op({ op: 'add', path: '/activities/-', value: { name: 'CLB Tin học', highlights: [] } })],
+    summary: 'Thêm hoạt động',
+  }
+
+  it('lượt sửa ra đề xuất dùng được → trả patch, không trả lỗi', async () => {
+    const g = twoShot(bad, good)
+    const r = await runChatTurn(deps(g), {
+      message: 'Thêm mục Hoạt động mới',
+      profile: profile(),
+      history: [],
+    })
+
+    expect(r.kind).toBe('patch')
+    expect(calledTasks(g).filter((t) => t === 'propose_patch')).toHaveLength(2)
+  })
+
+  it('lượt sửa nhận được LÝ DO cụ thể của lượt hỏng', async () => {
+    const g = twoShot(bad, good)
+    await runChatTurn(deps(g), { message: 'Thêm mục', profile: profile(), history: [] })
+
+    const calls = (g.run as unknown as { mock: { calls: [{ name: string }, { corrections?: string[] }][] } })
+      .mock.calls.filter((c) => c[0].name === 'propose_patch')
+    // Cấm chung chung không ăn thua — phải chỉ ra ĐÚNG op vừa hỏng
+    expect(calls[0]![1].corrections).toBeUndefined()
+    expect(calls[1]![1].corrections?.[0]).toMatch(/activities.*không đúng dạng/i)
+  })
+
+  it('chỉ thử lại MỘT lần — mỗi lượt gọi là 5-10 giây người dùng ngồi chờ', async () => {
+    const g = twoShot(bad, bad)
+    const r = await runChatTurn(deps(g), { message: 'Thêm mục', profile: profile(), history: [] })
+
+    expect(calledTasks(g).filter((t) => t === 'propose_patch')).toHaveLength(2)
+    expect(r.kind).toBe('error')
   })
 })

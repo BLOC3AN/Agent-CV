@@ -137,11 +137,17 @@ export class ChatRepo {
               SELECT created_at FROM chat_messages WHERE id = s.compacted_upto_message_id
             )
           )
-        ORDER BY m.created_at
+        -- DESC + LIMIT rồi ĐẢO LẠI (xem .reverse() bên dưới).
+        -- ORDER BY created_at LIMIT n lấy n tin nhắn CŨ NHẤT, không phải mới
+        -- nhất. Phiên dài hơn limit là model nhận toàn ngữ cảnh đầu phiên, còn
+        -- câu người dùng VỪA GÕ thì không có trong đó — và messageIds cũng
+        -- thiếu nó, nên mọi dẫn nguồn tới câu hiện tại đều bị coi là bịa.
+        -- Đo thật ở phiên 84 tin nhắn.
+        ORDER BY m.created_at DESC
         LIMIT $2`,
       [sessionId, limit],
     )
-    return rows.map((r) => ({
+    return rows.reverse().map((r) => ({
       id: r.id,
       role: r.role,
       content: r.content,

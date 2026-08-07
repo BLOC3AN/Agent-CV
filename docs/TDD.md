@@ -1419,6 +1419,176 @@ Prompt cấm nhắc tên field JSON (`proj`, `exp`, `/work/0`). Đo lần đầu
 viết *"mục 'Dự án' (proj) hoàn toàn trống rỗng"* — `proj` là khoá rút gọn của
 `stripPII`, người dùng không nhìn thấy JSON nên chữ đó vô nghĩa với họ.
 
+### 8.3.6 Ba không gian tên đường dẫn, và cái thứ ba lọt ra màn hình
+
+> Phát hiện từ người dùng. M5.
+
+`plan_agent_step` đọc `CompactProfile`, nơi key đã rút gọn để tiết kiệm token
+(`work` → `exp`, `activities` → `act`, `highlights` → `h`). Nên `targetPath` nó
+trả về nằm trong **không gian tên rút gọn**, không phải Profile thật:
+
+| plan trả về | Profile thật |
+|---|---|
+| `/act` | `/activities` |
+| `/exp/0/h/0` | `/work/0/highlights/0` |
+
+Ba hậu quả, cả ba đều **im lặng** — không lỗi ở đâu:
+
+1. `readPath(profile, '/act')` trả rỗng → `insight_mining` soạn câu hỏi mà
+   không biết mục đó đang có gì
+2. `propose_patch` nhận *"Mục liên quan: /act"* — con trỏ không tồn tại trong
+   chính hồ sơ nó được yêu cầu sửa
+3. Con trỏ lọt thẳng ra giao diện: *"cần biết đúng hướng đi cho vị trí /act"*
+
+Người dùng không nhìn thấy JSON. Với họ `/act` là một mẩu lỗi kỹ thuật rò ra.
+
+**`paths.ts` — dịch một lần, ngay sau `plan_agent_step`:**
+
+| Hàm | Việc |
+|---|---|
+| `expandCompactPath` | `/act` → `/activities`; con trỏ vốn đã đúng thì giữ nguyên, nên gọi lên là vô hại |
+| `sectionLabel` | `/work/0/highlights/1` → "Kinh nghiệm" — thứ ĐƯA VÀO PROMPT thay cho con trỏ |
+| `humanizePointers` | chốt chặn cuối trên mọi chuỗi hiển thị |
+
+`humanizePointers` tồn tại vì prompt đã dặn "không nhắc tên field" mà model vẫn
+nhắc — hai lần, ở hai task khác nhau. Dặn không phải là bảo đảm; bảo đảm phải
+nằm ở tầng code.
+
+### 8.3.7 Dẫn nguồn sai thì HẠ CẤP, không loại
+
+> Phát hiện từ người dùng. M5.
+
+Op dẫn nguồn `user_message` tới một `messageId` không có thật vốn bị loại hẳn.
+Lý do ban đầu đúng: giao diện tick sẵn op "có nguồn từ người dùng", nên nguồn
+bịa nguy hiểm hơn nội dung bịa.
+
+Nhưng loại hẳn thì **giết cả lượt**. Đo thật: người dùng gõ một yêu cầu mới
+thay vì trả lời form làm rõ, `answers` rỗng, model vẫn gán `user_message` cho
+**mọi** op — cả lô bị loại, và họ nhận về:
+
+> *"Trợ lý soạn đề xuất chưa dùng được: dẫn nguồn tới tin nhắn không tồn tại."*
+
+Một lời trách về lỗi của model, phát cho người dùng, kèm gợi ý vô dụng là nói
+rõ hơn — họ đã nói rõ rồi.
+
+Điều PHẢI bảo đảm là *"thứ model bịa không bao giờ hiện ra như đã được xác
+nhận"*. **Hạ xuống `inference`** làm đúng việc đó: không tick sẵn, viền vàng,
+người dùng tự quyết. Loại hẳn không bảo đảm thêm được gì.
+
+Đây cũng đã là cách xử lý số bịa (§8.3.2) — nay hai chỗ nhất quán.
+
+### 8.3.8 `recentMessages` trả về tin nhắn CŨ nhất
+
+> Phát hiện khi kiểm chứng bản sửa §8.3.7 trên phiên chat thật. M5.
+
+```sql
+ORDER BY m.created_at
+LIMIT $2          -- ← n tin nhắn CŨ NHẤT, không phải mới nhất
+```
+
+Tên hàm nói "recent", SQL làm ngược lại. Phiên ngắn hơn `limit` thì hai cách
+cho cùng kết quả, nên nó chạy đúng suốt cho tới khi phiên dài ra — không có
+lỗi, không có cảnh báo, chỉ là ngữ cảnh sai dần.
+
+**Thiệt hại ở phiên 84 tin nhắn:**
+
+| | |
+|---|---|
+| Model nhìn thấy | 12 tin nhắn ĐẦU phiên |
+| Câu người dùng vừa gõ | **không có trong ngữ cảnh** |
+| `messageIds` | thiếu id câu hiện tại → mọi dẫn nguồn tới nó bị coi là bịa |
+
+Điều này còn nuôi §8.3.7: model gán `user_message` cho op dựa trên câu người
+dùng vừa gõ — hoàn toàn hợp lý — nhưng id câu đó không nằm trong `messageIds`,
+nên guard coi là bịa nguồn.
+
+Sửa: `ORDER BY created_at DESC LIMIT n` rồi `.reverse()` về thứ tự thời gian.
+
+**Bài học.** Cùng dạng với §5.4.2, §5.4.3, §8.3.6: không lỗi ở đâu, hành vi
+sai, và sai theo kiểu chỉ lộ ra khi dữ liệu đủ lớn. Test dùng 20 tin nhắn với
+`limit=5` — phải vượt `limit` thì mới đo được gì.
+
+### 8.3.9 Chốt chặn cuối: áp thử rồi kiểm bằng chính `ProfileSchema`
+
+> Phát hiện khi kiểm chứng §8.3.6 trên hồ sơ thật. M5.
+
+Sau khi sửa hết ba lỗi trên, model trả về một op trông hoàn toàn hợp lệ:
+
+```json
+{ "op": "add", "path": "/activities/-",
+  "value": { "name": { "$ref": "/activities/0/name" }, "period": {…} } }
+```
+
+Đường dẫn có thật, `value` có mặt, dẫn nguồn hợp lệ — **mọi guard cũ cho qua**.
+Nhưng `name` là một object kiểu JSON Schema ở chỗ đáng lẽ là chuỗi, và
+`period` không phải field của Profile. Người dùng tick, bấm Áp dụng, rồi mới vỡ.
+
+`typeMismatch` không bắt được vì nó cần giá trị CŨ để so — op `add` thêm phần
+tử mới thì không có gì để so.
+
+**Cách duy nhất bao hết mọi hình dạng sai là hỏi chính schema.** `wouldBreakProfile`
+áp op lên **bản sao** rồi `ProfileSchema.safeParse`:
+
+| | |
+|---|---|
+| Chạy trên bản sao | hồ sơ thật không đụng tới (BR-53.1) |
+| Mỗi op kiểm ĐỘC LẬP với hồ sơ gốc | người dùng bỏ tick op nào cũng được, nên op này không được dựa vào op kia |
+| Lý do loại nêu đúng chỗ sai | `Giá trị không đúng dạng ở "activities/1/name"` |
+
+Hệ quả kèm theo: `remove` xoá mất một field BẮT BUỘC nay cũng bị loại — đúng,
+vì kết quả không còn là Profile hợp lệ.
+
+**Bài học.** Bốn guard trước đều kiểm một khía cạnh model có thể làm sai, và
+model tìm ra khía cạnh thứ năm. Chỉ có kiểm bằng chính định nghĩa dữ liệu mới
+đóng được cả lớp lỗi thay vì từng lỗi một.
+
+### 8.3.10 Có lúc chỉ grammar mới sửa được, prompt thì không
+
+> Phát hiện khi kiểm chứng §8.3.9 trên hồ sơ thật. M5.
+
+Guard §8.3.9 chặn đúng op hỏng, nhưng model **lặp lại đúng lỗi đó 100% số lần**:
+
+```json
+add /activities/-  {"name": {"$ref": "/activities/0/name"},
+                    "role": {"$ref": "/basics/headline"}, …}
+```
+
+Ba cách thuyết phục, đo trên model thật, **không cách nào ăn thua**:
+
+| Cách | Kết quả |
+|---|---|
+| Cấm hẳn trong prompt, kèm ví dụ đúng | vẫn `$ref` |
+| Nói lại lỗi cụ thể ở lượt sửa (`corrections`) | vẫn `$ref` |
+| Đưa khuôn mẫu hoàn chỉnh để chép | vẫn `$ref` |
+
+Nguyên nhân nằm ở grammar, không ở prompt. `PatchValueSchema` có nhánh
+`z.record(z.unknown())` → `additionalProperties: {}`, nghĩa là grammar **cho
+phép object với khoá bất kỳ**. Model Qwen được huấn luyện nhiều trên JSON
+Schema, nên trong ngữ cảnh "object chưa biết hình dạng" thì `$ref` là khoá có
+xác suất cao. Nó không cãi lời — nó đang đi theo đúng thứ grammar mở ra.
+
+**`CvItemSchema`: liệt kê hết field + `.strict()`** → `additionalProperties:
+false`. Grammar không sinh ra nổi khoá `$ref` nữa. Không còn phải thuyết phục
+model; nó không có cách nào viết ra thứ đó.
+
+Gộp field của mọi loại mục vào một schema (name/org/role/school/degree/…):
+model chỉ điền field hợp với chỗ nó thêm, và §8.3.9 vẫn kiểm lại bằng
+`ProfileSchema` nên field thừa không lọt vào hồ sơ.
+
+**Đo lại cùng yêu cầu, cùng câu trả lời của người dùng:**
+
+```
+add /activities/- {"name":"Quản lý hệ thống sản xuất 24/7",
+                   "period":"Hiện tại",
+                   "highlights":["Lãnh đạo nhóm 4 kỹ sư… 3 nhà máy…"]}
+→ dùng được 1, loại 0
+```
+
+**Bài học.** Với model nhỏ, ranh giới giữa "prompt kém" và "grammar quá rộng"
+rất dễ đọc nhầm. Dấu hiệu phân biệt: **lỗi lặp lại 100% và không nhúc nhích dù
+prompt đổi thế nào** — khi đó đừng viết lại prompt lần thứ tư, hãy đi xem
+grammar đang cho phép cái gì. Prompt là lời khuyên, grammar là luật.
+
 ### 8.4 F4 — Export PDF
 
 ```

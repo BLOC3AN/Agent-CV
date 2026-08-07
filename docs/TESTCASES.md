@@ -328,7 +328,18 @@ Mock ở tầng provider để **gateway thật** (routing, breaker, budget, val
 |---|---|---|---|---|
 | TC-53-20 | Chặn chỉ số vượt mảng | U | **P0** | `/work/7` khi chỉ có 1 mục → loại kèm lý do |
 | TC-53-21 | Chặn field bịa ra | U | **P0** | `/work/0/salary` → loại |
-| TC-53-22 | Chặn dẫn nguồn tới tin nhắn KHÔNG có thật | U | **P0** | Nguy hiểm hơn bịa nội dung — UI sẽ tick sẵn op đó |
+| TC-53-22 | Dẫn nguồn tới tin nhắn KHÔNG có thật → HẠ xuống `inference` | U | **P0** | Nguy hiểm hơn bịa nội dung vì UI tick sẵn. Nhưng loại hẳn thì giết cả lượt: model gán `user_message` cho MỌI op khi user gõ yêu cầu mới thay vì trả lời form (TDD §8.3.7) |
+| TC-53-36 | Con trỏ rút gọn được dịch về Profile thật | U | **P0** | `plan_agent_step` đọc CompactProfile nên trả `/act`; `readPath` im lặng trả rỗng (TDD §8.3.6) |
+| TC-53-37 | Con trỏ JSON KHÔNG lọt ra giao diện | U | **P0** | `/act` đã hiện thật trong câu hỏi làm rõ. Prompt dặn rồi vẫn lộ → chặn ở tầng code |
+| TC-53-38 | Hỏi lại y hệt lần hai → ĐỀ XUẤT luôn | U | P0 | Gõ lại nguyên văn nghĩa là không có gì bổ sung; hỏi tiếp là vòng lặp không lối ra |
+| TC-53-39 | Áp thử op rồi kiểm bằng `ProfileSchema` | U | **P0** | Model trả `{"$ref": …}` ở chỗ đáng lẽ là chuỗi; đường dẫn hợp lệ nên bốn guard trước đều cho qua (TDD §8.3.9) |
+| TC-53-40b | Áp thử KHÔNG đụng hồ sơ gốc | U | **P0** | BR-53.1 |
+| TC-53-41b | Mỗi op kiểm ĐỘC LẬP, không cộng dồn | U | P0 | Người dùng bỏ tick op nào cũng được |
+| TC-53-42b | Không op nào dùng được → nói lỗi cho model rồi thử lại MỘT lần | U | P0 | Mỗi lượt gọi là 5-10 giây người dùng ngồi chờ |
+| TC-53-43b | Người dùng ĐÃ trả lời thì không hỏi lại | U | P0 | Vừa điền form xong mà nhận thêm form nữa thì công họ bỏ ra thành vô ích |
+| TC-53-44b | `value` object có hình dạng ĐÓNG trong grammar | I | **P0** | `additionalProperties: {}` cho model viết `{"$ref": …}`; ba cách sửa bằng prompt đều thất bại 100% (TDD §8.3.10) |
+| TC-51-13 | `recentMessages` trả tin nhắn MỚI nhất | I | **P0** | `ORDER BY created_at LIMIT n` lấy n tin CŨ nhất. Phiên ngắn hơn `limit` thì hai cách giống nhau → chạy đúng cho tới khi phiên dài ra (TDD §8.3.8) |
+| TC-51-14 | Câu VỪA GÕ luôn có trong ngữ cảnh | I | **P0** | Thiếu nó thì `messageIds` thiếu id câu hiện tại → mọi dẫn nguồn tới nó bị coi là bịa |
 | TC-53-23 | `replace` lên field chưa tồn tại bị chặn | U | P0 | RFC 6902 đòi đường dẫn có sẵn |
 | TC-53-24 | `add` với "/-" và field mới được phép | U | P0 | Thêm vào cuối mảng, tạo field mới |
 | TC-53-25 | Lọc TỪNG op, không bỏ cả lô | U | **P0** | Một op hỏng không làm mất các op đúng (UC-53 6a) |

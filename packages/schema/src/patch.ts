@@ -31,6 +31,49 @@ export const GroundingSchema = z.object({
 })
 
 /**
+ * Một mục CV mới — hình dạng ĐÓNG, mọi field đều là chuỗi hoặc danh sách chuỗi.
+ *
+ * ── Vì sao phải liệt kê hết field thay vì cho object tự do ──
+ * Với `z.record(z.unknown())`, JSON Schema thành `additionalProperties: {}`, và
+ * grammar cho model viết object với KHOÁ BẤT KỲ. Model 4B dùng quyền đó để
+ * viết tham chiếu kiểu JSON Schema:
+ *
+ *   add /activities/- {"name": {"$ref": "/activities/0/name"}, …}
+ *
+ * Đo trên hồ sơ thật, hiện tượng này lặp lại 100%: cấm trong prompt kèm ví dụ
+ * không ăn thua, nói lại lỗi ở lượt sửa không ăn thua, đưa khuôn mẫu cụ thể để
+ * chép cũng không ăn thua. Model không nghe lời ở chỗ này.
+ *
+ * Liệt kê hết field + `.strict()` → `additionalProperties: false`, nên grammar
+ * KHÔNG SINH RA nổi khoá `$ref`. Không phải thuyết phục model nữa; nó không có
+ * cách nào viết ra thứ đó.
+ *
+ * Gộp field của mọi loại mục (kinh nghiệm, dự án, hoạt động, học vấn) vào một
+ * schema: model chỉ điền field hợp với chỗ nó đang thêm, và `wouldBreakProfile`
+ * kiểm lại bằng chính `ProfileSchema` nên field thừa không lọt vào hồ sơ.
+ */
+export const CvItemSchema = z
+  .object({
+    name: z.string().optional(),
+    org: z.string().optional(),
+    role: z.string().optional(),
+    school: z.string().optional(),
+    degree: z.string().optional(),
+    major: z.string().optional(),
+    gpa: z.string().optional(),
+    issuer: z.string().optional(),
+    period: z.string().optional(),
+    date: z.string().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    url: z.string().optional(),
+    level: z.string().optional(),
+    tech: z.array(z.string()).optional(),
+    highlights: z.array(z.string()).optional(),
+  })
+  .strict()
+
+/**
  * Giá trị mới của một op.
  *
  * ── Vì sao KHÔNG dùng `z.unknown()` ──
@@ -47,8 +90,8 @@ export const PatchValueSchema = z.union([
   z.number(),
   z.boolean(),
   z.null(),
-  z.array(z.unknown()),
-  z.record(z.unknown()),
+  z.array(z.string()),
+  CvItemSchema,
 ])
 
 export const PatchOpSchema = z.object({

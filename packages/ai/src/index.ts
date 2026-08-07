@@ -4,6 +4,7 @@ export * from './budget.js'
 export * from './policies.js'
 export * as piiPatterns from './patterns.js'
 export * from './pii.js'
+export * from './paths.js'
 export * from './redact.js'
 export {
   Gateway,
