@@ -125,12 +125,14 @@ services:
   # BullMQ: parse CV, export PDF (Playwright), embed
   worker:
     build:
-      context: ..
-      dockerfile: frontend/services/worker/Dockerfile
+      context: .
+      dockerfile: Dockerfile.worker
     container_name: hr-worker
     restart: unless-stopped
     environment:
       <<: *env
+      DATABASE_URL: postgres://postgres:${PG_PASSWORD:-hragent_dev}@postgres:5432/hragent
+      PDFKIT_URL: http://pdfkit:8000
     volumes:
       - uploads:/app/var/storage
     depends_on:

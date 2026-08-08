@@ -1,0 +1,3 @@
+FROM scratch
+COPY bin/hr-worker /hr-worker
+ENTRYPOINT ["/hr-worker"]

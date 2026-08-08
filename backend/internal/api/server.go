@@ -614,7 +614,7 @@ func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "multipart form không hợp lệ"})
 		return
 	}
-	file, _, err := r.FormFile("file")
+	file, header, err := r.FormFile("file")
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Thiếu file"})
 		return
@@ -664,7 +664,7 @@ func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {
 		err := s.db.QueryRowContext(r.Context(), `
 			WITH prev AS (SELECT status FROM jobs WHERE idempotency_key = $3), upsert AS (
 				INSERT INTO jobs (user_id, kind, idempotency_key, payload)
-				VALUES (NULLIF($1, '')::uuid, 'parse_cv', $3, $4::jsonb)
+				VALUES (NULLIF($1, '')::uuid, 'parse_cv', $2, $3::jsonb)
 				ON CONFLICT (idempotency_key) DO UPDATE SET
 					status = CASE WHEN jobs.status IN ('failed','cancelled') THEN 'queued' ELSE jobs.status END,
 					payload = CASE WHEN jobs.status IN ('failed','cancelled') THEN EXCLUDED.payload ELSE jobs.payload END,
@@ -674,7 +674,7 @@ func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {
 				RETURNING id, status
 			) SELECT id, status FROM upsert`,
 			userID, "parse_cv:"+userID+":"+id,
-			jsonString(map[string]any{"storageKey": key, "filename": r.FormValue("filename"), "uploadId": id})).Scan(&jobID, &status)
+			jsonString(map[string]any{"storageKey": key, "filename": header.Filename, "uploadId": id})).Scan(&jobID, &status)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được job"})
 			return
