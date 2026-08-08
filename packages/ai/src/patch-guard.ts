@@ -47,8 +47,10 @@ export function validateOps(
   const rejected: RejectedOp[] = []
   const answerText = answers.map((a) => a.answer).join(' ')
   const unsafeRemoval = unsafeRemovals(ops)
+  const { unique, duplicates } = deduplicateOps(ops)
+  rejected.push(...duplicates)
 
-  for (const op of ops) {
+  for (const op of unique) {
     const removalIssue = unsafeRemoval.get(op)
     if (removalIssue) {
       rejected.push({ op, reason: removalIssue })
@@ -182,6 +184,35 @@ export function validateOps(
   }
 
   return { valid, rejected }
+}
+
+/**
+ * Một JSON Patch proposal chỉ được có một thao tác cho mỗi op + path.
+ * Model thường lặp lại cùng một thao tác khi phải phân loại nhiều kỹ năng;
+ * giữ bản đầu tiên giúp UI không hiện hai checkbox cho cùng một thay đổi và
+ * tránh việc thứ tự áp patch quyết định kết quả một cách âm thầm.
+ */
+function deduplicateOps(ops: PatchOp[]): { unique: PatchOp[]; duplicates: RejectedOp[] } {
+  const seen = new Set<string>()
+  const unique: PatchOp[] = []
+  const duplicates: RejectedOp[] = []
+  for (const op of ops) {
+    // `add /-` intentionally repeats for independent new items. `remove`
+    // duplicates must remain visible to unsafeRemovals(), which checks index
+    // shifts across the whole proposal.
+    if (op.op === 'remove' || op.path.endsWith('/-')) {
+      unique.push(op)
+      continue
+    }
+    const key = `${op.op}:${op.path}`
+    if (seen.has(key)) {
+      duplicates.push({ op, reason: 'Đề xuất trùng đường dẫn với một thay đổi khác trong cùng lượt' })
+    } else {
+      seen.add(key)
+      unique.push(op)
+    }
+  }
+  return { unique, duplicates }
 }
 
 function invalidPathReason(profile: Profile, op: PatchOp): string | null {

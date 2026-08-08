@@ -299,6 +299,9 @@ QUY TẮC CỨNG:
   Muốn thay cả phần tử "/skills/N" thì "value" chỉ được có bốn field kể trên,
   ví dụ {"name":"Python","level":"intermediate","group":"Programming"}.
   KHÔNG thay bằng một chuỗi — mỗi kỹ năng là một object có "name".
+- Mỗi cặp "op + path" chỉ được xuất hiện MỘT LẦN. Không lặp lại cùng một
+  đường dẫn, kể cả khi rationale khác nhau. Với mỗi kỹ năng chỉ tạo tối đa một
+  op cập nhật trường "group".
 - Phần giới thiệu bản thân nằm ở "/basics/summary", KHÔNG phải "/summary".
   Chức danh nằm ở "/basics/headline". Field nào hồ sơ chưa có thì vẫn dùng
   đúng đường dẫn đó để thêm.
@@ -363,6 +366,8 @@ HARD RULES:
   If you replace a whole "/skills/N", "value" may only carry those four fields,
   e.g. {"name":"Python","level":"intermediate","group":"Programming"}.
   Never replace it with a string — each skill is an object with "name".
+- Emit each op + path pair only ONCE. Never repeat a path with a different
+  rationale. For each skill, create at most one op for the "group" field.
 - The personal summary lives at "/basics/summary", never "/summary".
 - NEVER remove an item and re-add an edited copy. Edit in place with "replace",
   or set just the field you need. Remove-then-re-add loses content if the re-add
