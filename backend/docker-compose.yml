@@ -28,6 +28,7 @@ services:
       BACKEND_ADDR: :8080
       DATABASE_URL: postgres://postgres:${PG_PASSWORD:-hragent_dev}@postgres:5432/hragent
       STORAGE_ROOT: /app/var/storage
+      PDFKIT_URL: http://pdfkit:8000
     ports:
       - '8080:8080'
     volumes:
