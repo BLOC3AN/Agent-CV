@@ -253,6 +253,33 @@ export class JobRepo {
   }
 
   /**
+   * Job nằm ở `queued` quá lâu — ứng viên cho việc "có ai đang giữ việc này
+   * không?".
+   *
+   * `reapStale` chỉ nhìn `running`, tức chỉ bắt được worker chết GIỮA CHỪNG.
+   * Nhưng job có thể chết TRƯỚC ĐÓ: bản BullMQ bị khử trùng theo `jobId`, hoặc
+   * Redis mất dữ liệu. Khi đó hàng DB nằm ở `queued` mà không hàng đợi nào giữ
+   * việc — không lỗi, không tiến độ, và màn hình chờ của user đứng im mãi mãi.
+   *
+   * Ở đây chỉ TRẢ VỀ ứng viên: câu hỏi "còn item BullMQ không" thuộc về tầng
+   * worker, `JobRepo` không được biết tới Redis.
+   *
+   * Mốc thời gian tính theo `created_at` nên job vừa hồi sinh (`created_at` cũ)
+   * đủ điều kiện ngay. Đó là chủ ý: chúng chính là nhóm dễ bị bỏ rơi nhất, và
+   * lượt đẩy lại vẫn an toàn vì `dispatch` bỏ qua job còn sống.
+   */
+  async listStaleQueued(olderThanMs = 2 * 60_000): Promise<JobRow[]> {
+    const { rows } = await this.pool.query<RawRow>(
+      `SELECT ${COLS} FROM jobs
+        WHERE status = 'queued'
+          AND created_at < now() - ($1 || ' milliseconds')::interval
+        ORDER BY created_at`,
+      [olderThanMs],
+    )
+    return rows.map(toJob)
+  }
+
+  /**
    * Job kẹt ở `running` quá lâu = worker chết giữa chừng. Không có bước này
    * thì job đó treo vĩnh viễn và user chờ mãi.
    */

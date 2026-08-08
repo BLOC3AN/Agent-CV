@@ -231,3 +231,43 @@ describe('JobRepo — vòng đời', () => {
     expect(await repo.get('00000000-0000-0000-0000-000000000000')).toBeNull()
   })
 })
+
+describe('JobRepo.listStaleQueued — tìm job nằm chờ mà không ai nhận', () => {
+  it('trả job đã ở queued quá lâu', async () => {
+    // `reapStale` chỉ nhìn job kẹt ở `running`. Job kẹt ở `queued` — bản BullMQ
+    // bị khử trùng, hoặc Redis mất dữ liệu — thì không ai phát hiện, và user
+    // ngồi nhìn màn "Đang chuẩn bị" vĩnh viễn.
+    const { job } = await repo.enqueue({ userId: null, kind: 'parse_cv', idempotencyKey: key() })
+    await pool.query("UPDATE jobs SET created_at = now() - interval '10 minutes' WHERE id = $1", [
+      job.id,
+    ])
+
+    const stale = await repo.listStaleQueued(5 * 60_000)
+    expect(stale.map((j) => j.id)).toContain(job.id)
+  })
+
+  it('KHÔNG trả job vừa được đẩy vào — nó đang chờ hợp lệ', async () => {
+    // Hàng DB được ghi TRƯỚC khi đẩy vào Redis (xem enqueue). Quét quá sớm sẽ
+    // bắt nhầm đúng khe đó và đẩy trùng.
+    const { job } = await repo.enqueue({ userId: null, kind: 'parse_cv', idempotencyKey: key() })
+
+    const stale = await repo.listStaleQueued(5 * 60_000)
+    expect(stale.map((j) => j.id)).not.toContain(job.id)
+  })
+
+  it('KHÔNG trả job đang chạy hay đã xong', async () => {
+    const running = await repo.enqueue({ userId: null, kind: 'parse_cv', idempotencyKey: key() })
+    const done = await repo.enqueue({ userId: null, kind: 'parse_cv', idempotencyKey: key() })
+    await repo.markRunning(running.job.id)
+    await repo.markRunning(done.job.id)
+    await repo.markDone(done.job.id, {})
+    await pool.query(
+      "UPDATE jobs SET created_at = now() - interval '10 minutes' WHERE id = ANY($1)",
+      [[running.job.id, done.job.id]],
+    )
+
+    const ids = (await repo.listStaleQueued(5 * 60_000)).map((j) => j.id)
+    expect(ids).not.toContain(running.job.id)
+    expect(ids).not.toContain(done.job.id)
+  })
+})

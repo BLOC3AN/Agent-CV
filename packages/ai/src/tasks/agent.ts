@@ -296,7 +296,11 @@ QUY TẮC CỨNG:
   nếu phần thêm lại bị cắt, và làm lệch chỉ số của mọi op sau nó.
 - Tối đa 20 op. Ưu tiên ít mà đúng. Nếu mục có nhiều phần tử hơn số op cho phép
   thì chỉ làm phần quan trọng nhất và DỪNG — không được xoá phần còn lại.
-- Viết lại nội dung bằng TIẾNG VIỆT tự nhiên, giữ nguyên tên riêng và tên công nghệ.
+- Khi sửa một field đã có, giữ nguyên ngôn ngữ của nội dung nguồn. Ngôn ngữ
+  phản hồi của trợ lý không quyết định ngôn ngữ của CV. Chỉ dịch khi yêu cầu
+  của người dùng nói rõ cần dịch hoặc chỉ định ngôn ngữ đích. Nếu không, viết
+  lại tự nhiên bằng đúng ngôn ngữ của field nguồn; giữ nguyên tên riêng và tên
+  công nghệ.
 
 "summary" — một câu tóm tắt bạn đã đề xuất gì.`
 
@@ -340,6 +344,10 @@ HARD RULES:
 - 20 ops maximum. Fewer and correct beats many and sloppy. If a section has more
   elements than you have ops for, do the most important part and STOP — never
   delete the rest.
+- When editing an existing field, preserve the source field's language. The
+  assistant response language does not determine the CV field language. Only
+  translate when the user's request explicitly asks for translation or names a
+  target language. Otherwise rewrite naturally in the source field's language.
 
 "summary" — one sentence on what you proposed.`
 

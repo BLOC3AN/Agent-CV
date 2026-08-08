@@ -3,7 +3,7 @@ import { getPool, JobRepo } from '@hr/db'
 // Import theo ĐƯỜNG DẪN CON, không qua '@hr/worker': index.ts kéo theo
 // `@hr/pdf` → Playwright và toàn bộ handler vào bundle Next.js, trong khi web
 // chỉ cần đẩy việc vào hàng đợi.
-import { getQueue, DEFAULT_JOB_OPTS } from '@hr/worker/queues'
+import { getQueue, dispatch } from '@hr/worker/queues'
 import { LocalStorage, type Storage } from '@hr/worker/storage'
 import type { JobKind } from '@hr/db'
 
@@ -70,28 +70,11 @@ export async function enqueue(input: {
   }
 
   try {
-    const queue = getQueue(input.kind)
-    if (!created && job.status === 'queued') {
-      // Redis có thể còn một BullMQ job terminal cũ cùng jobId trong khi DB đã
-      // đưa job về queued. BullMQ sẽ dedupe theo jobId và không tạo item mới,
-      // nên dọn bản terminal trước khi dispatch lại.
-      const existing = await queue.getJob(job.id)
-      if (existing) {
-        const state = await existing.getState()
-        if (state === 'completed' || state === 'failed') await existing.remove()
-      }
-    }
-    await queue.add(
-      input.kind,
-      { jobId: job.id },
-      {
-        ...DEFAULT_JOB_OPTS,
-        // Lấy jobId của DB làm jobId của BullMQ: nếu cùng job bị đẩy hai lần
-        // (hai tab, F5 giữa chừng), BullMQ bỏ qua bản trùng thay vì cho model
-        // chạy hai lượt.
-        jobId: job.id,
-      },
-    )
+    // `dispatch` tự dọn bản BullMQ cũ ở trạng thái cuối. KHÔNG được đặt việc dọn
+    // đó sau một điều kiện nào: chính `revived`/`requeueDone` — nhánh có `created`
+    // = true — là nhánh chắc chắn còn bản cũ ở `completed`, và trước đây nó bị
+    // nhánh `!created` bỏ qua nên `add` bị nuốt, job nằm chết ở `queued`.
+    await dispatch(getQueue(input.kind), input.kind, job.id)
     return { jobId: job.id, created, revived, queued: true }
   } catch {
     // Redis chết: job vẫn nằm ở `queued` trong DB. Trả về cho user biết đã nhận

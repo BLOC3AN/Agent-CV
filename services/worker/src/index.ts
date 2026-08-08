@@ -9,8 +9,10 @@ import {
   QUEUE_PREFIX,
   redisConnection,
   closeQueues,
+  getQueue,
   type JobData,
 } from './queues.js'
+import { requeueStranded } from './reap-queued.js'
 import { runJob, type JobHandler, type RunnerDeps } from './runner.js'
 import { PdfkitClient } from './pdfkit-client.js'
 import { LocalStorage } from './storage.js'
@@ -153,12 +155,29 @@ async function main(): Promise<void> {
   const workers = startWorkers()
   const repo = new JobRepo(getPool())
 
+  /*
+   * Job kẹt ở `queued` = việc chưa bao giờ tới tay worker: bản BullMQ cùng
+   * `jobId` còn ở trạng thái cuối nên lượt `add` bị khử trùng trong im lặng,
+   * hoặc Redis mất dữ liệu. Kiểu chết này câm hơn hẳn `running` treo — không
+   * lỗi, không tiến độ — và user nhìn màn "Đang chuẩn bị" cho tới lúc bỏ cuộc.
+   */
+  const rescueOnce = (): void => {
+    requeueStranded({ repo, queueFor: getQueue, log })
+      .then((r) => r.requeued > 0 && log('warn', `đẩy lại ${r.requeued} job bị bỏ rơi`))
+      .catch((e) => log('error', 'reaper hàng đợi lỗi', e))
+  }
+  // Chạy ngay khi khởi động: worker vừa chết là lúc dễ bỏ rơi job nhất, mà đó
+  // cũng là lúc có người đang ngồi chờ trước màn hình.
+  rescueOnce()
+
   // Job kẹt ở `running` = worker chết giữa chừng. Không dọn thì user chờ mãi.
   const reaper = setInterval(() => {
     repo
       .reapStale()
       .then((n) => n > 0 && log('warn', `dọn ${n} job treo`))
       .catch((e) => log('error', 'reaper lỗi', e))
+
+    rescueOnce()
   }, 5 * 60_000)
   reaper.unref()
 
@@ -208,7 +227,8 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
   })
 }
 
-export { QUEUE, QUEUE_PREFIX, CONCURRENCY, getQueue } from './queues.js'
+export { QUEUE, QUEUE_PREFIX, CONCURRENCY, getQueue, dispatch } from './queues.js'
+export { requeueStranded } from './reap-queued.js'
 export { runJob, isRetryable, type JobContext, type JobHandler } from './runner.js'
 export { PdfkitClient } from './pdfkit-client.js'
 export { LocalStorage, contentKey, jobKey } from './storage.js'

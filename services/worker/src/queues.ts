@@ -1,6 +1,16 @@
 import { Queue, type ConnectionOptions, type JobsOptions } from 'bullmq'
 import type { JobKind } from '@hr/db'
 
+/** Trạng thái BullMQ nghĩa là "việc còn sống, sẽ có worker nhận". */
+const LIVE_STATES = new Set([
+  'waiting',
+  'waiting-children',
+  'active',
+  'delayed',
+  'prioritized',
+  'paused',
+])
+
 /**
  * Định nghĩa hàng đợi — TDD §12.1.
  *
@@ -83,6 +93,37 @@ export function getQueue(kind: JobKind, connection?: ConnectionOptions): Queue<J
     queues.set(kind, q)
   }
   return q
+}
+
+/**
+ * Đưa một job vào hàng đợi, dọn sạch bản cũ nếu nó đã ở trạng thái cuối.
+ *
+ * `jobId` của BullMQ chính là khoá chính bảng `jobs`, nên hai lượt đẩy cùng một
+ * job không cho model chạy hai lượt. Cái giá của lựa chọn đó: khi bản cũ còn
+ * nằm ở `completed`/`failed` (removeOnComplete giữ tới một giờ), `queue.add`
+ * bị BullMQ **bỏ qua trong im lặng** — không ném, không tín hiệu. Hàng DB đã về
+ * `queued` mà không worker nào nhận việc, và user ngồi nhìn màn "Đang chuẩn bị"
+ * cho tới khi bỏ cuộc.
+ *
+ * Nên chỗ này KHÔNG được phụ thuộc vào việc phía gọi đoán xem có bản cũ hay
+ * không: cứ hỏi Redis rồi dọn. Đây là đường đi DUY NHẤT để đẩy việc.
+ *
+ * Trả về `true` nếu vừa đưa việc vào hàng đợi, `false` nếu đã có bản còn sống.
+ */
+export async function dispatch(
+  queue: Queue<JobData>,
+  name: string,
+  jobId: string,
+  opts: JobsOptions = DEFAULT_JOB_OPTS,
+): Promise<boolean> {
+  const existing = await queue.getJob(jobId)
+  if (existing) {
+    // Còn sống thì thôi — đẩy nữa cũng bị khử trùng, mà lại che mất bản đang chạy
+    if (LIVE_STATES.has(await existing.getState())) return false
+    await existing.remove()
+  }
+  await queue.add(name, { jobId }, { ...opts, jobId })
+  return true
 }
 
 export async function closeQueues(): Promise<void> {

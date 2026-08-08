@@ -66,6 +66,25 @@ describe('TC-SEC-09 — KB không vào system prompt', () => {
     expect(sections.find((s) => s.key === 'kb')!.role).toBe('user')
   })
 
+  it('`propose_patch`: giữ ngôn ngữ của field, chỉ dịch khi user yêu cầu', () => {
+    const sections = proposePatchTask.buildSections(patchInput) as {
+      key: string
+      content: string
+    }[]
+    const system = sections.find((s) => s.key === 'system')!.content
+
+    expect(system).toContain('giữ nguyên ngôn ngữ của nội dung nguồn')
+    expect(system).toContain('Chỉ dịch khi yêu cầu')
+
+    const englishSections = proposePatchTask.buildSections({
+      ...patchInput,
+      language: 'en',
+    }) as { key: string; content: string }[]
+    const englishSystem = englishSections.find((s) => s.key === 'system')!.content
+    expect(englishSystem).toContain("preserve the source field's language")
+    expect(englishSystem).toMatch(/Only\s+translate when the user's request explicitly asks/)
+  })
+
   it('KB được BỌC trong `<kb_reference>` kèm câu nhắc', () => {
     // Ranh giới phải hiện ra ngay cả khi nội dung bên trong bắt chước giọng
     // chỉ thị — đó là toàn bộ mục đích của thẻ bọc
