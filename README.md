@@ -2,6 +2,8 @@
 
 Ứng dụng dựng CV và phân tích độ khớp với JD cho sinh viên / fresher.
 
+Phiên bản hiện tại: **1.0.1**
+
 ## Cấu trúc
 
 ```text
