@@ -696,6 +696,8 @@ CREATE TABLE profile_revisions (
 CREATE INDEX ON profile_revisions (profile_id, id DESC);
 
 -- ── CV = snapshot profile + template ────────────────────────────────────────
+-- API: DELETE /api/cv/:id — xoá CV của user đang đăng nhập; không xoá theo id của user khác.
+
 CREATE TABLE cv_documents (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,

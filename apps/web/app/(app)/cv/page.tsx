@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getPool } from '@hr/db'
 import { currentUser } from '@/lib/auth'
+import { CvDeleteButton } from '@/components/cv/CvDeleteButton'
 
 /**
  * `/cv` — danh sách CV của tôi. UC-31, X-6.
@@ -72,10 +73,10 @@ export default async function CvListPage() {
       ) : (
         <ul className="mt-6 divide-y divide-border rounded-xl border border-border  ">
           {rows.map((r) => (
-            <li key={r.id}>
+            <li key={r.id} className="flex items-center gap-3 px-4 py-3">
               <Link
                 href={`/builder/${r.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-canvas "
+                className="min-w-0 flex-1 hover:text-brand"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{r.title ?? 'CV của tôi'}</p>
@@ -85,10 +86,8 @@ export default async function CvListPage() {
                     Sửa {when(r.updated_at)}
                   </p>
                 </div>
-                <span aria-hidden className="text-ink-subtle">
-                  →
-                </span>
               </Link>
+              <CvDeleteButton cvId={r.id} title={r.title ?? 'CV của tôi'} />
             </li>
           ))}
         </ul>

@@ -118,7 +118,19 @@ Nội dung bắt buộc:
 
 Không có nút read-only `/cv/:id` cho tới khi route đó tồn tại.
 
-### 4.4 Card hoàn thiện hồ sơ
+### 4.4 Danh sách CV và xóa CV
+
+Trang `/cv` phải cho phép người dùng xóa từng CV ngay trong danh sách, vì mỗi
+bản CV theo JD là một tài liệu độc lập và danh sách có thể tăng nhanh.
+
+- Dùng `DELETE /api/cv/:id`; không thêm route nghiệp vụ khác.
+- Backend bắt buộc kiểm tra user sở hữu CV; không được xóa theo `id` đơn độc.
+- UI phải hỏi xác nhận trước khi xóa, khóa nút trong lúc xử lý và hiển thị lỗi
+  nếu request thất bại.
+- Xóa thành công thì làm mới danh sách. Không có undo vì thao tác xóa là vĩnh
+  viễn; người dùng có thể tạo CV lại bằng `/cv/new` hoặc `/import`.
+
+### 4.5 Card hoàn thiện hồ sơ
 
 Dùng `Meter` hoặc primitive ring mới nếu cần visual giống mockup, nhưng ring chỉ
 là presentation của cùng một giá trị `Completeness`. Danh sách bên cạnh phải
@@ -126,7 +138,7 @@ lấy từ `parts`, không hard-code “Thông tin cá nhân / Kinh nghiệm / .
 
 Nếu API không trả breakdown, chỉ hiển thị phần trăm và không dựng danh sách giả.
 
-### 4.5 Card trợ lý AI
+### 4.6 Card trợ lý AI
 
 Dùng `AiPanel`/`Card variant="ai"` với:
 
@@ -139,7 +151,7 @@ Dùng `AiPanel`/`Card variant="ai"` với:
 Không đưa các câu ví dụ cố định như “Built 12 REST APIs...” nếu không lấy từ
 profile hoặc proposal thật.
 
-### 4.6 Đối chiếu gần đây
+### 4.7 Đối chiếu gần đây
 
 Mỗi item hiển thị:
 

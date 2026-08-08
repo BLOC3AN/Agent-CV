@@ -69,6 +69,11 @@ Ba nguyên tắc sản phẩm:
 └───────────────────────────────────────────────────────────────────┘
 ```
 
+Trang `/cv` có thao tác **Xoá** trên từng dòng. Thao tác gọi `DELETE
+/api/cv/:id`, chỉ chủ sở hữu mới được phép thực hiện, luôn hỏi xác nhận trước
+khi xóa và làm mới danh sách sau khi thành công. Xóa là vĩnh viễn, không hiển
+thị undo.
+
 ---
 
 ## 2.1 Home — ba màn hình, một địa chỉ
