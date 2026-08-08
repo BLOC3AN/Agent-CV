@@ -59,6 +59,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/cv/", s.cvRoute)
 	mux.HandleFunc("POST /api/uploads/cv", s.uploadCV)
 	mux.HandleFunc("GET /api/jobs/", s.job)
+	mux.HandleFunc("DELETE /api/jobs/", s.job)
+	mux.HandleFunc("GET /api/imports/", s.importRoute)
 	return withJSON(mux)
 }
 
@@ -591,6 +593,14 @@ func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
+	if strings.HasSuffix(id, "/stream") {
+		s.streamJob(w, r, strings.TrimSuffix(id, "/stream"))
+		return
+	}
+	if r.Method == http.MethodDelete {
+		s.cancelJob(w, r, id)
+		return
+	}
 	if s.db != nil {
 		var job Job
 		var result, errorText sql.NullString
@@ -621,6 +631,99 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, job)
+}
+
+func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request, id string) {
+	if s.db != nil {
+		result, err := s.db.ExecContext(r.Context(), `UPDATE jobs SET status = 'cancelled', finished_at = now() WHERE id = $1 AND status IN ('queued','running')`, id)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
+			return
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "Job không thể huỷ"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": id, "status": "cancelled"})
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if job := s.jobs[id]; job != nil && (job.Status == "queued" || job.Status == "running") {
+		job.Status = "cancelled"
+		writeJSON(w, http.StatusOK, map[string]any{"id": id, "status": "cancelled"})
+		return
+	}
+	writeJSON(w, http.StatusConflict, map[string]string{"error": "Job không thể huỷ"})
+}
+
+func (s *Server) streamJob(w http.ResponseWriter, r *http.Request, id string) {
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Streaming không được hỗ trợ"})
+		return
+	}
+	for {
+		var status string
+		var result, errText sql.NullString
+		if s.db != nil {
+			err := s.db.QueryRowContext(r.Context(), `SELECT status, COALESCE(result::text,''), COALESCE(error,'') FROM jobs WHERE id = $1`, id).Scan(&status, &result, &errText)
+			if err == sql.ErrNoRows {
+				fmt.Fprintf(w, "event: error\ndata: {\"error\":\"Không tìm thấy job\"}\n\n")
+				flusher.Flush()
+				return
+			}
+		} else {
+			s.mu.RLock()
+			job := s.jobs[id]
+			if job == nil {
+				s.mu.RUnlock()
+				fmt.Fprint(w, "event: error\ndata: {\"error\":\"Không tìm thấy job\"}\n\n")
+				flusher.Flush()
+				return
+			}
+			status = job.Status
+			s.mu.RUnlock()
+		}
+		data := map[string]any{"id": id, "status": status}
+		if result.Valid && result.String != "" {
+			var resultValue any
+			_ = json.Unmarshal([]byte(result.String), &resultValue)
+			data["result"] = resultValue
+		}
+		if errText.Valid && errText.String != "" {
+			data["error"] = errText.String
+		}
+		encoded, _ := json.Marshal(data)
+		fmt.Fprintf(w, "event: job\ndata: %s\n\n", encoded)
+		flusher.Flush()
+		if status == "done" || status == "failed" || status == "cancelled" {
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func (s *Server) importRoute(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/imports/"), "/")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
+		return
+	}
+	if strings.HasSuffix(id, "/complete") {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "Import complete chưa chuyển sang Go"})
+		return
+	}
+	r.URL.Path = "/api/jobs/" + id
+	s.job(w, r)
 }
 
 func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {

@@ -8,6 +8,7 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestApplyJSONPatch(t *testing.T) {
@@ -31,6 +32,17 @@ func TestApplyJSONPatchRejectsMissingPath(t *testing.T) {
 	_, err := applyJSONPatch([]byte(`{"basics":{}}`), []byte(`[{"op":"replace","path":"/missing","value":true}]`))
 	if err == nil {
 		t.Fatal("expected invalid patch error")
+	}
+}
+
+func TestCancelJob(t *testing.T) {
+	s := NewServer()
+	s.jobs["job-1"] = &Job{ID: "job-1", Kind: "parse_cv", Status: "queued", CreatedAt: time.Now()}
+	r := httptest.NewRequest(http.MethodDelete, "/api/jobs/job-1", nil)
+	w := httptest.NewRecorder()
+	s.Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusOK || s.jobs["job-1"].Status != "cancelled" {
+		t.Fatalf("cancel status=%d job=%s", w.Code, s.jobs["job-1"].Status)
 	}
 }
 
