@@ -8,10 +8,10 @@ diện cùng lúc.
 
 ## Trạng thái
 
-`backend/cmd/api` hiện là vertical slice đầu tiên: health, upload job và đọc
-trạng thái job. Nó dùng
-`uploadId` riêng cho mỗi lượt upload, vì cùng một file không đồng nghĩa với
-dùng lại kết quả cũ.
+`backend/cmd/api` và `backend/cmd/worker` hiện đã có production path cho
+auth, upload/job, profile/CV, KB, analyze, chat reply, export PDF, parse CV và
+keyword/semantic matching. Các CV thật trong `var/storage` đã được chạy qua
+worker Go.
 
 Phần Node cũ được giữ tạm trong `frontend/apps/web` server routes,
 `frontend/services/worker` và các package dùng
@@ -26,7 +26,8 @@ legacy; mỗi luồng mới phải có implementation và test ở Go trước.
   tạo job bền vững trong PostgreSQL; mỗi `uploadId` là một lượt upload độc lập.
 - `GET /api/jobs/{id}`: đọc trạng thái job từ PostgreSQL.
 - Go worker claim job bằng PostgreSQL `FOR UPDATE SKIP LOCKED`, xử lý
-  `parse_cv` qua PDFKit và `match_analysis` bằng keyword scoring degraded mode.
+  `parse_cv` qua PDFKit và `match_analysis` bằng keyword + embedding; khi
+  embedding/model không khả dụng, kết quả được đánh dấu degraded.
   Kết quả được ghi lại vào `jobs`/`match_analyses`, không để job treo.
 
 Go đã có production path với PostgreSQL và storage thật. Migration chưa hoàn
@@ -34,8 +35,10 @@ tất cho tới khi frontend đổi sang Go và các route/worker còn lại đ�
 
 ## Còn lại cần chuyển
 
-CV export, chat/proposals, semantic embedding/reranking, LLM gap advice,
-OCR/image branch và `embed_profile` vẫn cần model/PDF adapter Go riêng.
+Phần còn lại để đạt 100% business contract là proposals/JSON Patch trong chat,
+LLM gap advice + reranker, `embed_profile`, đầy đủ job retry/retention và
+frontend cutover khỏi các Node API route. OCR/image branch nằm ngoài phạm vi
+đã thống nhất.
 
 Image Go được build offline từ binary local:
 

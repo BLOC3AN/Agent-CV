@@ -72,6 +72,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/analyze", s.startAnalyze)
 	mux.HandleFunc("GET /api/analyze/", s.getAnalyze)
 	mux.HandleFunc("POST /api/chat", s.chat)
+	mux.HandleFunc("POST /api/chat/proposals/", s.chatProposal)
 	return withJSON(mux)
 }
 
@@ -1178,6 +1179,120 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	payload, _ := json.Marshal(map[string]any{"kind": "reply", "text": answer, "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID})
 	fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+}
+
+func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Proposal cần PostgreSQL"})
+		return
+	}
+	proposalID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/chat/proposals/"), "/")
+	var body struct {
+		ProfileID string `json:"profileId"`
+		Accept    []int  `json:"accept"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 128<<10)).Decode(&body) != nil || proposalID == "" || body.ProfileID == "" || len(body.Accept) > 20 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		return
+	}
+	var status, messageID string
+	var opsRaw []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT status,message_id,ops FROM proposed_patches WHERE id=$1`, proposalID).Scan(&status, &messageID, &opsRaw); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy đề xuất"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Proposal không hợp lệ"})
+		return
+	}
+	if status != "pending" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Đề xuất này đã " + status})
+		return
+	}
+	var all []json.RawMessage
+	if json.Unmarshal(opsRaw, &all) != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Ops proposal hỏng"})
+		return
+	}
+	invalid := []int{}
+	for _, i := range body.Accept {
+		if i < 0 || i >= len(all) {
+			invalid = append(invalid, i)
+		}
+	}
+	if len(invalid) > 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "Chỉ số op không hợp lệ", "invalid": invalid})
+		return
+	}
+	if len(body.Accept) == 0 {
+		_, _ = s.db.ExecContext(r.Context(), `UPDATE proposed_patches SET status='rejected',applied_ops='[]'::jsonb WHERE id=$1`, proposalID)
+		writeJSON(w, http.StatusOK, map[string]any{"applied": 0, "status": "rejected"})
+		return
+	}
+	selected := make([]json.RawMessage, 0, len(body.Accept))
+	for _, i := range body.Accept {
+		selected = append(selected, all[i])
+	}
+	patchRaw := jsonRawArray(selected)
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		return
+	}
+	defer tx.Rollback()
+	var old []byte
+	if err = tx.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 FOR UPDATE`, body.ProfileID).Scan(&old); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		return
+	}
+	updated, err := applyJSONPatch(old, patchRaw)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Patch không áp dụng được: " + err.Error()})
+		return
+	}
+	var revisionID int64
+	if err = tx.QueryRowContext(r.Context(), `UPDATE profiles SET data=$2::jsonb WHERE id=$1 RETURNING id`, body.ProfileID, string(updated)).Scan(new(string)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được hồ sơ"})
+		return
+	}
+	var messageArg any
+	if messageID != "" {
+		messageArg = messageID
+	}
+	if err = tx.QueryRowContext(r.Context(), `INSERT INTO profile_revisions(profile_id,patch,inverse,author,message_id) VALUES($1,$2::jsonb,$3::jsonb,'ai',$4) RETURNING id`, body.ProfileID, string(patchRaw), jsonString(map[string]any{"snapshot": json.RawMessage(old)}), messageArg).Scan(&revisionID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được revision"})
+		return
+	}
+	nextStatus := "partial"
+	if len(body.Accept) == len(all) {
+		nextStatus = "accepted"
+	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE proposed_patches SET status=$2,applied_ops=$3::jsonb WHERE id=$1`, proposalID, nextStatus, jsonString(body.Accept)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không settle được proposal"})
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được proposal"})
+		return
+	}
+	var profile any
+	_ = json.Unmarshal(updated, &profile)
+	writeJSON(w, http.StatusOK, map[string]any{"applied": len(selected), "rejected": []any{}, "revisionId": revisionID, "profile": profile, "status": nextStatus})
+}
+
+func jsonRawArray(values []json.RawMessage) []byte {
+	if len(values) == 0 {
+		return []byte("[]")
+	}
+	var b bytes.Buffer
+	b.WriteByte('[')
+	for i, v := range values {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.Write(v)
+	}
+	b.WriteByte(']')
+	return b.Bytes()
 }
 
 func callChatModel(ctx context.Context, messages []map[string]string) (string, error) {

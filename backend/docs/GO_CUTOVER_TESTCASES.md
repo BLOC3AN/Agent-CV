@@ -17,7 +17,7 @@
 | CUT-11 | Restart Go container giữa job | Job không mất trong PostgreSQL |
 | CUT-12 | Redis restart | Không tạo job trùng; hệ thống báo queued/degraded rõ ràng |
 | CUT-13 | Model server timeout | Job failed có mã lỗi; không kẹt running vô hạn |
-| CUT-14 | PDF không có text layer | Chuyển đúng nhánh OCR/manual, không dịch CV ngoài ý muốn |
+| CUT-14 | PDF không có text layer | `NO_TEXT_LAYER`/manual rõ ràng; OCR/image branch ngoài phạm vi |
 | CUT-15 | CV tiếng Anh | Prompt/result giữ `language=en`, không tự dịch sang tiếng Việt |
 | CUT-16 | Patch AI chứa field cấm/PII | Bị reject, profile không đổi |
 | CUT-17 | Hai request patch đồng thời | Không mất update; revision order xác định |
@@ -45,6 +45,9 @@
 | REAL-CV-03 | `var/storage/cf/...` — Sơn Trịnh | `done`, `language=en`, name/email nhận đúng |
 | REAL-CV-04 | `var/storage/d9/...` — Y Yen Nhi | `done`, `language=en`, name/email nhận đúng |
 | REAL-CV-05 | Aptis/boarding/database-model trong storage | `failed/NO_CV_SECTIONS`, không tạo profile |
+| CUT-37 | Proposal accept một phần | Chỉ op được chọn áp dụng, status `partial`, tạo revision `ai` |
+| CUT-38 | Proposal reject toàn bộ | Profile không đổi, status `rejected` |
+| CUT-39 | Proposal có index ngoài phạm vi | 422, proposal/profile không đổi |
 
 ## Lệnh kiểm tra tối thiểu
 
@@ -58,5 +61,5 @@ docker compose -f backend/docker-compose.yml --env-file .env config --quiet
 curl -fsS http://localhost:8080/api/health
 ```
 
-Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-20
+Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-36
 trên database staging hoặc bản snapshot có thể khôi phục.
