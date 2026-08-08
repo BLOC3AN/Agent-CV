@@ -35,6 +35,45 @@ export function defaultChecked(ops: PatchOp[]): number[] {
     .filter((i) => i >= 0)
 }
 
+const VALUE_LABEL: Record<string, string> = {
+  name: 'Tên',
+  level: 'Cấp độ',
+  group: 'Nhóm',
+  canonical: 'Tên chuẩn',
+  headline: 'Chức danh',
+  role: 'Vai trò',
+  org: 'Tổ chức',
+}
+
+function labelFor(key: string): string {
+  return VALUE_LABEL[key] ?? key
+}
+
+/** Hiện object hồ sơ thành thông tin đọc được, không để JSON rò lên UI. */
+function formatValue(value: unknown, path = ''): string {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, i) => formatValue(item, `${path}/${i}`)).filter(Boolean).join(' · ')
+  }
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).filter(([, item]) => item != null && item !== '')
+    if (path.startsWith('/skills/') || path === '/skills') {
+      const name = typeof (value as Record<string, unknown>).name === 'string'
+        ? String((value as Record<string, unknown>).name)
+        : ''
+      const details = entries
+        .filter(([key]) => key !== 'name')
+        .map(([key, item]) => `${labelFor(key)}: ${formatValue(item, `${path}/${key}`)}`)
+      return [name, ...details].filter(Boolean).join(' · ')
+    }
+    return entries.map(([key, item]) => `${labelFor(key)}: ${formatValue(item, `${path}/${key}`)}`).join(' · ')
+  }
+  return String(value)
+}
+
 /** Đọc giá trị hiện tại tại một JSON Pointer để hiện diff "trước → sau". */
 export function readAt(profile: Profile, pointer: string): string {
   const parts = pointer.split('/').slice(1).map((s) => s.replace(/~1/g, '/').replace(/~0/g, '~'))
@@ -44,17 +83,11 @@ export function readAt(profile: Profile, pointer: string): string {
     node = Array.isArray(node) ? node[Number(key)] : (node as Record<string, unknown>)[key]
     if (node === undefined) return ''
   }
-  if (typeof node === 'string') return node
-  if (Array.isArray(node)) return node.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' · ')
-  return node === null ? '' : JSON.stringify(node)
+  return formatValue(node, pointer)
 }
 
-function preview(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (Array.isArray(value)) {
-    return value.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' · ')
-  }
-  return value === undefined ? '' : JSON.stringify(value)
+function preview(value: unknown, path: string): string {
+  return formatValue(value, path)
 }
 
 interface Props {
@@ -124,7 +157,7 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
               tone: 'warn' as const,
             }
             const before = readAt(profile, op.path)
-            const after = preview(op.value)
+            const after = preview(op.value, op.path)
 
             return (
               <li
@@ -144,7 +177,9 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
                     className="mt-1"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="font-mono text-xs text-ink-muted">{op.path}</div>
+                    <div className="text-xs font-medium text-ink-muted">
+                      {op.path.startsWith('/skills/') ? `Kỹ năng · ${readAt(profile, op.path) || 'Mục kỹ năng'}` : op.path}
+                    </div>
 
                     {op.op !== 'add' && before && (
                       <p className="mt-1 text-sm text-ink-muted line-through">{before}</p>

@@ -96,6 +96,14 @@ describe('readAt — hiện giá trị TRƯỚC khi sửa', () => {
   it('mảng hiện thành chuỗi đọc được', () => {
     expect(readAt(profile(), '/work/0/highlights')).toContain('NodeJS')
   })
+
+  it('object kỹ năng hiện thành thông tin dễ đọc, không phải JSON', () => {
+    const p = profile({ skills: [{ name: 'Python', canonical: 'python', group: 'Ngôn ngữ' }] })
+    const value = readAt(p, '/skills/0')
+    expect(value).toContain('Python')
+    expect(value).toContain('Nhóm: Ngôn ngữ')
+    expect(value).not.toContain('{')
+  })
 })
 
 describe('modal duyệt đề xuất', () => {
@@ -114,6 +122,30 @@ describe('modal duyệt đề xuất', () => {
   it('hiện LÝ DO — người dùng cần biết vì sao mới quyết được', () => {
     renderModal([op()])
     expect(screen.getByText(/Chức danh cụ thể hơn/)).toBeInTheDocument()
+  })
+
+  it('diff kỹ năng hiển thị dạng thông tin, không hiển thị JSON thô', () => {
+    const p = profile({ skills: [{ name: 'Python', canonical: 'python', group: 'Ngôn ngữ' }] })
+    render(
+      <PatchReviewModal
+        data={{
+          proposalId: 'skill-p',
+          summary: 'Gom nhóm kỹ năng',
+          ops: [op({
+            path: '/skills/0',
+            value: { name: 'Python', level: 'advanced', group: 'Ngôn ngữ' },
+            grounding: { type: 'inference', ref: 'suy' },
+          })],
+          rejected: [],
+        }}
+        profile={p}
+        profileId="prof-1"
+        onApplied={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/Cấp độ: advanced/)).toBeInTheDocument()
+    expect(screen.queryByText(/\{"name"/)).not.toBeInTheDocument()
   })
 
   it('op suy diễn hiện CẢNH BÁO và không tick sẵn', () => {
