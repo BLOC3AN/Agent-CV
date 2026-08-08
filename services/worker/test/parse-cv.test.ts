@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { GatewayError, type Gateway } from '@hr/ai'
 import { JobError, type ProfileRepo, type JobRow } from '@hr/db'
-import { makeParseCvHandler, decideRoute } from '../src/handlers/parse-cv.js'
+import { makeParseCvHandler, decideRoute, detectCvLanguage } from '../src/handlers/parse-cv.js'
 import type { PdfkitClient, SegmentResult, TextQuality } from '../src/pdfkit-client.js'
 import type { Storage } from '../src/storage.js'
 import type { JobContext } from '../src/runner.js'
@@ -156,6 +156,16 @@ describe('decideRoute — TDD §8.1.1', () => {
     expect(decideRoute('good', false).route).toBe('text')
     // 'suspect' vẫn ra kết quả, chỉ kèm cảnh báo
     expect(decideRoute('suspect', false).route).toBe('text')
+  })
+})
+
+describe('detectCvLanguage — import giữ ngôn ngữ CV', () => {
+  it('nhận CV tiếng Anh', () => {
+    expect(detectCvLanguage('Education\nWork Experience\nSkills\nPresent')).toBe('en')
+  })
+
+  it('nhận CV tiếng Việt', () => {
+    expect(detectCvLanguage('HỌC VẤN\nKinh nghiệm làm việc\nKỹ năng\nHiện tại')).toBe('vi')
   })
 })
 

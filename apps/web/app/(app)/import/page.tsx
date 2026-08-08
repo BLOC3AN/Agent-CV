@@ -31,7 +31,8 @@ export default async function ImportPage({
       <h1 className="text-2xl font-semibold tracking-tight">Tải CV của bạn lên</h1>
       <p className="mt-2 text-ink-muted ">
         {intent ? LEAD[intent] : LEAD['improve']} Bạn sẽ được xem lại từng mục
-        trước khi dùng — máy đọc tự động nên có thể sai.
+        trước khi dùng — máy đọc tự động nên có thể sai. Nội dung được giữ
+        nguyên ngôn ngữ của CV, không tự động dịch.
       </p>
 
       <UploadBox intent={intent} />

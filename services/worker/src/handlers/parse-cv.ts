@@ -38,6 +38,7 @@ const PARSEABLE: ParseableSection[] = [
 export interface ParseCvPayload {
   storageKey: string
   filename?: string
+  /** @deprecated Import luôn giữ ngôn ngữ của CV; không dùng để dịch nữa. */
   outputLanguage?: Language
 }
 
@@ -69,6 +70,15 @@ export interface SectionOutcome {
  * 2200 của `parse_cv_to_profile` mà còn dư chỗ.
  */
 const SECTION_CHUNK_CHARS = 1_800
+
+/** Phát hiện ngôn ngữ CV sau khi trích text; import không tự dịch. */
+export function detectCvLanguage(text: string): Language {
+  const lower = text.toLocaleLowerCase('vi-VN')
+  const diacritics = (lower.match(/[ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/g) ?? []).length
+  const vi = (lower.match(/\b(kinh nghiệm|học vấn|kỹ năng|thực tập|công ty|dự án|chứng chỉ|hoạt động|hiện tại|ngoại ngữ)\b/g) ?? []).length
+  const en = (lower.match(/\b(experience|education|skills?|internship|company|projects?|certifications?|activities|present|languages?)\b/g) ?? []).length
+  return diacritics >= 3 || diacritics + vi > en ? 'vi' : 'en'
+}
 
 /**
  * Cổng chất lượng → nhánh xử lý (TDD §8.1.1).
@@ -103,12 +113,11 @@ export function makeParseCvHandler(deps: ParseCvDeps) {
     if (!ctx.job.userId) {
       throw new JobError('NO_USER', 'Job parse CV phải gắn với một tài khoản')
     }
-    const lang: Language = payload.outputLanguage ?? 'vi'
-
     // ── [1] Trích text + chia mục ─────────────────────────────────────────
     await ctx.progress(5, 'Đang đọc file PDF')
     const pdf = await deps.storage.get(payload.storageKey)
     const seg: SegmentResult = await deps.pdfkit.segment(pdf, payload.filename ?? 'cv.pdf')
+    const lang = detectCvLanguage(seg.text)
 
     // ── [2] Cổng chất lượng ───────────────────────────────────────────────
     const { route, warn } = decideRoute(seg.quality, ocrEnabled)

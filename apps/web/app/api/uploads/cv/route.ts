@@ -64,19 +64,23 @@ export async function POST(req: Request) {
   }
 
   const key = contentKey(bytes)
+  const givenUploadId = form.get('uploadId')
+  const uploadId =
+    typeof givenUploadId === 'string' && /^[0-9a-f-]{36}$/i.test(givenUploadId)
+      ? givenUploadId
+      : crypto.randomUUID()
   await storage().put(key, bytes)
 
-  const lang = form.get('language')
   const r = await enqueue({
     userId,
     kind: 'parse_cv',
-    // BR-72.1: cùng người + cùng nội dung file → cùng job, không parse lại.
-    // Có userId trong khoá để hai người tải cùng một file vẫn có job riêng.
-    idempotencyKey: `parse_cv:${userId}:${key}`,
+    // Mỗi lượt upload là một job mới. Hash nội dung chỉ là khoá storage;
+    // không dùng nó để tái sử dụng kết quả parse của lần upload trước.
+    idempotencyKey: `parse_cv:${userId}:${uploadId}`,
     payload: {
       storageKey: key,
       filename: file.name,
-      outputLanguage: lang === 'en' ? 'en' : 'vi',
+      uploadId,
     },
   })
 

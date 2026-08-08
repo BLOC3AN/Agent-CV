@@ -1943,6 +1943,12 @@ RUN fc-cache -f
 
 Trường hợp thật hay gặp: giao diện tiếng Việt · CV tiếng Anh · JD tiếng Anh. Hoặc CV tiếng Việt nhưng JD công ty nước ngoài bằng tiếng Anh.
 
+**Quy tắc import CV:** hệ thống phải tôn trọng ngôn ngữ nguồn. Sau khi
+`pdfkit` trích text, worker phát hiện `vi | en` từ nội dung CV và truyền ngôn
+ngữ đó cho task parse. Không dùng ngôn ngữ giao diện làm ngôn ngữ đầu ra và
+không tự động dịch nội dung trong lúc import. Dịch chỉ là thao tác có yêu cầu
+rõ ràng của người dùng.
+
 ### 9.2 Matching xuyên ngôn ngữ
 
 CV tiếng Việt ↔ JD tiếng Anh là trường hợp phổ biến ở thị trường VN.

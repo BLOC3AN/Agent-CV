@@ -55,8 +55,10 @@ export function UploadBox({ intent = null }: { intent?: Intent | null }) {
 
     setPhase('uploading')
     const form = new FormData()
+    // Mỗi lần người dùng upload là một lượt parse mới, kể cả cùng một file.
+    // Hash nội dung chỉ dùng cho storage; không dùng làm idempotency key.
+    form.append('uploadId', crypto.randomUUID())
     form.append('file', file)
-    form.append('language', 'vi')
 
     try {
       const res = await fetch('/api/uploads/cv', { method: 'POST', body: form })

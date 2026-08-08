@@ -554,6 +554,12 @@ tiêu đề mục do template sinh đi theo (`Ngoại ngữ` ↔ `Languages`); c
 dùng tự viết giữ nguyên. Nhãn cạnh công tắc nói rõ điều này — không nói thì
 người dùng bấm EN rồi chờ CV tự dịch.
 
+Khi import CV, frontend không gửi ngôn ngữ đích. Worker phát hiện ngôn ngữ từ
+text PDF sau bước trích xuất và dùng ngôn ngữ đó cho Profile. CV tiếng Anh được
+parse thành Profile tiếng Anh, CV tiếng Việt thành Profile tiếng Việt; import
+không tự dịch. Dịch chỉ xảy ra khi người dùng yêu cầu rõ ràng trong thao tác
+riêng.
+
 ### 9.7 Hiệu năng
 
 | Kỹ thuật | Lý do |

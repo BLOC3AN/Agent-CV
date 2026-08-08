@@ -106,12 +106,31 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       return NextResponse.json({ error: 'Không tìm thấy CV' }, { status: 404 })
     }
 
-    await client.query(
+    const profileId = deleted.rows[0]!.profile_id
+    const profileDeleted = await client.query(
       `DELETE FROM profiles p
         WHERE p.id = $1
-          AND NOT EXISTS (SELECT 1 FROM cv_documents c WHERE c.profile_id = p.id)`,
-      [deleted.rows[0]!.profile_id],
+          AND NOT EXISTS (SELECT 1 FROM cv_documents c WHERE c.profile_id = p.id)
+        RETURNING id`,
+      [profileId],
     )
+
+    // Một job parse cũ có thể vẫn trỏ tới Profile vừa bị xoá. Nếu giữ job
+    // `done`, lần upload lại đúng file sẽ nhận nhầm kết quả cũ và màn review có
+    // thể chờ/đi vào một Profile không còn tồn tại. Đánh dấu job thành
+    // `cancelled` để JobRepo.enqueue tự hồi sinh nó ở lần upload kế tiếp.
+    if (profileDeleted.rowCount === 1) {
+      await client.query(
+        `UPDATE jobs
+            SET status = 'cancelled', error = 'CV_DELETED: Profile đã bị xoá', finished_at = now()
+          WHERE user_id = $1
+            AND kind = 'parse_cv'
+            AND status = 'done'
+            AND result->>'profileId' = $2`,
+        [user.id, profileId],
+      )
+    }
+
     await client.query('COMMIT')
     return NextResponse.json({ deleted: true })
   } catch (error) {

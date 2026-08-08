@@ -35,7 +35,8 @@ export function storage(): Storage {
  * hỏng thì job nằm ở `queued` và reaper/retry vẫn cứu được.
  *
  * Job đã tồn tại (BR-72.1) thì KHÔNG đẩy lại — công việc đó đã chạy hoặc đang
- * chạy rồi.
+ * chạy rồi. Riêng import CV tạo idempotency key theo từng `uploadId`, nên
+ * upload lại cùng file vẫn là một lượt parse mới.
  */
 export async function enqueue(input: {
   userId: string | null
@@ -49,16 +50,20 @@ export async function enqueue(input: {
   // bị xóa sau đó. Nếu không kiểm tra, tải lại đúng file sẽ luôn tới review 404.
   if (!created && input.kind === 'parse_cv' && job.status === 'done') {
     const profileId = typeof job.result?.['profileId'] === 'string' ? job.result['profileId'] : null
+    let profileExists = false
     if (profileId) {
       const { rows } = await getPool().query(
         'SELECT 1 FROM profiles WHERE id = $1 AND user_id = $2',
         [profileId, input.userId],
       )
-      if (rows.length === 0 && (await jobRepo().requeueDone(job.id, input.payload))) {
-        job = (await jobRepo().get(job.id))!
-        created = true
-        revived = true
-      }
+      profileExists = rows.length > 0
+    }
+    // ProfileId thiếu hoặc Profile đã bị xoá đều làm kết quả `done` mất tính
+    // toàn vẹn. Hồi sinh job thay vì đưa user vào review với dữ liệu cũ.
+    if (!profileExists && (await jobRepo().requeueDone(job.id, input.payload))) {
+      job = (await jobRepo().get(job.id))!
+      created = true
+      revived = true
     }
   }
 

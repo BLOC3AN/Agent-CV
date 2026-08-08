@@ -143,7 +143,7 @@ Quy tắc:
 - Nếu text không chứa mục nào thuộc loại này, trả {"items": []}.
 
 Nội dung văn xuôi (highlights) viết bằng TIẾNG VIỆT tự nhiên, chuyên nghiệp.
-Nếu gốc là tiếng Anh thì DỊCH nghĩa sang tiếng Việt, không dịch từng từ.${extra}`
+CV đã được phân loại là tiếng Việt. Giữ nguyên ngôn ngữ và ý nghĩa; KHÔNG dịch.${extra}`
   }
   return `You extract the "${label}" section of a CV into JSON. Return ONLY a JSON object with an "items" key.
 
@@ -153,7 +153,8 @@ Rules:
 - Never infer numbers that are not in the text.
 - Preserve proper nouns, technology names, school and company names verbatim.
 - Each distinct entry in the text is one element of "items". Do not merge two entries.
-- If the text contains no entry of this kind, return {"items": []}.${extra}`
+- If the text contains no entry of this kind, return {"items": []}.
+- The CV has been classified as English. Preserve its language and meaning; do not translate.${extra}`
 }
 
 export interface ParseSectionInput {
@@ -179,8 +180,9 @@ export function makeSectionTask<K extends ParseableSection>(
     temperature: 0,
     /*
      * 2200 chứ không phải 1800: một chỗ làm dài (CV-06 ~1900 ký tự, 5 gạch đầu
-     * dòng) dịch sang tiếng Việt tốn 1.29× token, và JSON còn thêm khoá bao
-     * quanh. Vượt hạn mức khi decode có grammar thì JSON đứt giữa câu →
+     * dòng) có thể tốn nhiều token hơn khi CV dùng tiếng Việt, và JSON còn
+     * thêm khoá bao quanh. Vượt hạn mức khi decode có grammar thì JSON đứt
+     * giữa câu →
      * SCHEMA_INVALID → retry cắt đúng chỗ đó → mất trắng cả khúc.
      *
      * Trần trên vẫn cần: `chunkSection` ở worker giữ mỗi lượt ~1800 ký tự.
