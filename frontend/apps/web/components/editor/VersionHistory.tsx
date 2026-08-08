@@ -57,9 +57,27 @@ export function VersionHistory({
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/profiles/${profileId}/revisions`)
-      const data = (await res.json()) as { revisions?: Revision[]; error?: string }
+      const data = (await res.json()) as {
+        revisions?: Array<Partial<Revision> & { id?: string | number; opCount?: number; patch?: unknown[] }>
+        error?: string
+      }
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
-      setItems(data.revisions ?? [])
+      setItems(
+        (data.revisions ?? []).flatMap((revision) => {
+          if (!revision || revision.id === undefined || typeof revision.createdAt !== 'string') return []
+          const opCount = typeof revision.opCount === 'number'
+            ? revision.opCount
+            : Array.isArray(revision.patch)
+              ? revision.patch.length
+              : 0
+          return [{
+            id: String(revision.id),
+            author: revision.author as Revision['author'],
+            createdAt: revision.createdAt,
+            opCount,
+          }]
+        }),
+      )
     } catch (e) {
       setError((e as Error).message)
     }

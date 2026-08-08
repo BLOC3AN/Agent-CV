@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getPool } from '@hr/db'
 import { exportPdf, type ExportVariant } from '@hr/pdf'
+import { requireUserId } from '@/lib/auth'
 
 /**
  * GET /api/cv/:id/export?variant=presentation|ats — UC-32.
@@ -26,9 +27,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const q = new URL(req.url).searchParams.get('variant') ?? 'presentation'
   const variant = (VALID as string[]).includes(q) ? (q as ExportVariant) : 'presentation'
 
+  let userId: string
+  try {
+    userId = await requireUserId()
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 401 })
+  }
+
   const { rows } = await getPool().query<{ title: string | null; language: string }>(
-    'SELECT title, language FROM cv_documents WHERE id = $1',
-    [id],
+    'SELECT title, language FROM cv_documents WHERE id = $1 AND user_id = $2',
+    [id, userId],
   )
   if (rows.length === 0) {
     return NextResponse.json({ error: 'Không tìm thấy CV' }, { status: 404 })

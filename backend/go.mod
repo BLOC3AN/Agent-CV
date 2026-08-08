@@ -7,6 +7,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/phpdave11/gofpdf v1.4.2
 	github.com/redis/go-redis/v9 v9.6.1
+	go.yaml.in/yaml/v3 v3.0.4
 )
 
 require (

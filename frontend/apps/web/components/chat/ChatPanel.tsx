@@ -206,7 +206,7 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
               dùng không biết hệ thống còn sống hay đã treo, và nhiều người sẽ
               bấm lại — thêm một lượt vào hàng đợi vốn đã chậm.
             */}
-            <span>{step ?? 'Đang kết nối'}…</span>
+            <span>{step ?? 'Đang chuẩn bị'}…</span>
           </div>
         )}
 

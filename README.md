@@ -143,3 +143,15 @@ chuyển tiếp.
 - [TDD](backend/docs/TDD.md)
 - [Use cases](backend/docs/USECASES.md)
 - [Test cases](backend/docs/TESTCASES.md)
+
+##TODO
+Hiện vẫn nên giữ fallback Node vì còn các phần sau:
+
+  - Worker xử lý CV và OCR/image branch vẫn dùng Node/Python.
+  - Một số API phụ của Next chưa chuyển hoàn toàn sang Go: auth, upload/import, job stream, analyze, KB.
+  - PDF export/render nâng cao vẫn còn phụ thuộc Playwright/Next.
+  - Các edge case contract chưa có integration test đầy đủ với dữ liệu thật.
+  - Cần rollback nhanh nếu Go gặp lỗi production như timeout, migration hoặc ownership.
+
+  Tuy nhiên, với flow trung tâm reply → proposal → confirm → apply, Go đã là đường chính. Node hiện chỉ nên giữ như safety net, không phải runtime nghiệp vụ mặc định.
+

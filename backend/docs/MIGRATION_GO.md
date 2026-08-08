@@ -114,7 +114,7 @@ Use case và gate trước khi Go làm backend chính nằm ở
 [`GO_CUTOVER_TESTCASES.md`](GO_CUTOVER_TESTCASES.md). Không chuyển 100% traffic
 chỉ dựa trên việc image build thành công.
 
-Frontend cutover hiện được bảo vệ bởi `GO_API_CUTOVER` (mặc định `false`). Smoke
+Frontend cutover hiện dùng Go mặc định qua `GO_API_CUTOVER=true`. Smoke
 test thực tế với flag `true` đã xác nhận `/api/health`, magic-link request và
 upload/job đi qua Go trong khi trang Next vẫn render bình thường. Khi bật cờ,
 middleware rewrite toàn bộ `/api/*` sang Go; khi tắt cờ, Node route vẫn phục vụ

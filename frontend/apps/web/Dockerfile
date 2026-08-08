@@ -45,6 +45,7 @@ FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY --from=builder /app /app
 
@@ -53,6 +54,10 @@ COPY --from=builder /app /app
 # cây phụ thuộc khác với cây vừa build xong.
 #
 RUN npm prune --omit=dev --ignore-scripts && npm cache clean --force
+
+# PDF export chạy trong web route khi người dùng bấm tải xuống. Browser phải
+# có mặt ở runtime; chỉ cài package Playwright là chưa đủ.
+RUN npx playwright install --with-deps chromium
 
 # `typescript` phải QUAY LẠI sau khi prune, dù nó là devDependency.
 # `next.config.ts` viết bằng TypeScript và `next start` đọc file config MỖI LẦN

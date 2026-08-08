@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -22,6 +23,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/phpdave11/gofpdf"
 	"github.com/redis/go-redis/v9"
+	"go.yaml.in/yaml/v3"
 )
 
 type Job struct {
@@ -1551,6 +1553,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		ProfileID string              `json:"profileId"`
 		Message   string              `json:"message"`
 		Answers   []map[string]string `json:"answers"`
+		ModelRef  string              `json:"modelRef"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || body.ProfileID == "" || len(strings.TrimSpace(body.Message)) < 2 || len(body.Message) > 2000 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body chat không hợp lệ"})
@@ -1592,11 +1595,33 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	s.cacheChatMessages(r.Context(), userID, sessionID, history)
 	profileRaw := []byte{}
 	_ = s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 AND user_id=$2`, body.ProfileID, userID).Scan(&profileRaw)
+	// Giữ cùng UX SSE với flow Node: gửi trạng thái ngay khi đã nhận và dựng
+	// đủ context, thay vì để giao diện đứng ở "Đang kết nối" suốt lúc model chạy.
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher, _ := w.(http.Flusher)
+	sendStep := func(label string) {
+		payload, _ := json.Marshal(map[string]string{"label": label})
+		fmt.Fprintf(w, "event: step\ndata: %s\n\n", payload)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
 	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": "PROFILE:\n" + string(profileRaw) + "\n\nHISTORY:\n" + jsonString(history) + "\n\nUSER:\n" + body.Message}}
-	answer, modelErr := callChatModel(r.Context(), prompt)
+	sendStep("Đang hiểu yêu cầu của bạn")
+	sendStep("Đang xem lại hồ sơ để trả lời")
+	sendStep("Đang suy nghĩ")
+	answer, modelErr := callChatModel(r.Context(), prompt, body.ModelRef)
 	if modelErr != nil {
+		log.Printf("chat model unavailable modelRef=%q session=%s err=%v", body.ModelRef, sessionID, modelErr)
 		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "Model chưa khả dụng: "+modelErr.Error())
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "MODEL_UNAVAILABLE", "sessionId": sessionID})
+		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_UNAVAILABLE", "message": "Model chưa khả dụng", "detail": modelErr.Error(), "sessionId": sessionID})
+		fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+		if flusher != nil {
+			flusher.Flush()
+		}
 		return
 	}
 	modelOutput := parseChatModelOutput(answer)
@@ -1618,9 +1643,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	_, _ = s.db.ExecContext(r.Context(), `UPDATE chat_sessions SET updated_at=now() WHERE id=$1`, sessionID)
 	history = append(history, map[string]string{"role": "assistant", "content": assistantContent})
 	s.cacheChatMessages(r.Context(), userID, sessionID, history)
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
 	if modelOutput.Kind == "patch" {
+		sendStep("Đang kiểm tra đề xuất")
 		var proposalID string
 		if err := s.db.QueryRowContext(r.Context(), `INSERT INTO proposed_patches(message_id,ops) VALUES($1,$2::jsonb) RETURNING id`, assistantID, jsonRawArray(modelOutput.Ops)).Scan(&proposalID); err != nil {
 			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa lưu được đề xuất để bạn duyệt. Hồ sơ chưa thay đổi."}
@@ -1894,30 +1918,134 @@ func jsonRawArray(values []json.RawMessage) []byte {
 	return b.Bytes()
 }
 
-func callChatModel(ctx context.Context, messages []map[string]string) (string, error) {
+type chatProviderConfig struct {
+	Enabled   bool                       `yaml:"enabled"`
+	BaseURL   string                     `yaml:"base_url"`
+	APIKeyEnv string                     `yaml:"api_key_env"`
+	Models    map[string]chatModelConfig `yaml:"models"`
+}
+type chatModelConfig struct {
+	ModelID          string `yaml:"model_id"`
+	Port             int    `yaml:"port"`
+	StructuredOutput any    `yaml:"structured_output"`
+	Thinking         string `yaml:"thinking"`
+	ReasoningEffort  string `yaml:"reasoning_effort"`
+}
+type chatRuntimeConfig struct {
+	Providers struct {
+		Local    chatProviderConfig `yaml:"local"`
+		OpenAI   chatProviderConfig `yaml:"openai"`
+		DeepSeek chatProviderConfig `yaml:"deepseek"`
+	} `yaml:"providers"`
+}
+
+func loadChatRuntimeConfig() (chatRuntimeConfig, error) {
+	path := os.Getenv("HR_CONFIG_PATH")
+	if path == "" {
+		path = filepath.Join(".", "config.yml")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return chatRuntimeConfig{}, fmt.Errorf("read config %s: %w", path, err)
+	}
+	var cfg chatRuntimeConfig
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		return chatRuntimeConfig{}, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	return cfg, nil
+}
+
+func splitModelRef(modelRef string) (string, string, error) {
+	modelRef = strings.TrimSpace(modelRef)
+	if modelRef == "" {
+		modelRef = "local.reasoner"
+	}
+	parts := strings.SplitN(modelRef, ".", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("modelRef không hợp lệ: %q", modelRef)
+	}
+	return parts[0], parts[1], nil
+}
+
+func callChatModel(ctx context.Context, messages []map[string]string, modelRef string) (string, error) {
+	provider, alias, err := splitModelRef(modelRef)
+	if err != nil {
+		return "", err
+	}
+	cfg, err := loadChatRuntimeConfig()
+	if err != nil {
+		return "", err
+	}
+	var pc chatProviderConfig
+	switch provider {
+	case "local":
+		pc = cfg.Providers.Local
+	case "openai":
+		pc = cfg.Providers.OpenAI
+	case "deepseek":
+		pc = cfg.Providers.DeepSeek
+	default:
+		return "", fmt.Errorf("provider không được cấu hình: %s", provider)
+	}
+	if !pc.Enabled {
+		return "", fmt.Errorf("provider đã tắt: %s", provider)
+	}
+	mc, ok := pc.Models[alias]
+	if !ok || mc.ModelID == "" {
+		return "", fmt.Errorf("modelRef không được cấu hình: %s.%s", provider, alias)
+	}
+	if provider == "local" {
+		return postLocalChat(ctx, messages, pc, mc)
+	}
+	return postCloudChat(ctx, messages, provider, pc, mc)
+}
+
+func postLocalChat(ctx context.Context, messages []map[string]string, pc chatProviderConfig, mc chatModelConfig) (string, error) {
 	base := os.Getenv("MODEL_HOST")
 	if base == "" {
-		base = "http://100.68.50.41"
+		base = pc.BaseURL
 	}
-	endpoint := strings.TrimRight(base, "/") + ":5011/v1/chat/completions"
-	request := map[string]any{
-		"messages":    messages,
-		"temperature": 0.2,
-		"max_tokens":  1800,
-		"response_format": map[string]any{
-			"type": "json_schema",
-			"json_schema": map[string]any{
-				"name":   "cv_chat_result",
-				"schema": chatResponseSchema(),
-			},
-		},
+	if base == "" || mc.Port == 0 {
+		return "", fmt.Errorf("local model thiếu base_url hoặc port")
 	}
-	raw := jsonString(request)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(raw))
+	endpoint := strings.TrimRight(base, "/") + ":" + fmt.Sprint(mc.Port) + "/v1/chat/completions"
+	request := map[string]any{"model": mc.ModelID, "messages": messages, "temperature": 0.2, "max_tokens": 1800, "response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "cv_chat_result", "schema": chatResponseSchema()}}}
+	return postChatCompletion(ctx, endpoint, request, "")
+}
+
+func postCloudChat(ctx context.Context, messages []map[string]string, provider string, pc chatProviderConfig, mc chatModelConfig) (string, error) {
+	if pc.BaseURL == "" {
+		return "", fmt.Errorf("provider %s thiếu base_url", provider)
+	}
+	key := strings.TrimSpace(os.Getenv(pc.APIKeyEnv))
+	if key == "" {
+		return "", fmt.Errorf("thiếu secret %s cho %s", pc.APIKeyEnv, provider)
+	}
+	endpoint := strings.TrimRight(pc.BaseURL, "/") + "/chat/completions"
+	request := map[string]any{"model": mc.ModelID, "messages": messages, "temperature": 0.2, "max_tokens": 1800}
+	if mc.StructuredOutput == "json_object" {
+		request["response_format"] = map[string]any{"type": "json_object"}
+	} else if mc.StructuredOutput == true {
+		request["response_format"] = map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "cv_chat_result", "strict": true, "schema": chatResponseSchema()}}
+	}
+	if mc.Thinking != "" {
+		request["thinking"] = map[string]any{"type": mc.Thinking}
+	}
+	if mc.ReasoningEffort != "" {
+		request["reasoning_effort"] = mc.ReasoningEffort
+	}
+	return postChatCompletion(ctx, endpoint, request, key)
+}
+
+func postChatCompletion(ctx context.Context, endpoint string, request map[string]any, apiKey string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(jsonString(request)))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err

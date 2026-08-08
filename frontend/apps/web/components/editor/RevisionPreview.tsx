@@ -137,10 +137,27 @@ export function RevisionPreview({
     void (async () => {
       try {
         const res = await fetch(`/api/profiles/${profileId}/revisions/${revisionId}`)
-        const data = (await res.json()) as Snapshot & { error?: string }
+        const data = (await res.json()) as Partial<Snapshot> & { error?: string }
         if (!alive) return
         if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
-        setSnap(data)
+        if (
+          typeof data.revisionId !== 'string' ||
+          !Array.isArray(data.ops) ||
+          !data.after ||
+          typeof data.author !== 'string' ||
+          typeof data.createdAt !== 'string'
+        ) {
+          throw new Error('Dữ liệu bản lịch sử không đầy đủ')
+        }
+        setSnap({
+          revisionId: data.revisionId,
+          author: data.author as Snapshot['author'],
+          createdAt: data.createdAt,
+          ops: data.ops,
+          after: data.after,
+          before: data.before ?? null,
+          newerCount: typeof data.newerCount === 'number' ? data.newerCount : 0,
+        })
       } catch (e) {
         if (alive) setError((e as Error).message)
       }

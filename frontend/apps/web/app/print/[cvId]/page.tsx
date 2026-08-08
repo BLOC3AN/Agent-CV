@@ -48,11 +48,13 @@ export default async function PrintPage({ params, searchParams }: Props) {
   const Template = getTemplate(row.template_id).component
 
   return (
-    <Template
-      profile={profile}
-      theme={(row.theme ?? {}) as Record<string, never>}
-      layout={(row.layout ?? {}) as Record<string, never>}
-      variant={variant}
-    />
+    <div className="print-document">
+      <Template
+        profile={profile}
+        theme={(row.theme ?? {}) as Record<string, never>}
+        layout={(row.layout ?? {}) as Record<string, never>}
+        variant={variant}
+      />
+    </div>
   )
 }

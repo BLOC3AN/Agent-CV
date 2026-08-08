@@ -165,7 +165,7 @@ export const useChat = create<ChatState>((set, get) => ({
     set({
       busy: true,
       activeController: new AbortController(),
-      step: null,
+      step: 'Đang chuẩn bị',
       clarify: null,
       input: '',
       messages: [...get().messages, { role: 'user', content: text }],
@@ -197,7 +197,11 @@ export const useChat = create<ChatState>((set, get) => ({
         signal: controller?.signal,
         body: JSON.stringify({ profileId, message: text, answers, modelRef, ...(hint ? { hint } : {}) }),
       })
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) {
+        const error = (await res.json().catch(() => null)) as { error?: string; message?: string } | null
+        throw new Error(error?.message ?? error?.error ?? `HTTP ${res.status}`)
+      }
+      if (!res.body) throw new Error('Máy chủ không mở được luồng trả lời')
 
       const data = await readSse(res.body, (s) => set({ step: s }))
       if (!data) throw new Error('Máy chủ đóng kết nối giữa chừng')

@@ -69,6 +69,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* /print nằm trong RootLayout chung của Next, nhưng bản PDF chỉ được chứa CV.
+ * AppShell không bọc route này khi pathname là /print, nên document là con
+ * trực tiếp của body; ẩn các sibling sẽ loại TopNav/banner mà không ảnh hưởng
+ * các màn hình còn lại. */
+body:has(> .print-document) {
+  background: #fff;
+}
+body:has(> .print-document) > *:not(.print-document) {
+  display: none !important;
+}
+body:has(> .print-document) > .print-document {
+  display: block;
+}
+
 /* Nội dung trợ lý — Markdown/GFM, KaTeX và Mermaid dùng chung token UI. */
 .chat-rich-text :where(p, ul, ol, blockquote, table) {
   margin-top: 0.55rem;

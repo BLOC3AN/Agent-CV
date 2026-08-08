@@ -13,12 +13,15 @@ x-env: &env
   REDIS_URL: redis://redis:6379
   MODEL_HOST: ${MODEL_HOST:-http://100.68.50.41}
   PDFKIT_URL: http://pdfkit:8000
+  HR_CONFIG_PATH: /app/config.yml
   # Web ghi file upload, worker đọc — cùng đường dẫn, cùng volume `uploads`.
   STORAGE_ROOT: /app/var/storage
   NODE_ENV: ${NODE_ENV:-development}
 
 services:
   backend:
+    env_file:
+      - ../.env
     build:
       context: .
       dockerfile: Dockerfile
@@ -30,10 +33,12 @@ services:
       REDIS_URL: redis://redis:6379
       STORAGE_ROOT: /app/var/storage
       PDFKIT_URL: http://pdfkit:8000
+      HR_CONFIG_PATH: /app/config.yml
     ports:
       - '8080:8080'
     volumes:
       - uploads:/app/var/storage
+      - ../config.yml:/app/config.yml:ro
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -116,7 +121,8 @@ services:
       # Dev default giúp `docker compose` quản lý từng service; production
       # phải ghi đè bằng AUTH_SECRET thật trong .env/secret manager.
       AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me}
-      GO_API_CUTOVER: ${GO_API_CUTOVER:-false}
+      # Go đã là business API mặc định; đặt false chỉ khi cần rollback tạm thời.
+      GO_API_CUTOVER: ${GO_API_CUTOVER:-true}
       GO_BACKEND_URL: http://backend:8080
     ports:
       - '3000:3000'

@@ -188,13 +188,45 @@ export function BuilderShell(props: Props) {
 }
 
 function ExportButton({ cvId }: { cvId: string }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const download = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/cv/${cvId}/export?variant=presentation`)
+      const type = res.headers.get('content-type') ?? ''
+      if (!res.ok || !type.toLowerCase().includes('application/pdf')) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(body?.error ?? `Không tạo được PDF (HTTP ${res.status})`)
+      }
+      const blob = await res.blob()
+      const href = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = href
+      link.download = `CV-${cvId}.pdf`
+      link.click()
+      URL.revokeObjectURL(href)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <a
-      href={`/api/cv/${cvId}/export?variant=presentation`}
-      download
-      className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-ink-muted"
-    >
-      Tải xuống PDF
-    </a>
+    <span className="inline-flex flex-col items-end gap-1">
+      <button
+        type="button"
+        onClick={() => void download()}
+        disabled={busy}
+        title="Tạo và tải bản PDF CV đã render"
+        className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-ink-muted disabled:opacity-50"
+      >
+        {busy ? 'Đang tạo PDF…' : 'Tải xuống PDF'}
+      </button>
+      {error && <span role="alert" className="max-w-64 text-right text-xs text-danger">{error}</span>}
+    </span>
   )
 }
