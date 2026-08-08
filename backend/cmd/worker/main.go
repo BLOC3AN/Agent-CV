@@ -181,14 +181,18 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	if name == "" {
 		name = "Chưa rõ tên"
 	}
-	basics := map[string]any{"name": name}
+	basics := map[string]any{"name": name, "links": []any{}}
 	if email := firstMatch(seg.Text, `(?i)[\w.+-]+@[\w-]+(?:\.[\w-]+)+`); email != "" {
 		basics["email"] = email
 	}
 	if phone := firstMatch(seg.Text, `(?:\+|00)?[0-9][0-9 ()-]{7,}[0-9]`); phone != "" {
 		basics["phone"] = strings.TrimSpace(phone)
 	}
-	profile := map[string]any{"schemaVersion": 1, "language": lang, "basics": basics, "summary": seg.Text, "_meta": map[string]any{"source": "pdf_import", "verified": map[string]any{}, "degraded": seg.Quality != "good"}}
+	if summary := sectionText(seg.Merged["summary"]); summary != "" {
+		basics["summary"] = summary
+	}
+	profile := profileFromSegments(lang, seg.Merged)
+	profile["basics"] = basics
 	raw := jsonString(profile)
 	var profileID string
 	if err := db.QueryRowContext(ctx, `INSERT INTO profiles(user_id,data,language) VALUES($1,$2::jsonb,$3) RETURNING id`, j.UserID, raw, lang).Scan(&profileID); err != nil {
@@ -197,6 +201,210 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	result := jsonString(map[string]any{"profileId": profileID, "language": lang, "quality": seg.Quality, "warnings": seg.Reasons, "sections": seg.Merged})
 	_, err = db.ExecContext(ctx, `UPDATE jobs SET status='done',result=$2::jsonb,error=NULL,finished_at=now() WHERE id=$1`, j.ID, result)
 	return err
+}
+
+// PDFKit has already separated the CV into deterministic sections. Keep that
+// structure when creating the profile; previously only the first line/contact
+// fields were persisted, making every imported CV appear almost empty.
+func profileFromSegments(language string, merged map[string]string) map[string]any {
+	p := map[string]any{
+		"schemaVersion": 1, "language": language,
+		"basics":    map[string]any{"name": "Chưa rõ tên", "links": []any{}},
+		"education": []any{}, "work": []any{}, "projects": []any{}, "skills": []any{},
+		"activities": []any{}, "certifications": []any{}, "languages": []any{},
+		"_meta": map[string]any{"source": "pdf_import", "verified": map[string]any{}},
+	}
+	if summary := sectionText(merged["summary"]); summary != "" {
+		p["basics"].(map[string]any)["summary"] = summary
+	}
+	p["education"] = parseEducation(merged["education"])
+	p["work"] = parseWork(merged["work"])
+	p["activities"] = parseActivities(merged["activities"])
+	p["skills"] = parseSkills(merged["skills"])
+	p["certifications"] = parseCertifications(merged["certifications"])
+	return p
+}
+
+func cleanLines(raw string) []string {
+	var out []string
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func stripBullet(line string) string {
+	line = strings.TrimSpace(line)
+	line = strings.TrimSpace(strings.TrimLeft(line, "•▪▫◦●○◆◇■□▸▶►‣⁃➢✦✔✓*·"))
+	return strings.TrimSpace(strings.TrimLeft(line, "-–—"))
+}
+
+func sectionText(raw string) string {
+	lines := cleanLines(raw)
+	if len(lines) > 0 && (strings.EqualFold(lines[0], "summary") || strings.EqualFold(lines[0], "profile")) {
+		lines = lines[1:]
+	}
+	return strings.TrimSpace(strings.Join(lines, " "))
+}
+
+func parseEducation(raw string) []any {
+	lines := cleanLines(raw)
+	if len(lines) > 0 && strings.EqualFold(lines[0], "education") {
+		lines = lines[1:]
+	}
+	if len(lines) == 0 {
+		return []any{}
+	}
+	item := map[string]any{"school": lines[0], "degree": "", "highlights": []any{}}
+	var highlights []any
+	for _, line := range lines[1:] {
+		clean := stripBullet(line)
+		lower := strings.ToLower(clean)
+		switch {
+		case strings.HasPrefix(lower, "graduated:"):
+			item["degree"] = strings.TrimSpace(clean[len("Graduated:"):])
+		case strings.HasPrefix(lower, "gpa:"):
+			item["gpa"] = strings.TrimSpace(clean[len("GPA:"):])
+		default:
+			if clean != "" {
+				highlights = append(highlights, clean)
+			}
+		}
+	}
+	item["highlights"] = highlights
+	return []any{item}
+}
+
+var workDate = regexp.MustCompile(`(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b.*\b20\d{2}\b|\b20\d{2}\s*[–-]\s*(?:20\d{2}|current)\b`)
+
+func parseWork(raw string) []any {
+	lines := cleanLines(raw)
+	if len(lines) > 0 && strings.EqualFold(lines[0], "experience") {
+		lines = lines[1:]
+	}
+	var dates []int
+	for i, line := range lines {
+		if workDate.MatchString(line) {
+			dates = append(dates, i)
+		}
+	}
+	result := []any{}
+	for n, date := range dates {
+		start := 0
+		if n > 0 {
+			start = dates[n-1] + 1
+		}
+		before := nonBulletLines(lines[start:date])
+		if len(before) < 2 {
+			continue
+		}
+		end := len(lines)
+		if n+1 < len(dates) {
+			end = dates[n+1]
+		}
+		bodyEnd := end
+		if n+1 < len(dates) {
+			trailing := nonBulletLines(lines[date+1 : end])
+			if len(trailing) >= 2 {
+				bodyEnd = end - 2
+			}
+		}
+		highlights := []any{}
+		for _, line := range lines[date+1 : bodyEnd] {
+			if clean := stripBullet(line); clean != "" {
+				highlights = append(highlights, clean)
+			}
+		}
+		result = append(result, map[string]any{"org": before[len(before)-2], "role": before[len(before)-1], "startDate": lines[date], "highlights": highlights})
+	}
+	return result
+}
+
+func nonBulletLines(lines []string) []string {
+	var out []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "•") && !strings.HasPrefix(line, "-") {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+var activityHeading = regexp.MustCompile(`^20\d{2}\s*[–-]`)
+
+func parseActivities(raw string) []any {
+	lines := cleanLines(raw)
+	if len(lines) > 0 && strings.EqualFold(lines[0], "activities") {
+		lines = lines[1:]
+	}
+	result := []any{}
+	var current map[string]any
+	var highlights []any
+	flush := func() {
+		if current != nil {
+			current["highlights"] = highlights
+			result = append(result, current)
+		}
+		highlights = []any{}
+	}
+	for _, line := range lines {
+		clean := stripBullet(line)
+		if activityHeading.MatchString(clean) {
+			flush()
+			name := clean
+			if i := strings.Index(clean, "–"); i >= 0 {
+				name = strings.TrimSpace(clean[i+len("–"):])
+			} else if i := strings.Index(clean, "-"); i >= 0 {
+				name = strings.TrimSpace(clean[i+1:])
+			}
+			current = map[string]any{"name": name}
+			continue
+		}
+		if current == nil {
+			current = map[string]any{"name": clean}
+			continue
+		}
+		if clean != "" {
+			highlights = append(highlights, clean)
+		}
+	}
+	flush()
+	return result
+}
+
+func parseSkills(raw string) []any {
+	result := []any{}
+	for _, line := range cleanLines(raw) {
+		clean := stripBullet(line)
+		if strings.EqualFold(clean, "skills") {
+			continue
+		}
+		if i := strings.Index(clean, ":"); i >= 0 {
+			clean = clean[i+1:]
+		}
+		for _, token := range strings.FieldsFunc(clean, func(r rune) bool { return r == ',' || r == ';' }) {
+			if name := strings.TrimSpace(token); name != "" {
+				result = append(result, map[string]any{"name": name})
+			}
+		}
+	}
+	return result
+}
+
+func parseCertifications(raw string) []any {
+	result := []any{}
+	for _, line := range cleanLines(raw) {
+		clean := stripBullet(line)
+		if clean == "" || strings.EqualFold(clean, "certificate") || strings.HasPrefix(strings.ToLower(clean), "http") {
+			continue
+		}
+		result = append(result, map[string]any{"name": clean})
+	}
+	return result
 }
 
 type segmentResult struct {

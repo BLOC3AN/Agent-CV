@@ -49,3 +49,24 @@ func TestRetryableErrorClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestProfileFromSegmentsKeepsCVSections(t *testing.T) {
+	profile := profileFromSegments("en", map[string]string{
+		"summary":        "LE THANH HAI\n0964525151 • hai@example.com",
+		"education":      "EDUCATION\nHCMUTE\n• Graduated: Bachelor of Mechatronic Engineering\n• GPA: 7.18/10",
+		"work":           "EXPERIENCE\niMESPRO\nAI Engineer\nDecember, 2025 – Current\n• Built MLOps platform",
+		"activities":     "ACTIVITIES\n2026 – Neura Agent\n• Built an agent",
+		"skills":         "SKILLS\n• Languages: Python, Go, Docker",
+		"certifications": "CERTIFICATE\nIBM-Python for Data Science",
+	})
+	if len(profile["education"].([]any)) != 1 || len(profile["work"].([]any)) != 1 || len(profile["activities"].([]any)) != 1 {
+		t.Fatalf("sections not preserved: %#v", profile)
+	}
+	if len(profile["skills"].([]any)) != 3 || len(profile["certifications"].([]any)) != 1 {
+		t.Fatalf("skills/certifications not preserved: %#v", profile)
+	}
+	activities := profile["activities"].([]any)
+	if activities[0].(map[string]any)["name"] != "Neura Agent" {
+		t.Fatalf("activity heading was not decoded: %#v", activities[0])
+	}
+}
