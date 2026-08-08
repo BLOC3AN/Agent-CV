@@ -33,6 +33,7 @@ backend/legacy-eval/cv/*.png
 backend/legacy-eval/cv/*.docx
 backend/legacy-eval/cv/.filemap.txt
 backend/legacy-eval/golden/*.json
+backend/bin/
 
 # Ghi chú đánh giá thủ công có thể chứa trích đoạn CV
 eval/manual-log.md

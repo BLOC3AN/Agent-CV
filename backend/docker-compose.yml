@@ -104,7 +104,9 @@ services:
     restart: unless-stopped
     environment:
       <<: *env
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET chưa đặt trong .env}
+      # Dev default giúp `docker compose` quản lý từng service; production
+      # phải ghi đè bằng AUTH_SECRET thật trong .env/secret manager.
+      AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me}
     ports:
       - '3000:3000'
     volumes:

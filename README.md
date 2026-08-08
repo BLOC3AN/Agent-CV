@@ -63,8 +63,8 @@ docker compose -f backend/docker-compose.yml --profile full up -d --build
 ```
 
 Các service gồm Go backend, Next frontend, Postgres, Redis, PDFKit và worker
-chuyển tiếp. Cần copy `.env.example` thành `.env` và đặt `AUTH_SECRET` trước
-khi chạy đầy đủ.
+chuyển tiếp. Dev có giá trị `AUTH_SECRET` mặc định; production phải đặt secret
+riêng trong `.env` hoặc secret manager.
 
 ## Tài liệu
 
