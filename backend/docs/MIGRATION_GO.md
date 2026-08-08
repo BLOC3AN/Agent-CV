@@ -18,6 +18,23 @@ Phần Node cũ được giữ tạm trong `frontend/apps/web` server routes,
 chung để bảo toàn chức năng trong giai đoạn chuyển tiếp. Không mở rộng phần
 legacy; mỗi luồng mới phải có implementation và test ở Go trước.
 
+## Đã chuyển sang Go
+
+- `GET /api/health`
+- `POST /api/auth/request`, `GET /api/auth/verify`, `POST /api/auth/logout`
+- `POST /api/uploads/cv`: kiểm tra PDF, giới hạn 12 MB, lưu storage volume và
+  tạo job bền vững trong PostgreSQL; mỗi `uploadId` là một lượt upload độc lập.
+- `GET /api/jobs/{id}`: đọc trạng thái job từ PostgreSQL.
+
+Go đã có production path với PostgreSQL và storage thật. Migration chưa hoàn
+tất cho tới khi frontend đổi sang Go và các route/worker còn lại được chuyển.
+
+## Còn lại cần chuyển
+
+Profiles và revisions/patch/undo/verify, CV CRUD/export, imports/pages,
+matching/analyze, chat/proposals, KB/citations, job stream và worker xử lý
+`parse_cv`, `match_analysis`, `export_pdf`, `embed_profile`.
+
 Image Go được build offline từ binary local:
 
 ```bash

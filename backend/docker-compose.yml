@@ -26,8 +26,14 @@ services:
     restart: unless-stopped
     environment:
       BACKEND_ADDR: :8080
+      DATABASE_URL: postgres://postgres:${PG_PASSWORD:-hragent_dev}@postgres:5432/hragent
+      STORAGE_ROOT: /app/var/storage
     ports:
       - '8080:8080'
+    volumes:
+      - uploads:/app/var/storage
+    depends_on:
+      postgres: { condition: service_healthy }
 
   postgres:
     image: pgvector/pgvector:pg16
