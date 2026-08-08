@@ -41,22 +41,22 @@ export function ClarifyForm({ data, onSubmit, onSkip }: Props) {
         e.preventDefault()
         onSubmit(answered)
       }}
-      className="rounded-lg border border-sky-300 bg-sky-50/60 p-3 dark:border-sky-800 dark:bg-sky-950/20"
+      className="rounded-lg border border-brand-border bg-brand-subtle/60 p-3  "
     >
-      <p className="text-sm text-neutral-700 dark:text-neutral-300">{data.request.reason}</p>
+      <p className="text-sm text-ink ">{data.request.reason}</p>
 
       <div className="mt-3 space-y-2">
         {data.request.questions.map((q, i) => {
           const key = questionKey(q, i)
           return (
             <label key={key} className="block text-sm">
-              <span className="text-neutral-700 dark:text-neutral-300">{q.question}</span>
+              <span className="text-ink ">{q.question}</span>
               <input
                 type="text"
                 value={values[key] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
                 placeholder={q.placeholder}
-                className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 dark:border-neutral-600 dark:bg-neutral-800"
+                className="mt-1 w-full rounded border border-border-strong px-2 py-1.5  "
               />
             </label>
           )
@@ -67,7 +67,7 @@ export function ClarifyForm({ data, onSubmit, onSkip }: Props) {
         <button
           type="submit"
           disabled={answered.length === 0}
-          className="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded bg-brand px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
         >
           Gửi
         </button>
@@ -79,14 +79,14 @@ export function ClarifyForm({ data, onSubmit, onSkip }: Props) {
         <button
           type="button"
           onClick={() => onSubmit([{ question: 'Có số liệu không?', answer: 'Không có số liệu cụ thể' }])}
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-600"
+          className="rounded border border-border-strong px-3 py-1.5 text-sm "
         >
           Tôi không có số liệu
         </button>
         <button
           type="button"
           onClick={onSkip}
-          className="px-2 py-1.5 text-sm text-neutral-500 underline underline-offset-2"
+          className="px-2 py-1.5 text-sm text-ink-muted underline underline-offset-2"
         >
           Bỏ qua
         </button>

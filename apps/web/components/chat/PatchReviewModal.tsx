@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { PatchOp, Profile } from '@hr/schema'
+import { Dialog } from '@/components/ui'
 
 /**
  * Duyệt đề xuất của AI — UC-53, TDD §8.3.
@@ -102,18 +103,15 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Duyệt đề xuất thay đổi"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+    <Dialog
+      open
+      onClose={() => void submit([])}
+      title={"Trợ lý đề xuất " + data.ops.length + " thay đổi"}
     >
-      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl dark:bg-neutral-900">
-        <h2 className="text-lg font-semibold">Trợ lý đề xuất {data.ops.length} thay đổi</h2>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{data.summary}</p>
+        <p className="mt-1 text-sm text-ink-muted">{data.summary}</p>
 
         {inferenceCount > 0 && (
-          <p className="mt-3 rounded border border-amber-300 bg-amber-50 p-2 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+          <p className="mt-3 rounded border border-warn bg-warn-subtle p-2 text-sm">
             {inferenceCount} thay đổi do AI tự suy luận, chưa được tick sẵn. Bạn đọc kỹ
             rồi hãy chọn.
           </p>
@@ -134,8 +132,8 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
                 className={[
                   'rounded-lg border p-3',
                   g.tone === 'warn'
-                    ? 'border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20'
-                    : 'border-neutral-200 dark:border-neutral-700',
+                    ? 'border-warn bg-warn-subtle/50'
+                    : 'border-border',
                 ].join(' ')}
               >
                 <label className="flex cursor-pointer items-start gap-3">
@@ -146,24 +144,24 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
                     className="mt-1"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="font-mono text-xs text-neutral-500">{op.path}</div>
+                    <div className="font-mono text-xs text-ink-muted">{op.path}</div>
 
                     {op.op !== 'add' && before && (
-                      <p className="mt-1 text-sm text-neutral-500 line-through">{before}</p>
+                      <p className="mt-1 text-sm text-ink-muted line-through">{before}</p>
                     )}
                     {op.op === 'remove' ? (
-                      <p className="mt-1 text-sm text-red-600">(xoá)</p>
+                      <p className="mt-1 text-sm text-danger">(xoá)</p>
                     ) : (
                       <p className="mt-1 text-sm">{after}</p>
                     )}
 
-                    <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
+                    <p className="mt-2 text-xs text-ink-muted">
                       {op.rationale}
                     </p>
                     <p
                       className={[
                         'mt-1 text-xs',
-                        g.tone === 'warn' ? 'text-amber-700 dark:text-amber-400' : 'text-neutral-500',
+                        g.tone === 'warn' ? 'text-warn' : 'text-ink-muted',
                       ].join(' ')}
                     >
                       {g.text}
@@ -176,7 +174,7 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
         </ul>
 
         {data.rejected.length > 0 && (
-          <details className="mt-4 text-sm text-neutral-500">
+          <details className="mt-4 text-sm text-ink-muted">
             <summary className="cursor-pointer">
               {data.rejected.length} đề xuất bị loại vì không áp dụng được
             </summary>
@@ -191,7 +189,7 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
         )}
 
         {error && (
-          <p role="alert" className="mt-3 rounded border border-red-300 bg-red-50 p-2 text-sm">
+          <p role="alert" className="mt-3 rounded border border-danger bg-danger-subtle p-2 text-sm">
             {error}
           </p>
         )}
@@ -201,7 +199,7 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
             type="button"
             onClick={() => void submit(checked)}
             disabled={busy || checked.length === 0}
-            className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            className="rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
           >
             {busy ? 'Đang áp dụng…' : `Áp dụng ${checked.length} mục đã chọn`}
           </button>
@@ -209,12 +207,11 @@ export function PatchReviewModal({ data, profile, profileId, onApplied, onDismis
             type="button"
             onClick={() => void submit([])}
             disabled={busy}
-            className="rounded border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-600"
+            className="rounded border border-border-strong px-4 py-2 text-sm"
           >
             Bỏ qua tất cả
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }

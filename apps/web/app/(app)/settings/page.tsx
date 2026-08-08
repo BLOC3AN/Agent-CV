@@ -13,8 +13,8 @@ export default async function SettingsPage() {
     <main className="mx-auto max-w-2xl px-6 py-12">
       <h1 className="text-2xl font-semibold">Tài khoản</h1>
 
-      <section className="mt-6 rounded-xl border border-neutral-200 p-4 dark:border-neutral-700">
-        <p className="text-sm text-neutral-500">Email</p>
+      <section className="mt-6 rounded-xl border border-border p-4 ">
+        <p className="text-sm text-ink-muted">Email</p>
         <p className="font-medium">{user.email}</p>
       </section>
 
@@ -22,7 +22,7 @@ export default async function SettingsPage() {
         <form action="/api/auth/logout" method="post">
           <button
             type="submit"
-            className="rounded-lg border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-600"
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm "
           >
             Đăng xuất
           </button>

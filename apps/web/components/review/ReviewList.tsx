@@ -32,7 +32,7 @@ export function ReviewList({
 }: Props) {
   return (
     <section aria-label="Hệ thống đọc được" className="space-y-2">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Hệ thống đọc được
       </h2>
       {items.map((item) => (
@@ -93,12 +93,12 @@ function ReviewCard({
       className={[
         'rounded-lg border p-3 transition-colors',
         verified
-          ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
+          ? 'border-success bg-success-subtle  '
           : hasEmpty
             ? // BR-22.2: mục thiếu dữ liệu được làm nổi để user chú ý trước
-              'border-amber-300 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/20'
-            : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900',
-        open ? 'ring-2 ring-sky-400/60' : '',
+              'border-warn bg-warn-subtle  '
+            : 'border-border bg-white  ',
+        open ? 'ring-2 ring-brand' : '',
       ].join(' ')}
     >
       <button
@@ -110,11 +110,11 @@ function ReviewCard({
         <span className="truncate text-sm font-medium">{item.title}</span>
         <span className="shrink-0 text-xs">
           {verified ? (
-            <span className="text-emerald-700 dark:text-emerald-400">✓ đã xác nhận</span>
+            <span className="text-success ">✓ đã xác nhận</span>
           ) : hasEmpty ? (
-            <span className="text-amber-700 dark:text-amber-400">⚠ thiếu thông tin</span>
+            <span className="text-warn ">⚠ thiếu thông tin</span>
           ) : (
-            <span className="text-neutral-500">chưa xác nhận</span>
+            <span className="text-ink-muted">chưa xác nhận</span>
           )}
         </span>
       </button>
@@ -141,14 +141,14 @@ function ReviewCard({
                   type="button"
                   onClick={() => void save()}
                   disabled={busy}
-                  className="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                  className="rounded bg-brand px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                 >
                   {busy ? 'Đang lưu…' : 'Lưu'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditing(false)}
-                  className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-600"
+                  className="rounded border border-border-strong px-3 py-1.5 text-sm "
                 >
                   Huỷ
                 </button>
@@ -159,14 +159,14 @@ function ReviewCard({
                   type="button"
                   onClick={onConfirm}
                   disabled={busy || verified}
-                  className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+                  className="rounded bg-success px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
                 >
                   {verified ? '✓ Đã xác nhận' : busy ? 'Đang lưu…' : '✓ Đúng rồi'}
                 </button>
                 <button
                   type="button"
                   onClick={startEdit}
-                  className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-600"
+                  className="rounded border border-border-strong px-3 py-1.5 text-sm "
                 >
                   ✎ Sửa lại
                 </button>
@@ -182,8 +182,8 @@ function ReviewCard({
 function ShowRow({ field }: { field: ReviewField }) {
   return (
     <div className="grid grid-cols-[7rem_1fr] gap-2 text-sm">
-      <span className="text-neutral-500">{field.label}</span>
-      <span className={field.empty ? 'italic text-amber-700 dark:text-amber-400' : ''}>
+      <span className="text-ink-muted">{field.label}</span>
+      <span className={field.empty ? 'italic text-warn ' : ''}>
         {field.empty ? 'chưa có — bạn bổ sung giúp nhé' : field.value}
       </span>
     </div>
@@ -202,20 +202,20 @@ function EditRow({
   const long = field.value.length > 60 || field.label === 'Mô tả'
   return (
     <label className="grid grid-cols-[7rem_1fr] items-start gap-2 text-sm">
-      <span className="pt-1.5 text-neutral-500">{field.label}</span>
+      <span className="pt-1.5 text-ink-muted">{field.label}</span>
       {long ? (
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-600 dark:bg-neutral-800"
+          className="w-full rounded border border-border-strong bg-white px-2 py-1  "
         />
       ) : (
         <input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-600 dark:bg-neutral-800"
+          className="w-full rounded border border-border-strong bg-white px-2 py-1  "
         />
       )}
     </label>

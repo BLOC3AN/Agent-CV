@@ -91,7 +91,7 @@ export function OriginalPane({ jobId, highlightValues }: Props) {
   if (error) {
     return (
       <Frame>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-muted">
           Chưa hiện được bản gốc ({error}). Bạn vẫn rà soát bình thường ở cột bên phải.
         </p>
       </Frame>
@@ -101,7 +101,7 @@ export function OriginalPane({ jobId, highlightValues }: Props) {
   if (!data) {
     return (
       <Frame>
-        <div className="h-96 animate-pulse rounded bg-neutral-100 dark:bg-neutral-800" />
+        <div className="h-96 animate-pulse rounded bg-canvas " />
       </Frame>
     )
   }
@@ -109,7 +109,7 @@ export function OriginalPane({ jobId, highlightValues }: Props) {
   if (data.expired || data.pages.length === 0) {
     return (
       <Frame>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-muted">
           File gốc đã được xoá sau 48 giờ theo chính sách bảo mật. Bạn vẫn rà soát và
           sửa được nội dung ở cột bên phải.
         </p>
@@ -134,7 +134,7 @@ export function OriginalPane({ jobId, highlightValues }: Props) {
             const img = e.currentTarget
             setNatural({ w: img.naturalWidth, h: img.naturalHeight })
           }}
-          className="block h-auto w-full rounded border border-neutral-200 dark:border-neutral-700"
+          className="block h-auto w-full rounded border border-border "
         />
         {/* Vị trí tính bằng PHẦN TRĂM của kích thước ảnh gốc, không phải px:
             ảnh hiển thị co giãn theo bề ngang cột, nên px của ảnh gốc không
@@ -144,7 +144,7 @@ export function OriginalPane({ jobId, highlightValues }: Props) {
             <span
               key={`${b.page}-${i}`}
               aria-hidden
-              className="pointer-events-none absolute rounded-sm bg-amber-300/35 ring-2 ring-amber-500/70"
+              className="pointer-events-none absolute rounded-sm bg-warn-subtle/60 ring-2 ring-warn"
               style={{
                 left: `${((b.bbox[0] * scale) / natural.w) * 100}%`,
                 top: `${((b.bbox[1] * scale) / natural.h) * 100}%`,
@@ -166,7 +166,7 @@ export function OriginalPane({ jobId, highlightValues }: Props) {
           >
             ◀
           </button>
-          <span className="tabular-nums text-neutral-600 dark:text-neutral-400">
+          <span className="tabular-nums text-ink-muted ">
             Trang {current.index + 1}/{data.pages.length}
           </span>
           <button
@@ -188,9 +188,9 @@ function Frame({ children }: { children: React.ReactNode }) {
   return (
     <section
       aria-label="Bản gốc"
-      className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900"
+      className="rounded-lg border border-border bg-white p-3  "
     >
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Bản gốc
       </h2>
       {children}

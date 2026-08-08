@@ -4,16 +4,67 @@
 @import '@hr/templates/styles.css';
 
 /*
+ * Token thiết kế — spec 2026-08-07 §3.
+ *
+ * ── Vì sao ở đây chứ không rải trong component ──
+ * Trước đây 586 lượt màu dùng thẳng palette Tailwind (`bg-brand`,
+ * `text-ink-muted`) trên 38 file. Đổi một sắc độ phải sửa 38 chỗ, và chỗ
+ * thứ 39 sẽ lệch mà không ai biết.
+ *
+ * QUY TẮC MỘT DÒNG: teal chỉ dành cho thương hiệu và AI. Nhìn thấy teal là
+ * biết máy đang tham gia. Trạng thái không mượn teal; AI không mượn xanh lá,
+ * vàng hay đỏ.
+ */
+@theme {
+  /* Thương hiệu — brand VÀ mọi vùng AI, không dùng cho gì khác */
+  --color-brand: #0D9488;
+  --color-brand-hover: #0F766E;
+  --color-brand-subtle: #F0FDFA;
+  --color-brand-border: #99F6E4;
+  --color-brand-ink: #134E4A;
+
+  /* Mực và nền */
+  --color-ink: #0F172A;
+  --color-ink-muted: #475569;
+  --color-ink-subtle: #94A3B8;
+  --color-surface: #FFFFFF;
+  --color-canvas: #F8FAFC;
+  --color-border: #E2E8F0;
+  --color-border-strong: #CBD5E1;
+
+  /* Trạng thái — không bao giờ dùng teal */
+  --color-success: #059669;
+  --color-success-subtle: #ECFDF5;
+  --color-warn: #D97706;
+  --color-warn-subtle: #FFFBEB;
+  --color-danger: #DC2626;
+  --color-danger-subtle: #FEF2F2;
+
+  /* Bo góc — đúng ba mức, đừng thêm mức thứ tư */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Bóng — đúng hai mức: thẻ nổi và lớp phủ */
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 6%), 0 1px 3px rgb(15 23 42 / 8%);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / 8%), 0 12px 32px rgb(15 23 42 / 10%);
+}
+
+/*
  * Font có dấu tiếng Việt đầy đủ. Nhúng cục bộ chứ không gọi Google Fonts:
  * trang /print chạy trong Playwright, có thể không có mạng ra ngoài, và font
  * thiếu là lỗi chết người với CV tiếng Việt (BR-32.3).
  */
 :root {
-  --font-ui: 'Be Vietnam Pro', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* next/font sinh --font-be-vietnam ở scope <html>; giữ chuỗi dự phòng để
+     trang vẫn đọc được nếu file font tải hỏng. */
+  --font-ui: var(--font-be-vietnam), 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 body {
   font-family: var(--font-ui);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
 }
 

@@ -38,7 +38,7 @@ export default async function DiagnosePage({ params }: { params: Promise<{ cvId:
       <h1 className="text-2xl font-semibold">
         {health.scored ? `CV của bạn đạt ${health.overall}/100` : 'Xem lại CV của bạn'}
       </h1>
-      <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+      <p className="mt-2 text-sm text-ink-muted ">
         Chấm theo tiêu chí của HR trong ngành phần mềm — chưa tính tới một tin
         tuyển dụng cụ thể nào.
       </p>

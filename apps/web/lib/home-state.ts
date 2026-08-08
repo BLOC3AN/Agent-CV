@@ -115,7 +115,7 @@ export function nextStepFor(
     return {
       text: gap.todo,
       cta: 'Sửa cùng trợ lý',
-      href: `/builder/${ctx.cvId}?focus=${encodeURIComponent(gap.path)}`,
+      href: `/builder/${ctx.cvId}?assistant=1&focus=${encodeURIComponent(gap.path)}`,
     }
   }
 
@@ -128,4 +128,30 @@ export function nextStepFor(
   }
 
   return null
+}
+
+// ── Đối chiếu gần đây ───────────────────────────────────────────────────────
+
+/**
+ * Gộp các lần phân tích cùng một JD, giữ bản MỚI NHẤT.
+ *
+ * Truy vấn trả về theo `created_at DESC`, nên bản đầu tiên gặp là bản mới
+ * nhất. Người dùng muốn biết hồ sơ HIỆN TẠI khớp tới đâu, không phải điểm cao
+ * nhất từng đạt được.
+ *
+ * `jdId` null (JD đã bị xoá) thì KHÔNG gộp: không có cơ sở nào nói hai dòng đó
+ * cùng một tin tuyển dụng.
+ *
+ * Sống ở đây (không phải `app/page.tsx`) vì Next.js chỉ cho page.tsx export
+ * các tên đã biết trước (default, metadata, dynamic, ...) — `tsc` chặn build
+ * nếu page export thêm một hàm thuần, nên hàm này phải tách ra để test được.
+ */
+export function dedupeMatches<T extends { jdId: string | null }>(rows: T[]): T[] {
+  const seen = new Set<string>()
+  return rows.filter((r) => {
+    if (r.jdId === null) return true
+    if (seen.has(r.jdId)) return false
+    seen.add(r.jdId)
+    return true
+  })
 }

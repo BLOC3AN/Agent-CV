@@ -69,11 +69,11 @@ export function GuidedFlow() {
   return (
     <div>
       {/* Cho người dùng thấy còn bao xa — không thì họ không biết sắp xong chưa */}
-      <p className="text-xs text-neutral-500">
+      <p className="text-xs text-ink-muted">
         Bước {stepNo}/{TOTAL}
       </p>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
-        <div className="h-full bg-sky-600 transition-all" style={{ width: `${(stepNo / TOTAL) * 100}%` }} />
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-canvas ">
+        <div className="h-full bg-brand transition-all" style={{ width: `${(stepNo / TOTAL) * 100}%` }} />
       </div>
 
       <div className="mt-6">
@@ -85,7 +85,7 @@ export function GuidedFlow() {
                   key={s}
                   type="button"
                   onClick={() => advance({ situation: s })}
-                  className="rounded-lg border border-neutral-300 px-4 py-3 text-left text-sm hover:border-sky-500 dark:border-neutral-600"
+                  className="rounded-lg border border-border-strong px-4 py-3 text-left text-sm hover:border-brand-border "
                 >
                   {SITUATION_LABEL[s]}
                 </button>
@@ -111,14 +111,14 @@ export function GuidedFlow() {
               <button
                 type="button"
                 onClick={() => advance({ hasWorked: true })}
-                className="rounded-lg border border-neutral-300 px-5 py-2.5 text-sm dark:border-neutral-600"
+                className="rounded-lg border border-border-strong px-5 py-2.5 text-sm "
               >
                 Rồi
               </button>
               <button
                 type="button"
                 onClick={() => advance({ hasWorked: false })}
-                className="rounded-lg border border-neutral-300 px-5 py-2.5 text-sm dark:border-neutral-600"
+                className="rounded-lg border border-border-strong px-5 py-2.5 text-sm "
               >
                 Chưa
               </button>
@@ -159,7 +159,7 @@ export function GuidedFlow() {
                 type="button"
                 disabled={!answers.bodyTitle?.trim()}
                 onClick={() => advance({})}
-                className="rounded-lg bg-sky-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
+                className="rounded-lg bg-brand px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
               >
                 Tiếp
               </button>
@@ -191,7 +191,7 @@ export function GuidedFlow() {
                 type="button"
                 disabled={busy || !answers.name?.trim()}
                 onClick={() => advance({})}
-                className="rounded-lg bg-sky-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
+                className="rounded-lg bg-brand px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
               >
                 {busy ? 'Đang tạo CV…' : 'Tạo CV của tôi'}
               </button>
@@ -201,7 +201,7 @@ export function GuidedFlow() {
       </div>
 
       {error && (
-        <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-4 text-sm text-danger ">
           {error}
         </p>
       )}
@@ -210,7 +210,7 @@ export function GuidedFlow() {
         <button
           type="button"
           onClick={() => setStage(back)}
-          className="mt-6 text-sm text-neutral-500 underline"
+          className="mt-6 text-sm text-ink-muted underline"
         >
           Quay lại
         </button>
@@ -220,13 +220,13 @@ export function GuidedFlow() {
 }
 
 const INPUT =
-  'mt-1 w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800'
+  'mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm  '
 
 function Step({ title, lead, children }: { title: string; lead: string; children: React.ReactNode }) {
   return (
     <section>
       <h2 className="text-xl font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">{lead}</p>
+      <p className="mt-1 text-sm text-ink-muted ">{lead}</p>
       <div className="mt-4">{children}</div>
     </section>
   )
@@ -265,12 +265,12 @@ function TextStep({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="flex-1 rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+        className="flex-1 rounded border border-border-strong px-3 py-2 text-sm  "
       />
       <button
         type="submit"
         disabled={!value.trim()}
-        className="rounded-lg bg-sky-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
+        className="rounded-lg bg-brand px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
       >
         Tiếp
       </button>

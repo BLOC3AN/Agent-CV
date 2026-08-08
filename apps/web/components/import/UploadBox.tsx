@@ -109,30 +109,30 @@ export function UploadBox({ intent = null }: { intent?: Intent | null }) {
     }
 
     return () => es.close()
-  }, [jobId, phase, router])
+  }, [jobId, phase, router, carry])
 
   if (phase === 'working') {
     return (
-      <section className="mt-8 rounded-lg border border-neutral-200 p-6 dark:border-neutral-700">
+      <section className="mt-8 rounded-lg border border-border p-6 ">
         <h2 className="font-medium">Đang đọc {fileName}…</h2>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <p className="mt-1 text-sm text-ink-muted ">
           {progress.note ?? 'Đang chuẩn bị'}
         </p>
 
         <div
-          className="mt-4 h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700"
+          className="mt-4 h-2 overflow-hidden rounded-full bg-canvas "
           role="progressbar"
           aria-valuenow={progress.pct}
           aria-valuemin={0}
           aria-valuemax={100}
         >
           <div
-            className="h-full rounded-full bg-sky-600 transition-[width] duration-500"
+            className="h-full rounded-full bg-brand transition-[width] duration-500"
             style={{ width: `${Math.max(3, progress.pct)}%` }}
           />
         </div>
 
-        <p className="mt-4 text-sm text-neutral-500">
+        <p className="mt-4 text-sm text-ink-muted">
           Thường mất khoảng một phút. Bạn có thể đóng tab — kết quả vẫn được giữ, quay
           lại xem sau cũng được.
         </p>
@@ -157,18 +157,18 @@ export function UploadBox({ intent = null }: { intent?: Intent | null }) {
         className={[
           'rounded-lg border-2 border-dashed p-10 text-center transition-colors',
           dragging
-            ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/30'
-            : 'border-neutral-300 dark:border-neutral-600',
+            ? 'border-brand-border bg-brand-subtle '
+            : 'border-border-strong ',
         ].join(' ')}
       >
-        <p className="text-neutral-600 dark:text-neutral-400">
+        <p className="text-ink-muted ">
           Kéo file PDF vào đây, hoặc
         </p>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={phase === 'uploading'}
-          className="mt-3 rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="mt-3 rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {phase === 'uploading' ? 'Đang tải lên…' : 'Chọn file'}
         </button>
@@ -182,13 +182,13 @@ export function UploadBox({ intent = null }: { intent?: Intent | null }) {
             if (f) void upload(f)
           }}
         />
-        <p className="mt-3 text-xs text-neutral-500">PDF, tối đa 12MB</p>
+        <p className="mt-3 text-xs text-ink-muted">PDF, tối đa 12MB</p>
       </div>
 
       {error && (
         <div
           role="alert"
-          className="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm dark:border-red-800 dark:bg-red-950/30"
+          className="mt-4 rounded-lg border border-danger bg-danger-subtle p-3 text-sm  "
         >
           <p>{error.message}</p>
           {/* Luôn có đường đi tiếp — không bao giờ là ngõ cụt (BR-71.1) */}

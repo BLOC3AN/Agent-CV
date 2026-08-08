@@ -43,12 +43,45 @@ export async function enqueue(input: {
   idempotencyKey: string
   payload?: Record<string, unknown>
 }): Promise<{ jobId: string; created: boolean; revived: boolean; queued: boolean }> {
-  const { job, created, revived } = await jobRepo().enqueue(input)
+  let { job, created, revived } = await jobRepo().enqueue(input)
 
-  if (!created) return { jobId: job.id, created: false, revived: false, queued: false }
+  // Idempotency không được trả lại một job parse đã xong nhưng profile đích
+  // bị xóa sau đó. Nếu không kiểm tra, tải lại đúng file sẽ luôn tới review 404.
+  if (!created && input.kind === 'parse_cv' && job.status === 'done') {
+    const profileId = typeof job.result?.['profileId'] === 'string' ? job.result['profileId'] : null
+    if (profileId) {
+      const { rows } = await getPool().query(
+        'SELECT 1 FROM profiles WHERE id = $1 AND user_id = $2',
+        [profileId, input.userId],
+      )
+      if (rows.length === 0 && (await jobRepo().requeueDone(job.id, input.payload))) {
+        job = (await jobRepo().get(job.id))!
+        created = true
+        revived = true
+      }
+    }
+  }
+
+  // Redis có thể mất dữ liệu trong khi Postgres vẫn giữ job `queued`. Đẩy lại
+  // với chính jobId là an toàn: BullMQ dedupe nếu item cũ vẫn còn, đồng thời
+  // phục hồi được item đã mất sau khi Redis restart.
+  if (!created && job.status !== 'queued') {
+    return { jobId: job.id, created: false, revived: false, queued: false }
+  }
 
   try {
-    await getQueue(input.kind).add(
+    const queue = getQueue(input.kind)
+    if (!created && job.status === 'queued') {
+      // Redis có thể còn một BullMQ job terminal cũ cùng jobId trong khi DB đã
+      // đưa job về queued. BullMQ sẽ dedupe theo jobId và không tạo item mới,
+      // nên dọn bản terminal trước khi dispatch lại.
+      const existing = await queue.getJob(job.id)
+      if (existing) {
+        const state = await existing.getState()
+        if (state === 'completed' || state === 'failed') await existing.remove()
+      }
+    }
+    await queue.add(
       input.kind,
       { jobId: job.id },
       {
@@ -59,7 +92,7 @@ export async function enqueue(input: {
         jobId: job.id,
       },
     )
-    return { jobId: job.id, created: true, revived, queued: true }
+    return { jobId: job.id, created, revived, queued: true }
   } catch {
     // Redis chết: job vẫn nằm ở `queued` trong DB. Trả về cho user biết đã nhận
     // việc, chứ không giả vờ thành công hoàn toàn.

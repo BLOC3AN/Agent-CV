@@ -1,7 +1,8 @@
 import { getPool, JobRepo } from '@hr/db'
 import { profileCompleteness } from '@hr/matching'
 import { ProfileSchema } from '@hr/schema'
-import { decideHome, nextStepFor, type HomeJob } from '@/lib/home-state'
+import { decideHome, dedupeMatches, nextStepFor, type HomeJob } from '@/lib/home-state'
+import { aiAvailable } from '@/lib/health'
 import { IntentRouter } from '@/components/home/IntentRouter'
 import { ResumeHome } from '@/components/home/ResumeHome'
 import { ReturningHome, type RecentCv, type RecentMatch } from '@/components/home/ReturningHome'
@@ -26,6 +27,8 @@ interface HomeData {
   profileData: unknown
   matches: RecentMatch[]
   hasAnalysis: boolean
+  email: string
+  aiAvailable: boolean
 }
 
 /** Chào theo giờ trong ngày — giờ máy chủ, đủ dùng ở giai đoạn này. */
@@ -45,17 +48,28 @@ function when(d: Date): string {
   return `${Math.round(gio / 24)} ngày trước`
 }
 
+/**
+ * Tên hiển thị lấy từ email khi hồ sơ chưa có tên.
+ *
+ * Lời chào là dòng đầu tiên của sản phẩm; để trống chỗ cá nhân hoá duy nhất
+ * làm nó đọc như một trang lỗi. "dev@local" → "dev".
+ */
+function displayName(email: string): string {
+  return email.split('@')[0] ?? email
+}
+
 async function load(): Promise<HomeData | null> {
   // Chưa đăng nhập thì hiện Home lần đầu — người lạ vẫn thấy được sản phẩm
   // làm gì trước khi phải đăng ký (BR-01.4).
   const { currentUser } = await import('@/lib/auth')
-  const userId = (await currentUser().catch(() => null))?.id
+  const user = await currentUser().catch(() => null)
+  const userId = user?.id
   if (!userId) return null
 
   const pool = getPool()
   const jobs = await new JobRepo(pool).listByUser(userId, 10).catch(() => [])
 
-  const [cvRows, profRows, matchRows] = await Promise.all([
+  const [cvRows, profRows, matchRows, aiOk] = await Promise.all([
     pool
       .query<{ id: string; title: string | null; updated_at: Date; data: unknown }>(
         `SELECT c.id, c.title, c.updated_at, p.data
@@ -69,18 +83,32 @@ async function load(): Promise<HomeData | null> {
       .query<{ n: string }>('SELECT count(*) AS n FROM profiles WHERE user_id = $1', [userId])
       .catch(() => ({ rows: [{ n: '0' }] })),
     pool
-      .query<{ title: string | null; overall: number; cv_id: string }>(
-        // `job_descriptions` không có cột `title` — tên nằm trong `requirements`
+      .query<{
+        title: string | null
+        overall: number
+        cv_id: string
+        jd_id: string | null
+        created_at: Date
+      }>(
+        // `job_descriptions` không có cột `title` — tên nằm trong `requirements`.
+        // LIMIT 12 chứ không 3: gộp theo jd_id diễn ra ở tầng ứng dụng, nên
+        // phải lấy dư rồi mới cắt, nếu không phân tích lại cùng một JD ba lần
+        // sẽ đẩy hết JD khác ra khỏi danh sách.
         `SELECT j.requirements->>'title' AS title,
-                (m.score->>'overall')::int AS overall, m.cv_id
+                (m.score->>'overall')::int AS overall, m.cv_id,
+                m.jd_id, m.created_at
            FROM match_analyses m
            JOIN cv_documents c ON c.id = m.cv_id
            LEFT JOIN job_descriptions j ON j.id = m.jd_id
           WHERE c.user_id = $1
-          ORDER BY m.created_at DESC LIMIT 3`,
+          ORDER BY m.created_at DESC LIMIT 12`,
         [userId],
       )
       .catch(() => ({ rows: [] })),
+    // `aiAvailable()` đã tự có timeout 1.5s và tự lạc quan khi lỗi (lib/health.ts);
+    // `.catch()` ở đây chỉ là lớp phòng thủ thứ hai, cùng kiểu với các query
+    // phía trên — một lỗi bất ngờ ở đây không được phép làm vỡ Home.
+    aiAvailable().catch(() => true),
   ])
 
   const cvRow = cvRows.rows[0]
@@ -99,12 +127,18 @@ async function load(): Promise<HomeData | null> {
       ? { id: cvRow.id, title: cvRow.title ?? 'CV của tôi', updatedAt: when(cvRow.updated_at) }
       : null,
     profileData: cvRow?.data ?? null,
-    matches: matchRows.rows.map((r) => ({
-      jdTitle: r.title ?? 'Tin tuyển dụng',
-      overall: r.overall,
-      cvId: r.cv_id,
-    })),
+    matches: dedupeMatches(
+      matchRows.rows.map((r) => ({
+        jdTitle: r.title ?? 'Tin tuyển dụng',
+        overall: r.overall,
+        cvId: r.cv_id,
+        jdId: r.jd_id,
+        when: when(r.created_at),
+      })),
+    ).slice(0, 3),
     hasAnalysis: matchRows.rows.length > 0,
+    email: user.email,
+    aiAvailable: aiOk,
   }
 }
 
@@ -127,14 +161,16 @@ export default async function Home() {
 
   return (
     <ReturningHome
-      greeting={greet(null)}
+      greeting={greet(displayName(data.email))}
       completeness={profileCompleteness(parsed.data)}
       cv={data.cv}
+      profile={parsed.data}
       nextStep={nextStepFor(profileCompleteness(parsed.data), {
         cvId: data.cv?.id ?? null,
         hasAnalysis: data.hasAnalysis,
       })}
       matches={data.matches}
+      aiAvailable={data.aiAvailable}
     />
   )
 }

@@ -27,9 +27,9 @@ interface Revision {
 }
 
 const AUTHOR: Record<Revision['author'], { label: string; tone: string }> = {
-  user: { label: 'Bạn sửa', tone: 'text-neutral-700 dark:text-neutral-300' },
-  ai: { label: 'Trợ lý sửa', tone: 'text-sky-700 dark:text-sky-400' },
-  import: { label: 'Đọc từ CV', tone: 'text-neutral-500' },
+  user: { label: 'Bạn sửa', tone: 'text-ink ' },
+  ai: { label: 'Trợ lý sửa', tone: 'text-brand-ink ' },
+  import: { label: 'Đọc từ CV', tone: 'text-ink-muted' },
 }
 
 function when(iso: string): string {
@@ -93,20 +93,20 @@ export function VersionHistory({
 
   return (
     <section aria-label="Lịch sử thay đổi">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Lịch sử thay đổi
       </h2>
 
       {error && (
-        <p role="alert" className="mb-2 rounded border border-red-300 bg-red-50 p-2 text-sm">
+        <p role="alert" className="mb-2 rounded border border-danger bg-danger-subtle p-2 text-sm">
           {error}
         </p>
       )}
 
-      {items === null && <p className="text-sm text-neutral-500">Đang tải…</p>}
+      {items === null && <p className="text-sm text-ink-muted">Đang tải…</p>}
 
       {items?.length === 0 && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink-muted">
           Chưa có thay đổi nào. Mỗi lần bạn sửa CV, một mốc sẽ hiện ở đây.
         </p>
       )}
@@ -115,15 +115,15 @@ export function VersionHistory({
         {items?.map((r, i) => (
           <li
             key={r.id}
-            className="rounded-lg border border-neutral-200 p-2 text-sm dark:border-neutral-700"
+            className="rounded-lg border border-border p-2 text-sm "
           >
             <div className="flex items-baseline justify-between gap-2">
               <span className={AUTHOR[r.author]?.tone}>
                 {AUTHOR[r.author]?.label ?? r.author}
               </span>
-              <span className="text-xs text-neutral-400">{when(r.createdAt)}</span>
+              <span className="text-xs text-ink-subtle">{when(r.createdAt)}</span>
             </div>
-            <p className="mt-0.5 text-xs text-neutral-500">
+            <p className="mt-0.5 text-xs text-ink-muted">
               {r.opCount} thay đổi
               {i === 0 && ' · bản hiện tại'}
             </p>
@@ -136,7 +136,7 @@ export function VersionHistory({
               <button
                 type="button"
                 onClick={() => setPreviewing({ rev: r, isCurrent: i === 0 })}
-                className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800"
+                className="rounded border border-border-strong px-2 py-1 text-xs hover:bg-canvas  "
               >
                 Xem lại bản này
               </button>
@@ -147,7 +147,7 @@ export function VersionHistory({
                   type="button"
                   onClick={() => void restore(r.id)}
                   disabled={busy !== null}
-                  className="rounded border border-neutral-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-neutral-600"
+                  className="rounded border border-border-strong px-2 py-1 text-xs disabled:opacity-40 "
                 >
                   {busy === r.id ? 'Đang khôi phục…' : 'Khôi phục về đây'}
                 </button>

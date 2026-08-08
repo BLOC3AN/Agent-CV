@@ -214,55 +214,75 @@ trang** (tương đương ~72dpi cho A4), tăng dần và đo lại nếu cần 
 ```
 HR-agent/
 ├── config.yml                      # nguồn sự thật về model & routing
-├── docs/
-│   ├── TDD.md                      # tài liệu này
-│   └── adr/                        # Architecture Decision Records
+├── eslint.config.js                # cưỡng chế quy tắc phụ thuộc bên dưới
+├── docs/                           # TDD.md · PRODUCT.md · FRONTEND.md
+│                                   #   USECASES.md · TESTCASES.md
 ├── apps/
 │   └── web/                        # Next.js 15 (App Router) — UI + BFF
 │       ├── app/
-│       │   ├── (marketing)/
-│       │   ├── (app)/builder/      # editor CV
-│       │   ├── (app)/analyze/      # JD matching + gap report
-│       │   ├── (admin)/kb/         # curator UI cho Knowledge Base
-│       │   └── api/
-│       └── components/
+│       │   ├── (app)/builder/[cvId]/     editor CV
+│       │   ├── (app)/analyze/[cvId]/     JD matching + gap report
+│       │   ├── (app)/diagnose/[cvId]/    chẩn đoán sức khoẻ CV
+│       │   ├── (app)/import/             tải PDF + màn hình rà soát
+│       │   ├── (app)/cv/ · kb/ · settings/
+│       │   ├── start/guided/ · login/ · print/[cvId]/
+│       │   └── api/                      27 route — xem §11
+│       ├── components/             # xem FRONTEND.md §10
+│       └── lib/                    # auth · db · jobs · store · home-state
 ├── services/
-│   ├── worker/                     # BullMQ: parse, export, embed
-│   └── pdfkit/                     # FastAPI nhỏ: pdfplumber/PyMuPDF
+│   ├── worker/                     # BullMQ: parse_cv, export_pdf, match_analysis
+│   └── pdfkit/                     # FastAPI nhỏ: PyMuPDF
 ├── packages/
-│   ├── schema/                     # Zod: Profile, JD, Patch, KB  (dùng chung)
+│   ├── schema/                     # Zod: Profile, JD, Patch, KB, Review (đáy)
 │   ├── ai/
 │   │   ├── gateway.ts              # điểm vào DUY NHẤT tới model
 │   │   ├── budget.ts               # ngân sách context §6
+│   │   ├── chat-flow.ts            # ĐIỀU PHỐI một lượt chat §8.3
+│   │   ├── patch-guard.ts          # KIỂM DUYỆT op §8.3 — thuần hàm
+│   │   ├── policies.ts             # breaker, retry, timeout
+│   │   ├── pii.ts · redact.ts · patterns.ts · paths.ts
 │   │   ├── providers/
 │   │   │   ├── llamacpp.ts         # OpenAI-compatible
-│   │   │   ├── bgeEmbed.ts         # API riêng của :8003
-│   │   │   ├── bgeRerank.ts        # :5014
+│   │   │   ├── bge.ts              # embedder :8003 (API riêng)
 │   │   │   └── anthropic.ts        # stub, enabled: false
-│   │   ├── tasks/                  # 1 thư mục = 1 task
-│   │   │   └── <task>/{prompt.ts,schema.ts,index.ts}
-│   │   └── policies.ts             # breaker, retry, timeout
-│   ├── templates/                  # React components render CV
+│   │   └── tasks/                  # 1 FILE = 1 task, không phải 1 thư mục
+│   │       ├── agent.ts · answer.ts · parse-jd.ts · parse-section.ts
+│   │       └── cv-to-profile.ts · gap-analysis.ts · compact-chat.ts
+│   ├── db/                         # repository trên Postgres — KHÔNG phải db/
 │   ├── matching/                   # scoring engine (thuần code)
-│   └── kb/                         # selector + citation
-├── kb/seed/                        # Knowledge Base khởi tạo (YAML)
-├── eval/                           # bộ đánh giá
-│   ├── cv/  jd/  golden/
-│   └── run.ts
-├── db/migrations/
+│   ├── kb/                         # selector + citation
+│   ├── templates/                  # React components render CV
+│   └── pdf/                        # Playwright: /print → PDF
+├── kb/seed/ · kb/taxonomy/         # Knowledge Base khởi tạo (YAML)
+├── eval/                           # bộ đánh giá — cv/ jd/ golden/ run.ts
+├── db/                             # MIGRATION SQL + migrate.ts
+│                                   #   (khác packages/db — tên trùng, việc khác)
+├── scripts/                        # dev-restart.sh · kb-ingest.ts
 └── docker-compose.yml
 ```
 
-**Quy tắc phụ thuộc (enforce bằng ESLint `no-restricted-imports`):**
+**Chưa có:** `docs/adr/` (Architecture Decision Record) — quyết định kiến trúc
+hiện nằm rải trong tài liệu này và Phụ lục B.
+
+**Quy tắc phụ thuộc — cưỡng chế bằng `eslint.config.js`, chạy `npm run lint`:**
 
 ```
-apps/web  ──►  packages/ai  ──►  packages/schema
+apps/web  ──►  packages/*  ──►  packages/schema
 services  ──►  packages/*        (KHÔNG có chiều ngược lại)
 
-apps/**, services/** KHÔNG được import:
-  @anthropic-ai/sdk · openai · axios tới 100.68.50.41
-Chỉ packages/ai/providers/** được phép.
+Bốn rule đang chạy:
+  1. apps/**, services/**, packages/** KHÔNG import SDK model
+     (@anthropic-ai/sdk · openai · @google/generative-ai · cohere-ai · ollama)
+     → NGOẠI LỆ DUY NHẤT: packages/ai/src/providers/**
+  2. packages/** KHÔNG import @hr/web, @hr/worker, hay '**/apps/**'
+  3. packages/schema/** KHÔNG import bất kỳ @hr/* nào (nó là đáy)
+  4. Không ai import '@hr/*/src/*' — phải đi qua index.ts hoặc subpath
+     khai trong "exports" (ví dụ @hr/worker/queues là hợp lệ)
 ```
+
+Rule 4 tồn tại vì `apps/web` cố tình import `@hr/worker/queues` chứ không phải
+`@hr/worker`: entry point của worker kéo theo `@hr/pdf` → Playwright và toàn bộ
+handler vào bundle Next, trong khi web chỉ cần đẩy việc vào hàng đợi.
 
 ---
 
@@ -676,6 +696,8 @@ CREATE TABLE profile_revisions (
 CREATE INDEX ON profile_revisions (profile_id, id DESC);
 
 -- ── CV = snapshot profile + template ────────────────────────────────────────
+-- API: DELETE /api/cv/:id — xoá CV của user đang đăng nhập; không xoá theo id của user khác.
+
 CREATE TABLE cv_documents (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -2120,38 +2142,65 @@ Hiện chưa có nguồn KB. Đường đi:
 
 ## 11. API surface
 
+Danh sách ĐẦY ĐỦ 27 route đang chạy (`apps/web/app/api/**`).
+
 ```
+# Hồ sơ
 POST   /api/profiles                      tạo profile rỗng
 GET    /api/profiles/:id
 PATCH  /api/profiles/:id                  apply JSON Patch (từ user hoặc đã accept)
 GET    /api/profiles/:id/revisions        lịch sử
-POST   /api/profiles/:id/revert/:revId
+GET    /api/profiles/:id/revisions/:revId ảnh chụp một mốc — XEM trước khi khôi phục
+POST   /api/profiles/:id/revert           { revisionId } — khôi phục
+POST   /api/profiles/:id/undo             hoàn tác một bước
+POST   /api/profiles/:id/verify           user xác nhận nội dung AI sinh (_meta.verified)
 
+# Import
 POST   /api/uploads/cv                    → { jobId }
+GET    /api/imports/:jobId                kết quả parse để rà soát
+GET    /api/imports/:jobId/pages          ảnh PNG trang gốc + toạ độ khối text
+POST   /api/imports/:jobId/complete       chốt rà soát → tạo CV
 GET    /api/jobs/:id                      polling trạng thái
+DELETE /api/jobs/:id                      huỷ
 GET    /api/jobs/:id/stream               SSE
 
-POST   /api/jd                            parse JD
-POST   /api/match                         { cvId, jdId } → MatchAnalysis
-GET    /api/match/:id
+# Đối chiếu JD
+POST   /api/analyze                       { cvId, jdText } → jobId (gộp parse_jd + match)
+GET    /api/analyze/:cvId                 kết quả gần nhất
 
-POST   /api/chat/sessions
-POST   /api/chat/sessions/:id/messages    → SSE stream
-POST   /api/patches/:id/apply             { acceptedOpIndexes: number[] }
-POST   /api/patches/:id/reject
+# Chat
+POST   /api/chat                          một lượt chat → stream (KHÔNG phải EventSource,
+                                            xem FRONTEND §9.1)
+POST   /api/chat/proposals/:id            { accept | reject, acceptedOpIndexes }
 
+# CV & xuất file
 POST   /api/cv                            tạo CVDocument từ profile + template
-GET    /api/cv/:id/preview                render HTML
-POST   /api/cv/:id/export                 { variant: 'presentation'|'ats' } → jobId
+GET    /api/cv/:id · PATCH /api/cv/:id    đọc / đổi template, theme
+GET    /api/cv/:id/export                 ?variant=presentation|ats → jobId
 
-# Admin / curator
-POST   /api/kb/sources                    upload
-GET    /api/kb/chunks?status=pending_review
-POST   /api/kb/chunks/:id/approve
-POST   /api/kb/rubrics
+# Tài khoản
+POST   /api/auth/request                  gửi magic link
+GET    /api/auth/verify                   đổi token lấy phiên
+POST   /api/auth/logout
+DELETE /api/account                       xoá tài khoản + toàn bộ dữ liệu (UC-13)
+
+# Curator
+GET    /api/kb · PATCH /api/kb            danh sách chunk / duyệt
+POST   /api/kb/citations                  tra trích dẫn theo id
 
 GET    /api/health                        gồm cả trạng thái model server
 ```
+
+**Khác với bản thiết kế ban đầu — và lý do:**
+
+| Thiết kế cũ | Thực tế | Vì sao |
+|---|---|---|
+| `POST /api/jd` + `POST /api/match` | gộp `POST /api/analyze` | Không có luồng nào parse JD mà không đối chiếu ngay. Hai endpoint chỉ tạo thêm một trạng thái trung gian phải dọn |
+| `GET /api/match/:id` | `GET /api/analyze/:cvId` | FE luôn hỏi "CV này đối chiếu gần nhất ra sao", không bao giờ hỏi theo id lần chạy |
+| `/api/chat/sessions` + `/sessions/:id/messages` | `POST /api/chat` | Phiên chat gắn 1-1 với CV, id phiên không thêm thông tin gì |
+| `/api/patches/:id/apply` + `/reject` | `POST /api/chat/proposals/:id` | Một endpoint, phân biệt bằng body |
+| `/api/kb/sources`, `/kb/chunks/...`, `/kb/rubrics` | `GET`/`PATCH /api/kb` | Nạp KB làm bằng `npm run kb:ingest` (CLI), không qua HTTP |
+| `GET /api/cv/:id/preview` | — | Không tồn tại: preview là Server Component render thẳng, không qua API |
 
 **Quy ước:** mọi endpoint gọi LLM đều trả `meta` chứa `CallMeta` để FE hiển thị trạng thái degrade.
 

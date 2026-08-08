@@ -51,7 +51,12 @@ export default async function ReviewPage({
   const profile = profileId ? await profileRepo().get(profileId) : null
 
   if (!profileId || !profile) {
-    return <Notice title="Không tìm thấy hồ sơ của lượt tải lên này" />
+    return (
+      <FailureNotice
+        code="PROFILE_GONE"
+        message="Kết quả đọc cũ không còn hồ sơ tương ứng. Bạn tải lại file để hệ thống đọc lại nhé."
+      />
+    )
   }
 
   return (
@@ -100,6 +105,12 @@ function FailureNotice({ code, message }: { code: string; message: string }) {
       cta: 'Tải lên lại',
       href: '/import',
     },
+    PROFILE_GONE: {
+      title: 'Kết quả đọc cũ không còn dùng được',
+      body: message || 'Hồ sơ tạm của lượt tải lên này đã bị xóa. Bạn tải lại file để thử lại nhé.',
+      cta: 'Tải lại file',
+      href: '/import',
+    },
   }
 
   const g = GUIDE[code] ?? {
@@ -112,22 +123,22 @@ function FailureNotice({ code, message }: { code: string; message: string }) {
   return (
     <div className="mx-auto max-w-xl p-8">
       <h1 className="text-lg font-semibold">{g.title}</h1>
-      <p className="mt-2 text-neutral-600 dark:text-neutral-400">{g.body}</p>
+      <p className="mt-2 text-ink-muted ">{g.body}</p>
       <div className="mt-5 flex gap-3">
         <Link
           href={g.href}
-          className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white"
+          className="rounded bg-brand px-4 py-2 text-sm font-medium text-white"
         >
           {g.cta}
         </Link>
         <Link
           href="/import"
-          className="rounded border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-600"
+          className="rounded border border-border-strong px-4 py-2 text-sm "
         >
           Chọn file khác
         </Link>
       </div>
-      <p className="mt-6 text-xs text-neutral-400">Mã lỗi: {code}</p>
+      <p className="mt-6 text-xs text-ink-subtle">Mã lỗi: {code}</p>
     </div>
   )
 }
@@ -145,7 +156,7 @@ function Notice({
     <div className="mx-auto max-w-xl p-8">
       {refresh && <meta httpEquiv="refresh" content="4" />}
       <h1 className="text-lg font-semibold">{title}</h1>
-      {body && <p className="mt-2 text-neutral-600 dark:text-neutral-400">{body}</p>}
+      {body && <p className="mt-2 text-ink-muted ">{body}</p>}
     </div>
   )
 }

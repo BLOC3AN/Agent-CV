@@ -38,7 +38,7 @@ function statusOf(
     ([p, v]) => v === false && p.startsWith(`/${id}`),
   )
   if (hasUnverified) {
-    return { mark: '⚪', label: 'Có nội dung AI viết, bạn chưa xác nhận', tone: 'text-neutral-500' }
+    return { mark: '⚪', label: 'Có nội dung AI viết, bạn chưa xác nhận', tone: 'text-ink-muted' }
   }
   return null
 }
@@ -70,7 +70,7 @@ export function SectionOutline() {
 
   return (
     <nav aria-label="Mục lục CV" className="flex flex-col gap-0.5 text-sm">
-      <h2 className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Các mục
       </h2>
 
@@ -84,12 +84,12 @@ export function SectionOutline() {
           <div
             key={id}
             className={`group flex items-center gap-1 rounded-md px-2 py-1.5 ${
-              isActive ? 'bg-blue-50' : 'hover:bg-neutral-100'
+              isActive ? 'bg-brand-subtle' : 'hover:bg-canvas'
             }`}
           >
-            <span className={`flex-1 truncate ${off ? 'text-neutral-400 line-through' : ''}`}>
+            <span className={`flex-1 truncate ${off ? 'text-ink-subtle line-through' : ''}`}>
               {sectionTitle(id, lang)}
-              {n > 0 && <span className="ml-1.5 text-xs text-neutral-400">{n}</span>}
+              {n > 0 && <span className="ml-1.5 text-xs text-ink-subtle">{n}</span>}
               {st && (
                 <span className={`ml-1 ${st.tone}`} title={st.label} aria-label={st.label}>
                   {st.mark}
@@ -103,7 +103,7 @@ export function SectionOutline() {
                 onClick={() => move(i, i - 1)}
                 disabled={i === 0}
                 aria-label={`Chuyển ${sectionTitle(id, lang)} lên trên`}
-                className="rounded px-1 text-neutral-500 hover:bg-neutral-200 disabled:opacity-30"
+                className="rounded px-1 text-ink-muted hover:bg-canvas disabled:opacity-30"
               >
                 ▲
               </button>
@@ -112,7 +112,7 @@ export function SectionOutline() {
                 onClick={() => move(i, i + 1)}
                 disabled={i === order.length - 1}
                 aria-label={`Chuyển ${sectionTitle(id, lang)} xuống dưới`}
-                className="rounded px-1 text-neutral-500 hover:bg-neutral-200 disabled:opacity-30"
+                className="rounded px-1 text-ink-muted hover:bg-canvas disabled:opacity-30"
               >
                 ▼
               </button>
@@ -121,7 +121,7 @@ export function SectionOutline() {
                 onClick={() => toggle(id)}
                 aria-label={off ? `Hiện ${sectionTitle(id, lang)}` : `Ẩn ${sectionTitle(id, lang)}`}
                 aria-pressed={off}
-                className="rounded px-1 text-neutral-500 hover:bg-neutral-200"
+                className="rounded px-1 text-ink-muted hover:bg-canvas"
               >
                 {off ? '☐' : '☑'}
               </button>

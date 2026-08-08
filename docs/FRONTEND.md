@@ -58,16 +58,21 @@ Ba nguyên tắc sản phẩm:
 │ /settings            Tài khoản · ngôn ngữ · quyền riêng tư         │
 └───────────────────────────────────────────────────────────────────┘
 
-┌─ Admin (curator) ─────────────────────────────────────────────────┐
-│ /admin/kb            Nguồn tri thức                                │
-│ /admin/kb/review     Hàng đợi duyệt chunk                          │
-│ /admin/health        Trạng thái model server · metric              │
+┌─ Curator ─────────────────────────────────────────────────────────┐
+│ /kb                  Nguồn tri thức + duyệt chunk (một màn hình)   │
 └───────────────────────────────────────────────────────────────────┘
+  CHƯA CÓ: /admin/kb/review tách riêng · /admin/health (metric model
+  server). Trạng thái model hiện chỉ đọc được ở GET /api/health.
 
 ┌─ Nội bộ (không hiện với user) ────────────────────────────────────┐
 │ /print/:cvId?variant=presentation|ats   ← Playwright render → PDF  │
 └───────────────────────────────────────────────────────────────────┘
 ```
+
+Trang `/cv` có thao tác **Xoá** trên từng dòng. Thao tác gọi `DELETE
+/api/cv/:id`, chỉ chủ sở hữu mới được phép thực hiện, luôn hỏi xác nhận trước
+khi xóa và làm mới danh sách sau khi thành công. Xóa là vĩnh viễn, không hiển
+thị undo.
 
 ---
 
@@ -407,17 +412,32 @@ Job chạy nền. Đóng tab không mất kết quả — TDD §7.2 bảng `jobs
 
 ### 9.1 Stack
 
-| Lớp | Chọn |
-|---|---|
-| Framework | Next.js 15 App Router · React 19 · TypeScript strict |
-| Style | Tailwind CSS · shadcn/ui (Radix primitives) |
-| Server state | TanStack Query v5 |
-| Editor state | Zustand (Profile draft, undo/redo stack, selection) |
-| Form | React Hook Form + `@hookform/resolvers/zod` — dùng chung schema với backend |
-| Streaming | `EventSource` (SSE) |
-| Kéo thả | `@dnd-kit/core` (sắp xếp section) |
-| i18n | `next-intl` |
-| Xem PDF | `pdf.js` (render ảnh trang cho màn hình rà soát) |
+Cột **Trạng thái** ghi thứ ĐANG chạy, không phải thứ dự kiến — bảng này từng
+liệt kê 6 thư viện chưa hề được cài, và người đọc không có cách nào biết.
+
+| Lớp | Chọn | Trạng thái |
+|---|---|---|
+| Framework | Next.js 15 App Router · React 19 · TypeScript strict | ✅ đang dùng |
+| Style | Tailwind CSS v4 + token `@theme` (xem §12.1) | ✅ đang dùng |
+| App shell | `components/nav/AppShell.tsx` — rail dashboard đã đăng nhập; builder/import/review/print giữ flow riêng | ✅ đang dùng |
+| Component | Tự viết — `components/ui/`, 8 primitive (xem §12.3). Không có shadcn/ui hay Radix | ✅ đang dùng |
+| Chữ | Be Vietnam Pro qua `next/font/local`, 2 weight | ✅ đang dùng |
+| Server state | `fetch` trần trong Server Component + `useEffect` ở client | ✅ đang dùng |
+| Editor state | Zustand — `lib/editor-store.ts` (draft, undo/redo), `lib/chat-store.ts` | ✅ đang dùng |
+| Form | Thẻ `<form>` gốc; kiểm dữ liệu bằng Zod ở route handler | ✅ đang dùng |
+| Streaming | `EventSource` cho job (`/api/jobs/:id/stream`); chat đọc `ReadableStream` bằng tay vì `EventSource` chỉ làm được GET | ✅ đang dùng |
+| Xem PDF | pdfkit render sẵn PNG theo yêu cầu (`/api/imports/:jobId/pages`, 110 dpi), client chỉ hiện `<img>` | ✅ đang dùng |
+| Kéo thả | — | ⛔ chưa có (§10 mô tả thiết kế) |
+| i18n | — | ⛔ chưa có. Chuỗi giao diện đang viết thẳng tiếng Việt |
+
+**Vì sao không có thư viện server-state.** Màn hình nào cũng là Server Component
+đọc thẳng từ repository, phần client chỉ còn vài chỗ polling job. Thêm một tầng
+cache nữa thì phải đồng bộ nó với `editor-store`, mà `editor-store` mới là nguồn
+sự thật của bản nháp.
+
+**Render trang PDF ở server, không phải pdf.js.** Bản rà soát cần ảnh trang gốc
+đúng như pdfkit đọc được — dùng pdf.js ở client là render bằng một engine khác
+với engine đã trích text, và hai bên lệch nhau thì vùng tô sáng trỏ sai chỗ.
 
 ### 9.2 Điểm mấu chốt: **thao tác của user cũng là JSON Patch**
 
@@ -486,17 +506,29 @@ Template chỉ khai báo `path`. Toàn bộ logic sửa nằm trong `Editable`, 
 
 ### 9.5 SSE và stream từng phần
 
-```ts
-// Báo cáo đối chiếu: nhận theo từng sự kiện, không chờ trọn gói
-const es = new EventSource(`/api/match/${id}/stream`)
+Có **hai** đường stream, dùng cơ chế khác nhau vì ràng buộc khác nhau.
 
-es.addEventListener('score',    e => setScore(JSON.parse(e.data)))      // ~2s
-es.addEventListener('gap',      e => upsertGap(JSON.parse(e.data)))     // dần dần
-es.addEventListener('citation', e => attachCitation(JSON.parse(e.data)))
-es.addEventListener('degraded', e => setDegraded(JSON.parse(e.data)))
-es.addEventListener('done',     () => es.close())
-es.onerror = () => { es.close(); fallbackToPolling(id) }   // luôn có đường lui
+**a) Tiến trình job — `EventSource`, GET.** Dùng cho import CV và phân tích JD.
+
+```ts
+// components/import/UploadBox.tsx
+const es = new EventSource(`/api/jobs/${jobId}/stream`)
+
+es.addEventListener('status',   e => setStatus(JSON.parse(e.data)))
+es.addEventListener('progress', e => setPct(JSON.parse(e.data).pct))
+es.addEventListener('done',     e => finish(JSON.parse(e.data).result))
+es.addEventListener('failed',   e => showError(JSON.parse(e.data)))
+es.addEventListener('timeout',  e => reconnect())
+es.onerror = () => {
+  // SSE tự kết nối lại; chỉ báo lỗi khi trình duyệt đã bỏ cuộc hẳn
+  if (es.readyState === EventSource.CLOSED) showError({ code: 'STREAM' })
+}
 ```
+
+**b) Lượt chat — đọc `ReadableStream` bằng tay, POST.** `EventSource` chỉ làm
+được GET, mà một lượt chat phải gửi hồ sơ và câu trả lời qua body. Bộ đọc nằm ở
+`lib/chat-store.ts` (`readSse`), phát `step` cho từng bước của `runChatTurn` —
+`planning`, `answering`, `asking`, `proposing`, `validating` — rồi tới `result`.
 
 ### 9.6 Song ngữ — 3 trục độc lập (TDD §9)
 
@@ -509,7 +541,18 @@ const jdLang         = jd?.language             // ngôn ngữ JD
 // Chuyển ngôn ngữ CV không đổi ngôn ngữ giao diện, và ngược lại
 ```
 
-Trên topbar có công tắc `vi | en` — công tắc này đổi **ngôn ngữ CV**, không đổi giao diện. Ngôn ngữ giao diện nằm trong `/settings`. Phải nói rõ bằng nhãn để tránh nhầm.
+Trạng thái hiện tại — ba trục KHÔNG cùng tiến độ:
+
+| Trục | Trạng thái |
+|---|---|
+| `profile.language` — ngôn ngữ CV | ✅ có công tắc `vi \| en` trên thanh của `/builder` (`components/editor/CvLanguageSwitch.tsx`) |
+| `jd.language` — ngôn ngữ JD | ✅ có trong dữ liệu, chưa có công tắc; hiện `JdForm` gửi cứng `'vi'` |
+| `uiLocale` — ngôn ngữ giao diện | ⛔ chưa có. Chuỗi giao diện viết thẳng tiếng Việt — xem §9.1 |
+
+Công tắc ngôn ngữ CV **không dịch nội dung**. Nó đổi ngôn ngữ khai báo, và
+tiêu đề mục do template sinh đi theo (`Ngoại ngữ` ↔ `Languages`); chữ người
+dùng tự viết giữ nguyên. Nhãn cạnh công tắc nói rõ điều này — không nói thì
+người dùng bấm EN rồi chờ CV tự dịch.
 
 ### 9.7 Hiệu năng
 
@@ -517,14 +560,15 @@ Trên topbar có công tắc `vi | en` — công tắc này đổi **ngôn ngữ
 |---|---|
 | `debounce` 400ms trước khi phát patch | Gõ inline không tạo một patch mỗi ký tự |
 | `useDeferredValue` cho preview | Gõ không giật khi CV dài |
-| Virtualize danh sách gap | Báo cáo có thể 30+ mục |
 | Cache kết quả theo `(cvRevision, jdId)` | Không phân tích lại khi không có gì đổi (TDD §14.3) |
-| Prefetch template khi hover trong picker | Đổi mẫu thấy tức thì |
+
+Hai hạng mục "Virtualize danh sách gap" và "Prefetch template khi hover" đã
+chuyển xuống §13 — để chúng ở đây khiến người đọc tưởng đã có.
 
 ### 9.8 Khả năng tiếp cận
 
 - Sửa inline phải dùng được bằng bàn phím: `Tab` di chuyển, `Enter` vào sửa, `Escape` huỷ
-- Kéo thả section có phương án thay thế bằng phím (`@dnd-kit` hỗ trợ sẵn)
+- Kéo thả section: **chưa xây**, chưa có `@dnd-kit` (§10 — `SectionOutline.tsx` "CHƯA có kéo thả"); khi xây phải có phương án thay thế bằng phím ngay từ đầu, không thêm sau
 - Màu không phải kênh thông tin duy nhất — mọi trạng thái ⚠️🔴✨ đều kèm icon và text
 - Vùng streaming dùng `aria-live="polite"` để trình đọc màn hình thông báo nội dung mới
 
@@ -532,32 +576,63 @@ Trên topbar có công tắc `vi | en` — công tắc này đổi **ngôn ngữ
 
 ## 10. Thư viện thành phần
 
+Cây dưới đây là `apps/web/components/` THẬT.
+
 ```
 components/
-├── ui/                     shadcn: Button · Dialog · Sheet · Tooltip …
-├── editor/
-│   ├── Editable.tsx        ★ ô sửa inline theo JSON Pointer
-│   ├── SectionOutline.tsx  mục lục + kéo thả + chỉ báo trạng thái
-│   ├── ThemePicker.tsx     mẫu · màu · font · giãn dòng
-│   └── UndoRedo.tsx
-├── review/
-│   ├── PdfPageViewer.tsx   ảnh trang + tô sáng vùng
-│   └── FieldConfirm.tsx    "Đúng rồi / Sửa lại"
-├── analysis/
-│   ├── ScoreRing.tsx       vòng điểm + breakdown
-│   ├── GapCard.tsx         hỗ trợ skeleton → nội dung streaming
-│   └── CitationBadge.tsx   ★ 📖 có nguồn / ⚡ gợi ý chung
+├── ui/                      8 primitive tự viết, không phụ thuộc ngoài — §12.3
+│   ├── Button.tsx · Card.tsx · Section.tsx · Badge.tsx
+│   ├── Meter.tsx · Dialog.tsx · Sheet.tsx · Field.tsx
+│   └── useFocusTrap.ts      dùng chung bởi Dialog và Sheet
+├── ai/
+│   └── AiPanel.tsx          ★ chữ ký AI, tầng "bề mặt" — §12.4
+├── analyze/
+│   ├── JdForm.tsx           dán JD → gửi phân tích
+│   └── ReportView.tsx       ★ điểm + breakdown + gap + trích dẫn, hỗ trợ
+│                              skeleton → nội dung điền dần (§5.1)
 ├── chat/
-│   ├── ChatPanel.tsx       slide-over
-│   ├── ClarifyForm.tsx     ★ form câu hỏi làm rõ
-│   └── PatchReviewModal.tsx ★ diff + checkbox theo grounding
+│   ├── ChatPanel.tsx        slide-over
+│   ├── ClarifyForm.tsx      ★ form câu hỏi làm rõ (§6.1)
+│   └── PatchReviewModal.tsx ★ diff + checkbox theo grounding (§6.2)
+├── diagnose/
+│   └── HealthReport.tsx     chẩn đoán sức khoẻ CV (UC-04)
+├── editor/
+│   ├── BuilderShell.tsx     khung 2 pane của /builder
+│   ├── Editable.tsx         ★ ô sửa inline theo JSON Pointer (§9.4)
+│   ├── RevisionPreview.tsx  xem một mốc trước khi khôi phục (UC-34)
+│   ├── SectionOutline.tsx   mục lục + chỉ báo trạng thái (CHƯA có kéo thả)
+│   ├── ThemePicker.tsx      mẫu · màu
+│   ├── UndoRedo.tsx
+│   └── VersionHistory.tsx   danh sách mốc
+├── guided/
+│   └── GuidedFlow.tsx       luồng có người dẫn (UC-05)
+├── home/
+│   ├── IntentRouter.tsx     Home lần đầu — 4 lối vào (§2.1)
+│   ├── ResumeHome.tsx       Home khi có việc dở dang
+│   └── ReturningHome.tsx    Home khi đã có hồ sơ
+├── import/
+│   └── UploadBox.tsx        tải PDF + theo dõi job qua SSE
+├── kb/
+│   └── KbCurator.tsx        duyệt chunk (UC-61)
+├── nav/
+│   ├── TopNav.tsx
+│   └── AppShell.tsx          rail dashboard theo spec 2026-08-08
+├── review/
+│   ├── OriginalPane.tsx     ★ ảnh trang PDF + tô sáng vùng (thay cho
+│   │                          "PdfPageViewer" ở bản thiết kế cũ)
+│   ├── ReviewList.tsx       ★ từng mục "Đúng rồi / Sửa lại"
+│   └── ReviewShell.tsx      khung 2 cột của màn hình rà soát (§4)
+├── settings/
+│   └── DeleteAccount.tsx
 └── system/
-    ├── DegradeBanner.tsx
-    ├── QueuePosition.tsx
-    └── JobProgress.tsx
+    └── DegradeBanner.tsx    §8.1
 ```
 
-★ = thành phần đặc thù của sản phẩm này, không có sẵn trong thư viện. Đây là những chỗ cần đầu tư thiết kế kỹ nhất.
+★ = thành phần đặc thù của sản phẩm này. Đây là những chỗ cần đầu tư thiết kế kỹ nhất.
+
+**Chưa có, và biết là chưa có:** `QueuePosition` / `JobProgress` (§8.3 — hiện
+tiến trình nằm trong `UploadBox`), và tách `ScoreRing` / `GapCard` /
+`CitationBadge` ra khỏi `ReportView`.
 
 ---
 
@@ -577,7 +652,136 @@ Thông báo lỗi phải nói **user làm gì tiếp theo**, không mô tả l�
 
 ---
 
-## 12. Việc chưa làm ở giai đoạn 1
+## 12. Hệ thiết kế
+
+Nguồn: [spec 2026-08-07](superpowers/specs/2026-08-07-frontend-redesign-design.md).
+
+### 12.1 Token
+
+Khai một chỗ duy nhất trong `apps/web/app/globals.css` bằng `@theme` của
+Tailwind v4. Component **không** dùng palette thô (`bg-sky-600`,
+`text-neutral-500`) — trước đây cách đó tạo ra 586 lượt màu rải trên 38 file.
+
+| Nhóm | Token | Dùng ở đâu |
+|---|---|---|
+| Thương hiệu | `brand` `brand-hover` `brand-subtle` `brand-border` `brand-ink` | nút chính, link, **và mọi vùng AI** |
+| Mực & nền | `ink` `ink-muted` `ink-subtle` `surface` `canvas` `border` `border-strong` | |
+| Trạng thái | `success` `warn` `danger` + bản `-subtle` | |
+
+Ngoài bảng màu, `@theme` còn khai đúng ba mức bo góc (`radius-sm/md/lg`) và
+đúng hai mức bóng (`shadow-sm` cho thẻ nổi, `shadow-md` cho lớp phủ) — không
+thêm mức thứ tư/thứ ba để tránh trôi dạt tuỳ ý.
+
+**Quy tắc một dòng:** teal chỉ dành cho thương hiệu và AI. Thấy teal là biết
+máy đang tham gia. Trạng thái không mượn teal; AI không mượn xanh lá, vàng, đỏ.
+
+**Chỉ có chế độ sáng.** Spec quyết định D4 gỡ hẳn `dark:` khỏi phạm vi —
+không phải hoãn sang giai đoạn sau. Lý do: bớt một bảng màu phải chăm, và
+`/print` (bản PDF) vốn luôn hiển thị sáng nên chế độ tối không giúp gì ở đó.
+
+### 12.2 Chữ
+
+Be Vietnam Pro nạp bằng `next/font/local` (file `.woff2` trong repo, không gọi
+mạng). Hai weight: 400 và 600.
+
+`packages/templates/src/styles.css` tham chiếu qua **cùng biến CSS**
+`--font-be-vietnam`, nên bản xem trước và file PDF không lệch font.
+
+Thang chữ nới rộng hơn mặc định vì dấu tiếng Việt chồng cả trên lẫn dưới:
+`display 30/38 · h1 24/32 · h2 18/28 · h3 15/22 · body 15/24 · small 13/20 ·
+micro 12/16`.
+
+**Cố ý KHÔNG cài font vào `services/worker/Dockerfile`.** Spec §3.2 (bản gốc)
+dự tính thêm, nhưng đo bằng Playwright thật (mở `/print/:cvId`, hai `cvId`
+khác nhau, hai lần chạy) cho kết quả: `document.fonts` báo `beVietnamPro`
+weight 400 và 600 `status=loaded`, và `getComputedStyle('.cv-root').fontFamily`
+bắt đầu bằng `beVietnamPro`. Lý do việc này chạy được mà không cần cài font
+vào image: `/print` dùng root layout của web app, nên Chromium của Playwright
+tải `.woff2` qua HTTP từ chính web app — cùng origin với trang nó vừa mở,
+không cần font hệ điều hành, không gọi mạng ra ngoài. Thêm: fontconfig không
+xử lý `.woff2` đáng tin, nên cài vào image cũng không chắc có tác dụng.
+
+### 12.3 Primitive
+
+`apps/web/components/ui/` — tám cái, không thêm dependency ngoài.
+
+`Button` · `Card` · `Section` · `Badge` · `Meter` · `Dialog` · `Sheet` · `Field`
+
+(Thư mục còn có `devWarn.ts` và `useFocusTrap.ts` — tiện ích dùng chung, không
+tính vào tám primitive.)
+
+Hai cái mang doctrine, ở mức khuyến nghị (thiếu thì cảnh báo ở dev qua
+`devWarn`, không chặn build):
+
+- `Button` nhận `disabledReason` — §8.1 yêu cầu nút cần AI phải mờ đi **kèm
+  lời giải thích**, không biến mất.
+- `Meter` nhận `parts` — BR-02.1 yêu cầu mọi phần trăm phải tra được nguồn.
+
+`Dialog` và `Sheet` dùng chung `useFocusTrap`: Escape đóng, bẫy focus, trả
+focus về nơi đã mở, khoá cuộn nền.
+
+### 12.4 Chữ ký AI
+
+`components/ai/AiPanel.tsx` là tầng **bề mặt** của chữ ký AI: nó bọc
+`Card variant="ai"` (nền `brand-subtle`, viền `brand-border`, dải gradient 3px
+phía trên — khai trong `components/ui/Card.tsx`) và xử lý luôn trạng thái
+degrade. Shimmer chỉ chạy khi `streaming`, tắt theo `prefers-reduced-motion`.
+
+Chữ ký AI hoàn chỉnh gồm ba tầng, nhưng chúng **không nằm cùng một file**:
+
+1. **Bề mặt** — `AiPanel.tsx`, mô tả ở trên.
+2. **Lối vào** — nút `✦ Trợ lý` ở `components/nav/TopNav.tsx` và rail trái,
+   dẫn tới `/builder/:cvId?assistant=1` với CV gần nhất. Trong builder, sidebar
+   phải của `BuilderShell` mở mặc định; ở màn hình hẹp panel xếp dưới bản xem
+   trước.
+3. **Chứng cứ** — diff trước/sau và badge nguồn theo `grounding.type` nằm ở
+   `components/chat/PatchReviewModal.tsx`; dấu ⚪ cho nội dung chưa xác nhận
+   nằm ở `components/editor/Editable.tsx` (§3.3).
+
+**Hiện trạng, chưa xong hết:**
+
+- `AiPanel.tsx` mới được dùng ở đúng **một** màn hình (`ReturningHome.tsx`,
+  qua prop `available`). `ChatPanel`, `ReportView`, `PatchReviewModal`,
+  `ClarifyForm` là các vùng AI khác nhưng **chưa** chuyển sang dùng
+  `AiPanel`/`Card variant="ai"` — "mọi vùng AI đi qua AiPanel" là hướng đích,
+  không phải hiện trạng.
+- `?assistant=1` và `?focus=<path>` hiện đã được `/builder` đọc. CTA chính
+  trong khối AI trên trang chủ mở sidebar trợ lý và focus đúng mục thiếu.
+
+**Trạng thái degrade nằm cùng file với chữ ký**, có chủ ý: chữ ký làm khối AI
+to, nên xử lý lúc-model-chết ở nơi khác sẽ có chỗ quên, và chỗ quên hiện ra
+thành một ô rỗng giữa màn hình.
+
+Nguồn cho prop `available` là `apps/web/lib/health.ts` (`aiAvailable()`), một
+file mới bọc `Gateway.health()` bằng ba lớp: cache 30 giây (tránh dội việc
+ping vào model server mỗi lần Home được tải), timeout 1,5 giây (`Promise.race`
+với một promise hẹn giờ), và trả `true` (lạc quan) khi lỗi hoặc quá hạn. Cần
+lớp bọc này vì `Gateway.health()` ping cả 6 provider qua mạng và không tự
+cache — gọi thẳng khi render Home sẽ làm trang chủ phụ thuộc model server,
+trái ràng buộc "degrade, đừng sập" (TDD §3.2 A7).
+
+### 12.5 Điểm khớp JD không tô màu
+
+TDD §8.2.3: đo thực tế cho 41 và 41 là **đúng**; thứ có ý nghĩa là thứ tự
+tương đối, không phải vạch ngưỡng. Con số để `ink` trung tính; nghĩa nằm ở
+dòng sự thật đếm được bên dưới ("Thiếu 4/11 kỹ năng JD yêu cầu") và ở thứ hạng
+so với các lần đối chiếu khác của chính người dùng.
+
+---
+
+## 13. Việc chưa làm ở giai đoạn 1
+
+### 13.0 Đề xuất dashboard theo mockup tham khảo
+
+Mockup `ChatGPT Image 08_44_19 8 thg 8, 2026.png` được dùng làm nguồn tham
+khảo về phân cấp thông tin, không phải nguồn nghiệp vụ. Phạm vi mapping và
+spec đầy đủ nằm ở
+[`docs/superpowers/specs/2026-08-08-dashboard-reference-adaptation.md`](superpowers/specs/2026-08-08-dashboard-reference-adaptation.md).
+
+Thiết kế đã duyệt: học bố cục card chính + chỉ số + AI + đối chiếu gần đây
+trong ảnh; giữ nguyên API/function/schema hiện tại; loại bỏ các khối không có
+contract như thông báo, việc đã lưu, LinkedIn và nâng cấp trả phí. P1/P2 đang
+được triển khai trong [`dashboard-reference-adaptation.md`](superpowers/specs/2026-08-08-dashboard-reference-adaptation.md).
 
 | Hạng mục | Lý do hoãn |
 |---|---|
@@ -586,6 +790,10 @@ Thông báo lỗi phải nói **user làm gì tiếp theo**, không mô tả l�
 | Sửa CV trên mobile | Trải nghiệm kém; chỉ hỗ trợ xem + chat |
 | Template mức B (2 cột) | M6 |
 | Cộng tác thời gian thực | Không có nhu cầu ở MVP |
-| Chế độ tối | Ưu tiên thấp |
 | Chia sẻ CV bằng link công khai | Cần cân nhắc PII trước |
 | Import từ LinkedIn | Phụ thuộc API bên thứ ba |
+| Virtualize danh sách gap | Báo cáo hiện chưa vượt 30 mục trên dữ liệu thật; làm khi đo được là chậm |
+| Prefetch template khi hover | Chờ bộ chọn mẫu được dựng lại ở kế hoạch 2 |
+
+**Chế độ tối không nằm trong bảng này** — spec D4 đã **quyết bỏ hẳn**, không
+phải hoãn. Xem §12.1.

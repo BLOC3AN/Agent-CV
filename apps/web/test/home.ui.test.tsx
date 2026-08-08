@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
+import { existsSync, readdirSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ProfileSchema, type Profile } from '@hr/schema'
@@ -65,6 +67,16 @@ describe('Home lần đầu — bộ định tuyến ý định (UC-01)', () => 
     // Nhóm đông nhất và bị bỏ rơi nặng nhất (PRODUCT §2)
     expect(ENTRIES.find((e) => e.featured)!.title).toMatch(/không biết/)
   })
+
+  it('KHÔNG lối vào nào mang chữ ký AI — teal-gradient chỉ dành cho vùng MÁY tham gia', () => {
+    // Quy tắc màu cốt lõi (spec §5.1): nền teal + dải gradient 3px
+    // (Card variant="ai") báo hiệu MÁY đang tham gia. IntentRouter là điều
+    // hướng thuần người dùng chọn — không lối vào nào, kể cả lối `featured`,
+    // được mượn chữ ký đó. Trộn hai nghĩa này làm người dùng không còn phân
+    // biệt được đâu là gợi ý của máy, đâu là điều hướng của sản phẩm.
+    const { container } = render(<IntentRouter />)
+    expect(container.querySelector('[data-variant="ai"]')).not.toBeInTheDocument()
+  })
 })
 
 describe('Home quay lại (UC-02)', () => {
@@ -74,8 +86,10 @@ describe('Home quay lại (UC-02)', () => {
         greeting="Chào buổi chiều, Hải"
         completeness={profileCompleteness(profile)}
         cv={{ id: 'cv1', title: 'CV Computer Vision Engineer', updatedAt: '2 giờ trước' }}
+        profile={profile}
         nextStep={nextStepFor(profileCompleteness(profile), { cvId: 'cv1', hasAnalysis: false })}
         matches={[]}
+        aiAvailable={true}
         {...over}
       />,
     )
@@ -83,7 +97,10 @@ describe('Home quay lại (UC-02)', () => {
   it('TC-01-02 KHÔNG bắt onboarding lại', () => {
     renderReturning(full())
     expect(screen.queryByText(/Bạn cần giúp gì/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/Tiếp tục chỗ đang dở/i)).toBeInTheDocument()
+    // Điều test này canh giữ là "có lối đi tiếp thẳng vào CV đang dở", không
+    // phải một chuỗi tiêu đề cụ thể — tiêu đề đổi mà lối đi vẫn còn thì test
+    // không được đỏ oan.
+    expect(screen.getByRole('link', { name: /Tiếp tục chỉnh CV/ })).toBeInTheDocument()
   })
 
   it('TC-02-03 bấm vào phần trăm xem được nó GỒM NHỮNG GÌ', async () => {
@@ -92,7 +109,7 @@ describe('Home quay lại (UC-02)', () => {
     renderReturning(p())
 
     expect(screen.queryByText('Học vấn')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Hồ sơ đã đầy đủ/ }))
+    await user.click(screen.getByRole('button', { name: /Gồm những gì/ }))
 
     expect(screen.getByText('Học vấn')).toBeInTheDocument()
     expect(screen.getByText('Kỹ năng')).toBeInTheDocument()
@@ -102,7 +119,7 @@ describe('Home quay lại (UC-02)', () => {
   it('TC-02-04 phần CHƯA xong hiện kèm việc cần làm', async () => {
     const user = userEvent.setup()
     renderReturning(p())
-    await user.click(screen.getByRole('button', { name: /Hồ sơ đã đầy đủ/ }))
+    await user.click(screen.getByRole('button', { name: /Gồm những gì/ }))
     expect(screen.getByText(/Viết vài dòng giới thiệu/)).toBeInTheDocument()
   })
 
@@ -122,8 +139,10 @@ describe('Home quay lại (UC-02)', () => {
         greeting="Chào"
         completeness={profileCompleteness(full())}
         cv={null}
+        profile={null}
         nextStep={null}
         matches={[]}
+        aiAvailable={true}
       />,
     )
     expect(screen.getByText(/đang ổn/)).toBeInTheDocument()
@@ -136,7 +155,9 @@ describe('Home quay lại (UC-02)', () => {
     })
     const a = screen.getByRole('link', { name: /Bosch CV Engineer/ })
     expect(a).toHaveAttribute('href', '/analyze/cv9')
-    expect(screen.getByText('81%')).toBeInTheDocument()
+    // Không còn dấu `%` — điểm khớp không tô màu/định dạng như một ngưỡng
+    // tuyệt đối (TDD §8.2.3), chỉ còn con số trần.
+    expect(screen.getByText('81')).toBeInTheDocument()
   })
 })
 
@@ -164,5 +185,217 @@ describe('Home tiếp tục việc dở dang (UC-03)', () => {
   it('luôn có lối thoát sang cách khác', () => {
     render(<ResumeHome job={job()} />)
     expect(screen.getByRole('link', { name: /file khác/ })).toBeInTheDocument()
+  })
+})
+
+describe('ReturningHome — bố cục mới', () => {
+  const base = {
+    greeting: 'Chào buổi tối, Hải',
+    completeness: profileCompleteness(p()),
+    cv: { id: 'cv-1', title: 'LE THANH HAI', updatedAt: '6 giờ trước' },
+    profile: p(),
+    nextStep: null,
+    matches: [],
+    aiAvailable: true,
+  }
+
+  it('hiện bản CV thu nhỏ — sản phẩm xoay quanh tài liệu, phải thấy nó', () => {
+    const { container } = render(<ReturningHome {...base} />)
+    expect(container.querySelector('[data-variant="thumbnail"]')).toBeInTheDocument()
+  })
+
+  it('không có hồ sơ thì không cố vẽ thumbnail', () => {
+    const { container } = render(<ReturningHome {...base} profile={null} />)
+    expect(container.querySelector('[data-variant="thumbnail"]')).not.toBeInTheDocument()
+  })
+
+  it('gợi ý của trợ lý đi qua AiPanel — mang chữ ký AI', () => {
+    const { container } = render(
+      <ReturningHome
+        {...base}
+        nextStep={{ text: 'Thêm số liệu vào các gạch đầu dòng', cta: 'Cùng tôi sửa', href: '/builder/cv-1' }}
+      />,
+    )
+    expect(container.querySelector('[data-variant="ai"]')).toBeInTheDocument()
+  })
+
+  it('trợ lý chết: khối vẫn còn và nói việc gì vẫn làm được', () => {
+    render(
+      <ReturningHome
+        {...base}
+        aiAvailable={false}
+        nextStep={{ text: 'Thêm số liệu', cta: 'Cùng tôi sửa', href: '/builder/cv-1' }}
+      />,
+    )
+    expect(screen.getByText(/tạm ngưng/)).toBeInTheDocument()
+    expect(screen.getByText(/vẫn sửa CV, đổi mẫu và tải file/)).toBeInTheDocument()
+  })
+
+  it('trợ lý chết: nút "Tiếp tục chỉnh CV" VẪN bấm được — nó không cần AI', () => {
+    render(<ReturningHome {...base} aiAvailable={false} />)
+    expect(screen.getByRole('link', { name: /Tiếp tục chỉnh CV/ })).toBeInTheDocument()
+  })
+
+  it('mỗi dòng đối chiếu có mốc thời gian để phân biệt', () => {
+    render(
+      <ReturningHome
+        {...base}
+        matches={[
+          { jdTitle: 'Junior Full-stack Developer', overall: 44, cvId: 'cv-1', jdId: 'jd-1', when: 'hôm nay' },
+          { jdTitle: 'Backend Developer', overall: 72, cvId: 'cv-1', jdId: 'jd-2', when: '3 ngày trước' },
+        ]}
+      />,
+    )
+    expect(screen.getByText('hôm nay')).toBeInTheDocument()
+    expect(screen.getByText('3 ngày trước')).toBeInTheDocument()
+  })
+
+  it('điểm khớp KHÔNG tô màu — TDD §8.2.3 cấm khẳng định ngưỡng tuyệt đối', () => {
+    const { container } = render(
+      <ReturningHome
+        {...base}
+        matches={[{ jdTitle: 'X', overall: 44, cvId: 'cv-1', jdId: 'jd-1', when: 'hôm nay' }]}
+      />,
+    )
+    // Kiểm bằng data-tone chứ không bằng className: Global Constraints cấm test
+    // bám vào chuỗi class, và một ngày nào đó đổi tên utility sẽ làm test đỏ
+    // mà chẳng có hành vi nào sai. `data-tone` là hợp đồng, class là chi tiết.
+    expect(screen.getByText('44')).toBeInTheDocument()
+    expect(container.querySelector('[data-tone]')).not.toBeInTheDocument()
+  })
+})
+
+describe('IntentRouter và ResumeHome — dùng chung ngôn ngữ thị giác', () => {
+  it('IntentRouter: mỗi lối vào là một thẻ, không phải danh sách link trần', () => {
+    const { container } = render(<IntentRouter />)
+    expect(container.querySelectorAll('[data-variant]').length).toBeGreaterThanOrEqual(
+      ENTRIES.length,
+    )
+  })
+
+  it('IntentRouter: vẫn đủ số lối vào như trước', () => {
+    render(<IntentRouter />)
+    for (const e of ENTRIES) {
+      expect(screen.getByRole('link', { name: new RegExp(e.title) })).toBeInTheDocument()
+    }
+  })
+
+  it('ResumeHome: job đang chạy → thẻ có nút tiếp tục', () => {
+    render(
+      <ResumeHome
+        job={{
+          id: 'job-1',
+          kind: 'parse_cv',
+          status: 'done',
+          createdAt: new Date(),
+          filename: 'cv.pdf',
+          reviewed: false,
+        }}
+      />,
+    )
+    expect(screen.getByRole('link', { name: /Tiếp tục/ })).toHaveAttribute(
+      'href',
+      '/import/job-1/review',
+    )
+  })
+
+  it('ResumeHome: job HỎNG dùng tông danger, không phải tông thường', () => {
+    const { container } = render(
+      <ResumeHome
+        job={{
+          id: 'job-2',
+          kind: 'parse_cv',
+          status: 'failed',
+          createdAt: new Date(),
+          filename: 'cv.pdf',
+          reviewed: undefined,
+        }}
+      />,
+    )
+    expect(container.querySelector('[data-tone="danger"]')).toBeInTheDocument()
+  })
+})
+
+/**
+ * BR-01.3 — KHÔNG hiện link tới màn hình chưa tồn tại.
+ *
+ * ── Vì sao cần test này, không chỉ sửa một link ──
+ * Nút "Xem CV" từng trỏ tới `/cv/:id`, một route CHƯA BAO GIỜ được dựng — chỉ
+ * có `/cv` và `/cv/new`. Nó lọt qua 16 lượt review và 751 test, vì mọi test tìm
+ * link theo TÊN (`getByRole('link', { name: 'Xem CV' })`) chứ không hỏi href
+ * đó có dẫn tới đâu thật không. Lỗi chỉ lộ khi người dùng bấm và nhận 404.
+ *
+ * Test này đối chiếu mọi href do các màn Home sinh ra với cây route thật trên
+ * đĩa, nên nó bắt được CẢ LOẠI lỗi chứ không riêng một ca.
+ */
+describe('BR-01.3 — mọi link ở Home phải dẫn tới route có thật', () => {
+  const APP_DIR = resolve(__dirname, '../app')
+
+  /** Có `page.tsx` nào khớp đường dẫn này không? `(nhóm)` không ăn segment. */
+  function routeExists(pathname: string): boolean {
+    const segs = pathname.split(/[?#]/)[0]!.split('/').filter(Boolean)
+    const walk = (dir: string, i: number): boolean => {
+      if (i === segs.length) return existsSync(join(dir, 'page.tsx'))
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue
+        const grouping = e.name.startsWith('(') && e.name.endsWith(')')
+        if (grouping && walk(join(dir, e.name), i)) return true
+        if (grouping) continue
+        const literal = e.name === segs[i]
+        const dynamic = /^\[[^\]]+\]$/.test(e.name)
+        if ((literal || dynamic) && walk(join(dir, e.name), i + 1)) return true
+      }
+      return false
+    }
+    return walk(APP_DIR, 0)
+  }
+
+  it('hàm dò route tự nó đúng — route có thật thì thấy, route bịa thì không', () => {
+    expect(routeExists('/')).toBe(true)
+    expect(routeExists('/cv')).toBe(true)
+    expect(routeExists('/builder/bat-ky-id')).toBe(true)
+    expect(routeExists('/cv/bat-ky-id')).toBe(false)
+    expect(routeExists('/khong-he-ton-tai')).toBe(false)
+  })
+
+  const hrefsOf = (c: HTMLElement): string[] =>
+    Array.from(c.querySelectorAll('a[href]'))
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((h) => h.startsWith('/'))
+
+  it('ReturningHome', () => {
+    const { container } = render(
+      <ReturningHome
+        greeting="Chào buổi tối, Hải"
+        completeness={profileCompleteness(p())}
+        cv={{ id: 'cv-1', title: 'CV của tôi', updatedAt: '6 giờ trước' }}
+        profile={p()}
+        nextStep={{ text: 'x', cta: 'Cùng tôi sửa', href: '/builder/cv-1' }}
+        matches={[{ jdTitle: 'X', overall: 44, cvId: 'cv-1', jdId: 'jd-1', when: 'hôm nay' }]}
+        aiAvailable
+      />,
+    )
+    const hrefs = hrefsOf(container)
+    expect(hrefs.length).toBeGreaterThan(0)
+    for (const h of hrefs) expect(routeExists(h), `link chết: ${h}`).toBe(true)
+  })
+
+  it('IntentRouter', () => {
+    const { container } = render(<IntentRouter />)
+    const hrefs = hrefsOf(container)
+    expect(hrefs.length).toBeGreaterThan(0)
+    for (const h of hrefs) expect(routeExists(h), `link chết: ${h}`).toBe(true)
+  })
+
+  it('ResumeHome', () => {
+    for (const status of ['done', 'failed'] as const) {
+      const { container } = render(
+        <ResumeHome
+          job={{ id: 'job-1', kind: 'parse_cv', status, createdAt: new Date(),
+                 filename: 'cv.pdf', reviewed: false }}
+        />,
+      )
+      for (const h of hrefsOf(container)) expect(routeExists(h), `link chết: ${h}`).toBe(true)
+    }
   })
 })

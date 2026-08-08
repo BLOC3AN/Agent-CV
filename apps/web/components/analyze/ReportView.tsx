@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 /**
  * Màn hình báo cáo đối chiếu — UC-42, FRONTEND §5.2.
@@ -65,31 +66,21 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
   const [error, setError] = useState<string | null>(null)
   const [citations, setCitations] = useState<Record<string, Citation>>({})
 
-  // Poll cho tới khi lời khuyên soạn xong. Poll chứ không SSE: dữ liệu này là
-  // ảnh chụp toàn phần, không phải luồng sự kiện — tải lại cả bản đơn giản hơn
-  // và không sợ lệch trạng thái khi mất kết nối giữa chừng.
   useEffect(() => {
-    let stop = false
-    let tries = 0
-
-    const tick = async (): Promise<void> => {
-      try {
-        const res = await fetch(`/api/analyze/${cvId}`)
-        const data = (await res.json()) as Report
-        if (stop) return
-        setReport(data)
-
-        const done = data.ready && (data.advicePending ?? 0) === 0
-        // Trần 120 lượt ≈ 4 phút: job có thể hỏng ở bước tư vấn, và poll mãi
-        // sẽ đốt pin máy người dùng mà không bao giờ dừng
-        if (!done && tries++ < 120) setTimeout(() => void tick(), 2_000)
-      } catch (e) {
-        if (!stop) setError((e as Error).message)
-      }
-    }
-    void tick()
+    const source = new EventSource(`/api/analyze/${cvId}/stream`)
+    source.addEventListener('report', (event) => {
+      setReport(JSON.parse((event as MessageEvent<string>).data) as Report)
+    })
+    source.addEventListener('done', (event) => {
+      setReport(JSON.parse((event as MessageEvent<string>).data) as Report)
+      source.close()
+    })
+    source.addEventListener('error', (event) => {
+      const data = (event as MessageEvent<string>).data
+      if (data) setError((JSON.parse(data) as { message?: string }).message ?? 'Không đọc được báo cáo')
+    })
     return () => {
-      stop = true
+      source.close()
     }
   }, [cvId])
 
@@ -122,7 +113,7 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
 
   if (error) {
     return (
-      <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm">
+      <p role="alert" className="rounded-lg border border-danger bg-danger-subtle p-4 text-sm">
         Chưa tải được kết quả: {error}
       </p>
     )
@@ -131,12 +122,12 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
   if (!report?.ready) {
     return (
       <section className="space-y-3">
-        <p className="text-neutral-600 dark:text-neutral-400">
+        <p className="text-ink-muted">
           Đang đối chiếu CV với mô tả công việc…
         </p>
-        <div className="h-24 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800" />
-        <div className="h-40 animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800" />
-        {jobId && <p className="text-xs text-neutral-400">Mã phiên: {jobId}</p>}
+        <div className="h-24 animate-pulse rounded-lg bg-canvas" />
+        <div className="h-40 animate-pulse rounded-lg bg-canvas" />
+        {jobId && <p className="text-xs text-ink-subtle">Mã phiên: {jobId}</p>}
       </section>
     )
   }
@@ -149,7 +140,7 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
         <h1 className="text-xl font-semibold">
           Đối chiếu với: {report.jd?.title || 'Tin tuyển dụng'}
           {report.jd?.seniority && report.jd.seniority !== 'unknown' && (
-            <span className="ml-2 text-sm font-normal text-neutral-500">
+            <span className="ml-2 text-sm font-normal text-ink-muted">
               ({report.jd.seniority})
             </span>
           )}
@@ -159,7 +150,7 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
       {report.degraded && (
         <p
           role="status"
-          className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30"
+          className="rounded-lg border border-warn bg-warn-subtle p-3 text-sm"
         >
           {report.degradedReason ??
             'Đang dùng đối chiếu từ khoá. Phân tích ngữ nghĩa tạm không khả dụng.'}
@@ -167,24 +158,24 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
       )}
 
       {/* ── Điểm ─────────────────────────────────────────────────────── */}
-      <section className="flex flex-wrap items-center gap-8 rounded-lg border border-neutral-200 p-5 dark:border-neutral-700">
+      <section className="flex flex-wrap items-center gap-8 rounded-lg border border-border p-5">
         <div className="text-center">
           <div className="text-4xl font-bold tabular-nums">{report.overall}</div>
-          <div className="text-xs text-neutral-500">/100</div>
+          <div className="text-xs text-ink-muted">/100</div>
         </div>
         <dl className="min-w-[240px] flex-1 space-y-1.5">
           {Object.entries(report.breakdown ?? {}).map(([k, v]) => (
             <div key={k} className="flex items-center gap-3 text-sm">
-              <dt className="w-28 shrink-0 text-neutral-600 dark:text-neutral-400">
+              <dt className="w-28 shrink-0 text-ink-muted">
                 {LABEL[k] ?? k}
               </dt>
               <dd className="flex flex-1 items-center gap-2">
                 <span
-                  className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700"
+                  className="h-2 flex-1 overflow-hidden rounded-full bg-border"
                   aria-hidden
                 >
                   <span
-                    className="block h-full rounded-full bg-sky-600"
+                    className="block h-full rounded-full bg-brand"
                     style={{ width: `${v}%` }}
                   />
                 </span>
@@ -198,18 +189,18 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
       {/* ── Đã khớp ──────────────────────────────────────────────────── */}
       {(report.matched?.length ?? 0) > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">
             Đã khớp ({report.matched!.length})
           </h2>
           <ul className="space-y-1.5">
             {report.matched!.map((m) => (
               <li key={m.requirement} className="flex flex-wrap items-baseline gap-2 text-sm">
-                <span className="text-emerald-600">✓</span>
+                <span className="text-success">✓</span>
                 <span className="font-medium">{m.requirement}</span>
                 {m.evidence[0] && (
                   // Bằng chứng luôn hiện ra: user phải kiểm chứng được, và
                   // không có nó thì con số chỉ là lời khẳng định suông
-                  <span className="text-neutral-500">
+                  <span className="text-ink-muted">
                     ← “{m.evidence[0].excerpt}”
                   </span>
                 )}
@@ -222,10 +213,10 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
       {/* ── Còn thiếu ────────────────────────────────────────────────── */}
       {gaps.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">
             Còn thiếu ({gaps.length})
             {(report.advicePending ?? 0) > 0 && (
-              <span className="ml-2 font-normal normal-case text-neutral-400">
+              <span className="ml-2 font-normal normal-case text-ink-subtle">
                 đang soạn lời khuyên cho {report.advicePending} mục…
               </span>
             )}
@@ -234,17 +225,23 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
             {gaps.map((g) => (
               <li
                 key={g.id}
-                className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-700"
+                className="rounded-lg border border-border p-3"
               >
                 <div className="flex flex-wrap items-baseline gap-2 text-sm">
                   <span aria-hidden>{SEVERITY[g.severity]?.dot}</span>
                   <span className="font-medium">{g.requirement}</span>
-                  <span className="text-xs text-neutral-500">{REASON[g.reason]}</span>
+                  <span className="text-xs text-ink-muted">{REASON[g.reason]}</span>
+                  <Link
+                    href={"/builder/" + cvId + "?assistant=1"}
+                    className="ml-auto text-xs font-medium text-brand underline underline-offset-2 hover:text-brand-hover"
+                  >
+                    Sửa giúp tôi
+                  </Link>
                 </div>
 
                 {g.advice ? (
                   <div className="mt-2">
-                    <p className="text-sm text-neutral-700 dark:text-neutral-300">💬 {g.advice}</p>
+                    <p className="text-sm text-ink">💬 {g.advice}</p>
 
                     {/*
                       §10.4 — ranh giới giữa "có nguồn" và "AI tự nghĩ" phải
@@ -258,11 +255,11 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
                           const c = citations[ref]
                           return (
                             <details key={ref} className="text-xs">
-                              <summary className="cursor-pointer text-emerald-700 dark:text-emerald-400">
+                              <summary className="cursor-pointer text-success">
                                 📖 Theo {c?.authorName ?? '…'}
                                 {c?.authorTitle ? ` — ${c.authorTitle}` : ''}
                               </summary>
-                              <p className="mt-1 whitespace-pre-wrap border-l-2 border-emerald-300 pl-2 text-neutral-600 dark:text-neutral-400">
+                              <p className="mt-1 whitespace-pre-wrap border-l-2 border-success pl-2 text-ink-muted">
                                 {c?.excerpt ?? 'Đang tải trích đoạn…'}
                               </p>
                             </details>
@@ -270,14 +267,14 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
                         })}
                       </div>
                     ) : (
-                      <p className="mt-1.5 inline-block rounded border border-dashed border-neutral-300 bg-neutral-50 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-600 dark:bg-neutral-800/50">
+                      <p className="mt-1.5 inline-block rounded border border-dashed border-border-strong bg-canvas px-2 py-0.5 text-xs text-ink-muted">
                         ⚡ Gợi ý chung của AI — chưa dựa trên tri thức HR nào
                       </p>
                     )}
                   </div>
                 ) : (
                   <div
-                    className="mt-2 h-4 w-3/4 animate-pulse rounded bg-neutral-100 dark:bg-neutral-800"
+                    className="mt-2 h-4 w-3/4 animate-pulse rounded bg-canvas"
                     aria-label="đang soạn lời khuyên"
                   />
                 )}
@@ -290,13 +287,13 @@ export function ReportView({ cvId, jobId }: { cvId: string; jobId?: string }) {
       {/* ── Từ khoá ATS ──────────────────────────────────────────────── */}
       {(report.missingAtsKeywords?.length ?? 0) > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">
             Từ khoá ATS còn thiếu ({report.missingAtsKeywords!.length})
           </h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          <p className="text-sm text-ink-muted">
             {report.missingAtsKeywords!.join(' · ')}
           </p>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-ink-muted">
             Hệ thống lọc hồ sơ tự động quét đúng chuỗi trong tin tuyển dụng — nó không
             biết “ReactJS” và “React” là một.
           </p>

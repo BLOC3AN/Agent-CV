@@ -46,3 +46,6 @@ __pycache__/
 
 *.log
 .DS_Store
+
+# Thư mục làm việc của subagent-driven-development — scratch, không phải mã nguồn
+.superpowers/

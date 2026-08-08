@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getPool } from '@hr/db'
 import { TEMPLATE_IDS } from '@hr/templates'
+import { NotAuthenticated, requireUser } from '@/lib/auth'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -67,4 +68,56 @@ export async function GET(_req: Request, { params }: Ctx) {
   )
   if (rows.length === 0) return NextResponse.json({ error: 'Không tìm thấy' }, { status: 404 })
   return NextResponse.json({ cv: rows[0] })
+}
+
+/**
+ * DELETE /api/cv/:id — xoá một CV khỏi danh sách (UC-31).
+ *
+ * Chỉ chủ sở hữu mới được xoá. CV là bản trình bày của một Profile, nên xoá
+ * luôn Profile nếu không còn CV nào tham chiếu tới nó; các bảng phụ thuộc CV
+ * đã khai báo ON DELETE CASCADE trong schema.
+ */
+export async function DELETE(_req: Request, { params }: Ctx) {
+  const { id } = await params
+  if (!z.string().uuid().safeParse(id).success) {
+    return NextResponse.json({ error: 'Mã CV không hợp lệ' }, { status: 400 })
+  }
+
+  let user
+  try {
+    user = await requireUser()
+  } catch (e) {
+    if (e instanceof NotAuthenticated) return NextResponse.json({ error: e.message }, { status: 401 })
+    throw e
+  }
+
+  const pool = getPool()
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const deleted = await client.query<{ profile_id: string }>(
+      `DELETE FROM cv_documents
+        WHERE id = $1 AND user_id = $2
+        RETURNING profile_id`,
+      [id, user.id],
+    )
+    if (deleted.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: 'Không tìm thấy CV' }, { status: 404 })
+    }
+
+    await client.query(
+      `DELETE FROM profiles p
+        WHERE p.id = $1
+          AND NOT EXISTS (SELECT 1 FROM cv_documents c WHERE c.profile_id = p.id)`,
+      [deleted.rows[0]!.profile_id],
+    )
+    await client.query('COMMIT')
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
 }

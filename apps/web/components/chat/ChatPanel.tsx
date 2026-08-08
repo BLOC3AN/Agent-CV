@@ -72,13 +72,13 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
 
   return (
     <section aria-label="Trợ lý CV" className="flex h-full flex-col">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Trợ lý CV
       </h2>
 
-      <div className="min-h-[200px] flex-1 space-y-3 overflow-y-auto rounded-lg border border-neutral-200 p-3 dark:border-neutral-700">
+      <div className="min-h-[200px] flex-1 space-y-3 overflow-y-auto rounded-lg border border-border p-3">
         {messages.length === 0 && (
-          <div className="text-sm text-neutral-500">
+          <div className="text-sm text-ink-muted">
             <p>Bạn muốn sửa gì trong CV? Ví dụ:</p>
             <ul className="mt-2 space-y-1">
               {suggestions.map((s) => (
@@ -86,7 +86,7 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
                   <button
                     type="button"
                     onClick={() => void send(s)}
-                    className="text-left underline underline-offset-2 hover:text-sky-600"
+                    className="text-left underline underline-offset-2 hover:text-brand"
                   >
                     {s}
                   </button>
@@ -102,21 +102,21 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
             className={[
               'max-w-[90%] rounded-lg px-3 py-2 text-sm',
               m.role === 'user'
-                ? 'ml-auto bg-sky-600 text-white'
-                : 'bg-neutral-100 dark:bg-neutral-800',
+                ? 'ml-auto bg-brand text-white'
+                : 'bg-canvas',
             ].join(' ')}
           >
             {m.content}
 
             {(m.nextSteps?.length ?? 0) > 0 && (
-              <ul className="mt-2 space-y-1 border-t border-neutral-300 pt-2 dark:border-neutral-600">
+              <ul className="mt-2 space-y-1 border-t border-border-strong pt-2">
                 {m.nextSteps!.map((s) => (
                   <li key={s}>
                     <button
                       type="button"
                       disabled={busy}
                       onClick={() => void send(s)}
-                      className="text-left text-sky-700 underline underline-offset-2 hover:text-sky-900 disabled:opacity-40 dark:text-sky-400"
+                      className="text-left text-brand-ink underline underline-offset-2 hover:text-brand-ink disabled:opacity-40"
                     >
                       {s}
                     </button>
@@ -131,11 +131,11 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           <div
             role="status"
             aria-live="polite"
-            className="flex max-w-[90%] items-center gap-2 rounded-lg bg-neutral-100 px-3 py-2 text-sm text-neutral-500 dark:bg-neutral-800"
+            className="flex max-w-[90%] items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm text-ink-muted"
           >
             <span
               aria-hidden
-              className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-neutral-300 border-t-sky-600"
+              className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-border-strong border-t-brand"
             />
             {/*
               Nói RÕ đang làm gì. "Đang suy nghĩ…" suốt nửa phút khiến người
@@ -168,12 +168,12 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           disabled={busy}
           placeholder="Bạn muốn sửa gì?"
           aria-label="Tin nhắn cho trợ lý"
-          className="flex-1 rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+          className="flex-1 rounded border border-border-strong px-3 py-2 text-sm"
         />
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           Gửi
         </button>

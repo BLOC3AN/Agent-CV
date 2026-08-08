@@ -29,15 +29,15 @@ export default async function ImportPage({
   return (
     <main className="mx-auto max-w-xl px-6 py-16">
       <h1 className="text-2xl font-semibold tracking-tight">Tải CV của bạn lên</h1>
-      <p className="mt-2 text-neutral-600 dark:text-neutral-400">
+      <p className="mt-2 text-ink-muted ">
         {intent ? LEAD[intent] : LEAD['improve']} Bạn sẽ được xem lại từng mục
         trước khi dùng — máy đọc tự động nên có thể sai.
       </p>
 
       <UploadBox intent={intent} />
 
-      <section className="mt-10 rounded-lg border border-neutral-200 p-4 text-sm text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
-        <h2 className="mb-2 font-medium text-neutral-900 dark:text-neutral-100">
+      <section className="mt-10 rounded-lg border border-border p-4 text-sm text-ink-muted  ">
+        <h2 className="mb-2 font-medium text-ink ">
           Về dữ liệu của bạn
         </h2>
         <ul className="list-disc space-y-1 pl-5">

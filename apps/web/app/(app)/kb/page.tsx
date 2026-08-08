@@ -36,7 +36,7 @@ export default async function KbPage() {
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="text-xl font-semibold">Tri thức HR</h1>
-      <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+      <p className="mt-2 text-sm text-ink-muted ">
         Mọi lời khuyên hệ thống đưa ra đều phải trích dẫn được về một người thật.
         Nguồn chưa có tên người chịu trách nhiệm sẽ không được dùng.
       </p>
