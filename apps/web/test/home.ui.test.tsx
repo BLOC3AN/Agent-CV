@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
+import { existsSync, readdirSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ProfileSchema, type Profile } from '@hr/schema'
@@ -311,5 +313,89 @@ describe('IntentRouter và ResumeHome — dùng chung ngôn ngữ thị giác', 
       />,
     )
     expect(container.querySelector('[data-tone="danger"]')).toBeInTheDocument()
+  })
+})
+
+/**
+ * BR-01.3 — KHÔNG hiện link tới màn hình chưa tồn tại.
+ *
+ * ── Vì sao cần test này, không chỉ sửa một link ──
+ * Nút "Xem CV" từng trỏ tới `/cv/:id`, một route CHƯA BAO GIỜ được dựng — chỉ
+ * có `/cv` và `/cv/new`. Nó lọt qua 16 lượt review và 751 test, vì mọi test tìm
+ * link theo TÊN (`getByRole('link', { name: 'Xem CV' })`) chứ không hỏi href
+ * đó có dẫn tới đâu thật không. Lỗi chỉ lộ khi người dùng bấm và nhận 404.
+ *
+ * Test này đối chiếu mọi href do các màn Home sinh ra với cây route thật trên
+ * đĩa, nên nó bắt được CẢ LOẠI lỗi chứ không riêng một ca.
+ */
+describe('BR-01.3 — mọi link ở Home phải dẫn tới route có thật', () => {
+  const APP_DIR = resolve(__dirname, '../app')
+
+  /** Có `page.tsx` nào khớp đường dẫn này không? `(nhóm)` không ăn segment. */
+  function routeExists(pathname: string): boolean {
+    const segs = pathname.split(/[?#]/)[0]!.split('/').filter(Boolean)
+    const walk = (dir: string, i: number): boolean => {
+      if (i === segs.length) return existsSync(join(dir, 'page.tsx'))
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue
+        const grouping = e.name.startsWith('(') && e.name.endsWith(')')
+        if (grouping && walk(join(dir, e.name), i)) return true
+        if (grouping) continue
+        const literal = e.name === segs[i]
+        const dynamic = /^\[[^\]]+\]$/.test(e.name)
+        if ((literal || dynamic) && walk(join(dir, e.name), i + 1)) return true
+      }
+      return false
+    }
+    return walk(APP_DIR, 0)
+  }
+
+  it('hàm dò route tự nó đúng — route có thật thì thấy, route bịa thì không', () => {
+    expect(routeExists('/')).toBe(true)
+    expect(routeExists('/cv')).toBe(true)
+    expect(routeExists('/builder/bat-ky-id')).toBe(true)
+    expect(routeExists('/cv/bat-ky-id')).toBe(false)
+    expect(routeExists('/khong-he-ton-tai')).toBe(false)
+  })
+
+  const hrefsOf = (c: HTMLElement): string[] =>
+    Array.from(c.querySelectorAll('a[href]'))
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((h) => h.startsWith('/'))
+
+  it('ReturningHome', () => {
+    const { container } = render(
+      <ReturningHome
+        greeting="Chào buổi tối, Hải"
+        completeness={profileCompleteness(p())}
+        cv={{ id: 'cv-1', title: 'CV của tôi', updatedAt: '6 giờ trước' }}
+        profile={p()}
+        nextStep={{ text: 'x', cta: 'Cùng tôi sửa', href: '/builder/cv-1' }}
+        matches={[{ jdTitle: 'X', overall: 44, cvId: 'cv-1', jdId: 'jd-1', when: 'hôm nay' }]}
+        aiAvailable
+      />,
+    )
+    const hrefs = hrefsOf(container)
+    expect(hrefs.length).toBeGreaterThan(0)
+    for (const h of hrefs) expect(routeExists(h), `link chết: ${h}`).toBe(true)
+  })
+
+  it('IntentRouter', () => {
+    const { container } = render(<IntentRouter />)
+    const hrefs = hrefsOf(container)
+    expect(hrefs.length).toBeGreaterThan(0)
+    for (const h of hrefs) expect(routeExists(h), `link chết: ${h}`).toBe(true)
+  })
+
+  it('ResumeHome', () => {
+    for (const status of ['done', 'failed'] as const) {
+      const { container } = render(
+        <ResumeHome
+          job={{ id: 'job-1', kind: 'parse_cv', status, createdAt: new Date(),
+                 filename: 'cv.pdf', reviewed: false }}
+        />,
+      )
+      for (const h of hrefsOf(container)) expect(routeExists(h), `link chết: ${h}`).toBe(true)
+    }
   })
 })

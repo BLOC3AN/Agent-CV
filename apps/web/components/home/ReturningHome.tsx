@@ -83,11 +83,18 @@ export function ReturningHome({
                 >
                   Tiếp tục chỉnh CV
                 </Link>
+                {/*
+                  KHÔNG có nút "Xem CV" ở đây — BR-01.3 cấm hiện link tới màn
+                  hình chưa tồn tại. Bản thiết kế vẽ nó, nhưng route `/cv/:id`
+                  (xem CV ở chế độ chỉ đọc) chưa được dựng; chỉ có `/cv` và
+                  `/cv/new`. Một nút 404 tệ hơn một nút vắng mặt: người dùng
+                  bấm rồi kết luận sản phẩm hỏng.
+                */}
                 <Link
-                  href={`/cv/${cv.id}`}
+                  href="/cv"
                   className="inline-flex items-center rounded-md border border-border-strong bg-surface px-4 py-2 text-[15px] font-medium text-ink transition-colors hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                 >
-                  Xem CV
+                  Tất cả CV
                 </Link>
               </div>
             </div>
