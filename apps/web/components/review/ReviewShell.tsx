@@ -130,12 +130,12 @@ export function ReviewShell({ jobId, intent = null, profileId, initialProfile, q
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold">Kiểm tra lại thông tin đọc được</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-ink-muted">
             Hệ thống đọc tự động nên có thể sai. Bạn xác nhận từng mục giúp nhé.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm tabular-nums text-neutral-600 dark:text-neutral-400">
+          <span className="text-sm tabular-nums text-ink-muted ">
             Đã xác nhận {progress.done}/{progress.total} mục
           </span>
           <button
@@ -143,7 +143,7 @@ export function ReviewShell({ jobId, intent = null, profileId, initialProfile, q
             onClick={() => void finish()}
             disabled={!progress.complete || finishing}
             title={progress.complete ? undefined : 'Còn mục chưa xác nhận'}
-            className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {finishing ? 'Đang tạo CV…' : 'Tiếp →'}
           </button>
@@ -153,7 +153,7 @@ export function ReviewShell({ jobId, intent = null, profileId, initialProfile, q
       {quality.warning && (
         <div
           role="status"
-          className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30"
+          className="mb-4 rounded-lg border border-warn bg-warn-subtle p-3 text-sm  "
         >
           <strong>File này hơi khó đọc</strong> ({quality.reasons.join(', ')}). Bạn kiểm
           kỹ hơn bình thường giúp nhé — nhất là tên riêng và con số.
@@ -163,7 +163,7 @@ export function ReviewShell({ jobId, intent = null, profileId, initialProfile, q
       {error && (
         <div
           role="alert"
-          className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm dark:border-red-800 dark:bg-red-950/30"
+          className="mb-4 rounded-lg border border-danger bg-danger-subtle p-3 text-sm  "
         >
           {error}
         </div>
@@ -185,8 +185,8 @@ export function ReviewShell({ jobId, intent = null, profileId, initialProfile, q
       </div>
 
       {/* Luôn phải có đường thoát — UC-22 luồng thay thế 3a */}
-      <footer className="mt-6 border-t border-neutral-200 pt-4 text-sm dark:border-neutral-700">
-        <a href="/cv/new" className="text-neutral-500 underline underline-offset-2">
+      <footer className="mt-6 border-t border-border pt-4 text-sm ">
+        <a href="/cv/new" className="text-ink-muted underline underline-offset-2">
           Đọc sai nhiều quá, để tôi nhập tay
         </a>
       </footer>

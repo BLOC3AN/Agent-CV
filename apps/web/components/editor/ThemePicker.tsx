@@ -26,17 +26,17 @@ export function ThemePicker({ showTemplate = false }: { showTemplate?: boolean }
 
   return (
     <div className="flex flex-col gap-3 px-2 text-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Trình bày
       </h2>
 
       {showTemplate && (
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Mẫu</span>
+          <span className="text-xs text-ink-muted">Mẫu</span>
           <select
             value={templateId}
             onChange={(e) => setTemplate(e.target.value as TemplateId)}
-            className="rounded-md border border-neutral-300 px-2 py-1"
+            className="rounded-md border border-border-strong px-2 py-1"
           >
             {TEMPLATE_IDS.map((id) => (
               <option key={id} value={id}>
@@ -48,7 +48,7 @@ export function ThemePicker({ showTemplate = false }: { showTemplate?: boolean }
       )}
 
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-neutral-500">Màu nhấn</span>
+        <span className="text-xs text-ink-muted">Màu nhấn</span>
         <div className="flex gap-1.5">
           {ACCENTS.map((a) => (
             <button
@@ -59,7 +59,7 @@ export function ThemePicker({ showTemplate = false }: { showTemplate?: boolean }
               aria-pressed={theme.accent === a.hex}
               onClick={() => setTheme({ accent: a.hex })}
               className={`h-6 w-6 rounded-full border-2 ${
-                theme.accent === a.hex ? 'border-neutral-900' : 'border-transparent'
+                theme.accent === a.hex ? 'border-ink' : 'border-transparent'
               }`}
               style={{ background: a.hex }}
             />
@@ -68,7 +68,7 @@ export function ThemePicker({ showTemplate = false }: { showTemplate?: boolean }
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-ink-muted">
           Cỡ chữ · {Math.round((theme.scale ?? 1) * 100)}%
         </span>
         <input
@@ -79,7 +79,7 @@ export function ThemePicker({ showTemplate = false }: { showTemplate?: boolean }
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-neutral-500">Giãn dòng</span>
+        <span className="text-xs text-ink-muted">Giãn dòng</span>
         <input
           type="range" min={1.3} max={1.8} step={0.05}
           value={theme.lineHeight ?? 1.5}

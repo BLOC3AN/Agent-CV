@@ -37,7 +37,7 @@ export default async function AnalyzePage({
       ) : (
         <>
           <h1 className="text-xl font-semibold">Đối chiếu CV với tin tuyển dụng</h1>
-          <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+          <p className="mt-2 text-sm text-ink-muted ">
             Dán toàn bộ mô tả công việc vào đây. Hệ thống sẽ tạo một bản CV riêng cho
             vị trí này — bản gốc của bạn giữ nguyên.
           </p>

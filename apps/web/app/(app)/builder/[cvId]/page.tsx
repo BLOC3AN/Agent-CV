@@ -15,10 +15,13 @@ export const dynamic = 'force-dynamic'
 
 export default async function BuilderPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ cvId: string }>
+  searchParams: Promise<{ assistant?: string; focus?: string }>
 }) {
   const { cvId } = await params
+  const query = await searchParams
 
   const { rows } = await getPool().query<{
     profile_id: string
@@ -54,6 +57,8 @@ export default async function BuilderPage({
       theme={(row.theme ?? {}) as Partial<Theme>}
       layout={(row.layout ?? {}) as Partial<Layout>}
       title={row.title ?? 'CV chưa đặt tên'}
+      initialDrawer={query.assistant === '1' ? 'chat' : null}
+      focusPath={query.focus ?? null}
     />
   )
 }

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
  * Đầu mục + khoảng cách chuẩn.
  *
  * Trước đây `<h2 className="text-sm font-semibold uppercase tracking-wide
- * text-neutral-500">` được chép lại ở 3 chỗ chỉ riêng trong ReturningHome.
+ * text-ink-muted">` được chép lại ở 3 chỗ chỉ riêng trong ReturningHome.
  *
  * Dùng `<h2>` thật chứ không phải div tô đậm: trình đọc màn hình duyệt trang
  * bằng danh sách heading, và một trang toàn div là một trang không duyệt được.

@@ -41,7 +41,7 @@ export default function NewCvPage() {
   return (
     <main className="mx-auto max-w-md px-6 py-12">
       <h1 className="text-2xl font-semibold">Bắt đầu CV mới</h1>
-      <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+      <p className="mt-2 text-sm text-ink-muted ">
         Chỉ cần vài thông tin, phần còn lại điền ngay trong trình soạn.
       </p>
 
@@ -59,12 +59,12 @@ export default function NewCvPage() {
         <button
           type="submit"
           disabled={busy || !form.name.trim()}
-          className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           {busy ? 'Đang tạo…' : 'Tạo CV'}
         </button>
         {error && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger ">
             {error}
           </p>
         )}
@@ -81,12 +81,12 @@ function Field({
   return (
     <label className="block text-sm">
       {label}
-      {required && <span className="text-red-600"> *</span>}
+      {required && <span className="text-danger"> *</span>}
       <input
         {...rest}
         required={required}
         aria-label={label}
-        className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+        className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm  "
       />
     </label>
   )

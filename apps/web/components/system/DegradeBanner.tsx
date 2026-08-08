@@ -72,7 +72,7 @@ export function DegradeBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm dark:border-amber-800 dark:bg-amber-950/40"
+      className="border-b border-warn bg-warn-subtle px-6 py-2 text-sm  "
     >
       <div className="mx-auto flex max-w-5xl flex-wrap items-baseline gap-x-2 gap-y-1">
         <span aria-hidden>⚠</span>
@@ -81,7 +81,7 @@ export function DegradeBanner() {
           Máy chủ AI đang không phản hồi. Bạn vẫn <strong>{on.slice(0, 3).join(', ')}</strong> bình
           thường.
         </span>
-        {off.length > 0 && <span className="text-amber-800 dark:text-amber-300">Tạm ngừng: {off.join(', ')}.</span>}
+        {off.length > 0 && <span className="text-warn ">Tạm ngừng: {off.join(', ')}.</span>}
         <span className="flex-1" />
         <button
           type="button"

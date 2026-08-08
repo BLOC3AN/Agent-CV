@@ -414,6 +414,7 @@ liệt kê 6 thư viện chưa hề được cài, và người đọc không c�
 |---|---|---|
 | Framework | Next.js 15 App Router · React 19 · TypeScript strict | ✅ đang dùng |
 | Style | Tailwind CSS v4 + token `@theme` (xem §12.1) | ✅ đang dùng |
+| App shell | `components/nav/AppShell.tsx` — rail dashboard đã đăng nhập; builder/import/review/print giữ flow riêng | ✅ đang dùng |
 | Component | Tự viết — `components/ui/`, 8 primitive (xem §12.3). Không có shadcn/ui hay Radix | ✅ đang dùng |
 | Chữ | Be Vietnam Pro qua `next/font/local`, 2 weight | ✅ đang dùng |
 | Server state | `fetch` trần trong Server Component + `useEffect` ở client | ✅ đang dùng |
@@ -609,7 +610,8 @@ components/
 ├── kb/
 │   └── KbCurator.tsx        duyệt chunk (UC-61)
 ├── nav/
-│   └── TopNav.tsx
+│   ├── TopNav.tsx
+│   └── AppShell.tsx          rail dashboard theo spec 2026-08-08
 ├── review/
 │   ├── OriginalPane.tsx     ★ ảnh trang PDF + tô sáng vùng (thay cho
 │   │                          "PdfPageViewer" ở bản thiết kế cũ)
@@ -767,6 +769,18 @@ so với các lần đối chiếu khác của chính người dùng.
 ---
 
 ## 13. Việc chưa làm ở giai đoạn 1
+
+### 13.0 Đề xuất dashboard theo mockup tham khảo
+
+Mockup `ChatGPT Image 08_44_19 8 thg 8, 2026.png` được dùng làm nguồn tham
+khảo về phân cấp thông tin, không phải nguồn nghiệp vụ. Phạm vi mapping và
+spec đầy đủ nằm ở
+[`docs/superpowers/specs/2026-08-08-dashboard-reference-adaptation.md`](superpowers/specs/2026-08-08-dashboard-reference-adaptation.md).
+
+Thiết kế đã duyệt: học bố cục card chính + chỉ số + AI + đối chiếu gần đây
+trong ảnh; giữ nguyên API/function/schema hiện tại; loại bỏ các khối không có
+contract như thông báo, việc đã lưu, LinkedIn và nâng cấp trả phí. P1/P2 đang
+được triển khai trong [`dashboard-reference-adaptation.md`](superpowers/specs/2026-08-08-dashboard-reference-adaptation.md).
 
 | Hạng mục | Lý do hoãn |
 |---|---|

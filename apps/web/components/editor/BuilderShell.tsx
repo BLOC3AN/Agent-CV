@@ -11,6 +11,7 @@ import { UndoRedo, SaveStatus } from './UndoRedo'
 import { ThemePicker } from './ThemePicker'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { VersionHistory } from './VersionHistory'
+import { Sheet } from '@/components/ui'
 
 /**
  * Khung màn hình soạn CV — FRONTEND.md §3.1.
@@ -31,12 +32,14 @@ interface Props {
   theme: Partial<Theme>
   layout: Partial<Layout>
   title: string
+  initialDrawer?: Exclude<Drawer, null> | null
+  focusPath?: string | null
 }
 
 type Drawer = 'chat' | 'history' | null
 
 export function BuilderShell(props: Props) {
-  const [drawer, setDrawer] = useState<Drawer>(null)
+  const [drawer, setDrawer] = useState<Drawer>(props.initialDrawer ?? null)
   const init = useEditor((s) => s.init)
   const storeProfile = useEditor((s) => s.profile)
   const storeTheme = useEditor((s) => s.theme)
@@ -54,6 +57,20 @@ export function BuilderShell(props: Props) {
     })
   }, [init, props.profileId, props.cvId, props.initialProfile,
       props.templateId, props.theme, props.layout])
+
+  useEffect(() => {
+    if (props.initialDrawer) setDrawer(props.initialDrawer)
+  }, [props.initialDrawer])
+
+  useEffect(() => {
+    if (!props.focusPath) return
+    const timer = window.setTimeout(() => {
+      const target = Array.from(document.querySelectorAll<HTMLElement>('[data-editable]')).find((el) => el.dataset.editable === props.focusPath)
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      target?.focus({ preventScroll: true })
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [props.focusPath, storeProfile])
 
   /*
    * Lúc server-render, store còn rỗng (init chạy trong useEffect, chỉ có ở
@@ -74,9 +91,9 @@ export function BuilderShell(props: Props) {
   return (
     <div className="flex h-screen flex-col">
       {/* ── Thanh trên ─────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-2">
+      <header className="flex items-center gap-3 border-b border-border bg-surface px-4 py-2">
         <h1 className="truncate font-medium">{props.title}</h1>
-        <span className="text-neutral-300">·</span>
+        <span className="text-ink-subtle">·</span>
         <SaveStatus />
         <div className="flex-1" />
         <UndoRedo />
@@ -85,7 +102,7 @@ export function BuilderShell(props: Props) {
           type="button"
           onClick={() => setDrawer((d) => (d === 'history' ? null : 'history'))}
           aria-pressed={drawer === 'history'}
-          className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100"
+          className="rounded-lg border border-border-strong px-3 py-1.5 text-sm hover:bg-canvas"
         >
           Lịch sử
         </button>
@@ -93,7 +110,7 @@ export function BuilderShell(props: Props) {
           type="button"
           onClick={() => setDrawer((d) => (d === 'chat' ? null : 'chat'))}
           aria-pressed={drawer === 'chat'}
-          className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
+          className="rounded-lg border border-brand-border bg-brand-subtle px-3 py-1.5 text-sm font-medium text-brand-ink hover:bg-brand-border"
         >
           Trợ lý
         </button>
@@ -101,7 +118,7 @@ export function BuilderShell(props: Props) {
           href={`/print/${props.cvId}?variant=presentation`}
           target="_blank"
           rel="noreferrer"
-          className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-100"
+          className="rounded-lg border border-border-strong px-3 py-1.5 text-sm hover:bg-canvas"
         >
           Xem bản in
         </a>
@@ -110,52 +127,40 @@ export function BuilderShell(props: Props) {
 
       <div className="flex min-h-0 flex-1">
         {/* ── Mục lục (ẩn dưới 768px — FRONTEND.md §3.2) ─────────────── */}
-        <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-neutral-200 bg-white p-2 md:block">
+        <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-border bg-surface p-2 md:block">
           <SectionOutline />
-          <hr className="my-3 border-neutral-200" />
+          <hr className="my-3 border-border" />
           <ThemePicker showTemplate />
         </aside>
 
         {/* ── Xem trước + sửa inline ─────────────────────────────────── */}
-        <main className="min-w-0 flex-1 overflow-y-auto bg-neutral-100 p-6">
+        <main className="min-w-0 flex-1 overflow-y-auto bg-canvas p-6">
           <div className="mx-auto w-fit">
             <FieldProvider renderer={editableRenderer}>
               <Template profile={profile} theme={theme} layout={layout} variant="screen" />
             </FieldProvider>
           </div>
-          <p className="mx-auto mt-4 max-w-[210mm] text-center text-xs text-neutral-500">
+          <p className="mx-auto mt-4 max-w-[210mm] text-center text-xs text-ink-muted">
             Bấm vào bất kỳ dòng nào để sửa trực tiếp. Enter để lưu, Escape để huỷ.
           </p>
         </main>
 
-        {/* Slide-over: chiếm chỗ khi mở, trả lại toàn bộ bề ngang khi đóng */}
-        {drawer && (
-          <aside className="w-full shrink-0 overflow-y-auto border-l border-neutral-200 bg-white p-3 sm:w-96 dark:border-neutral-700 dark:bg-neutral-900">
-            <div className="mb-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setDrawer(null)}
-                aria-label="Đóng"
-                className="rounded px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100"
-              >
-                ✕
-              </button>
-            </div>
-            {drawer === 'chat' ? (
-              <ChatPanel
-                profileId={props.profileId}
-                profile={profile}
-                onProfileChange={(p) => useEditor.setState({ profile: p })}
-              />
-            ) : (
-              <VersionHistory
-                profileId={props.profileId}
-                onRestored={(p) => useEditor.setState({ profile: p })}
-              />
-            )}
-          </aside>
-        )}
-      </div>
+       </div>
+
+      <Sheet open={drawer === 'chat'} onClose={() => setDrawer(null)} title="Trợ lý CV">
+        <ChatPanel
+          profileId={props.profileId}
+          profile={profile}
+          onProfileChange={(p) => useEditor.setState({ profile: p })}
+        />
+      </Sheet>
+
+      <Sheet open={drawer === 'history'} onClose={() => setDrawer(null)} title="Lịch sử phiên bản">
+        <VersionHistory
+          profileId={props.profileId}
+          onRestored={(p) => useEditor.setState({ profile: p })}
+        />
+      </Sheet>
     </div>
   )
 }
@@ -164,7 +169,7 @@ function ExportButton({ cvId }: { cvId: string }) {
   return (
     <a
       href={`/api/cv/${cvId}/export`}
-      className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700"
+      className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-ink-muted"
     >
       Xuất PDF
     </a>

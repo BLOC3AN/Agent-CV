@@ -128,7 +128,7 @@ describe('xem lại một mốc trước khi khôi phục', () => {
     await screen.findByRole('dialog', { name: /Xem lại bản cũ/ })
 
     await waitFor(() => {
-      const marked = container.querySelectorAll('[class*="bg-amber-200"]')
+      const marked = container.querySelectorAll('[class*="bg-warn-subtle"]')
       expect(marked.length).toBeGreaterThan(0)
     })
   })

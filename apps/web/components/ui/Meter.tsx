@@ -30,11 +30,13 @@ export function Meter({
   value,
   label,
   parts,
+  showValue = true,
   className = '',
 }: {
   value: number
   label: string
   parts?: MeterPart[]
+  showValue?: boolean
   className?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -52,7 +54,7 @@ export function Meter({
     <div className={className}>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[13px] text-ink-muted">
-          {label} <strong className="tabular-nums text-ink">{pct}%</strong>
+          {label} {showValue && <strong className="tabular-nums text-ink">{pct}%</strong>}
         </span>
         {canExpand && (
           <button

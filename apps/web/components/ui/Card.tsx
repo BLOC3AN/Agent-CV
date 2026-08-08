@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 /**
- * Vỏ thẻ dùng chung — thay cho `rounded-xl border border-neutral-200 p-4`
+ * Vỏ thẻ dùng chung — thay cho `rounded-xl border border-border p-4`
  * được chép lại 7 lần.
  *
  * Biến thể `ai` là CHỮ KÝ THỊ GIÁC của máy (spec §5.1): nền teal nhạt, viền

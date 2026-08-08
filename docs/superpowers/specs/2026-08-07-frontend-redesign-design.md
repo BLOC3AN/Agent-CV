@@ -53,7 +53,7 @@ về nơi đã mở. Đây là modal chặn mọi thay đổi từ AI — dùng 
 | # | Quyết định | Ghi chú |
 |---|---|---|
 | D1 | **Teal + Ink** làm hệ màu thương hiệu | Thị trường tuyển dụng VN kín màu đỏ (TopCV, ITviec) và xanh dương (VietnamWorks); teal đứng riêng mà vẫn đọc là tin cậy |
-| D2 | **Top nav**, không sidebar | Người dùng thường chỉ có 4 đích. Giữ trọn chiều ngang cho `/builder` ở 1366×768 (TDD §2.4) |
+| D2 | **Top nav cho workspace thao tác; sidebar cho dashboard đã đăng nhập** | Giữ trọn chiều ngang cho `/builder` ở 1366×768; Home/CV/settings cần rail ổn định để quét nhanh theo dashboard spec 2026-08-08 |
 | D3 | **AI nổi bật theo cả ba cách**, đặt ở ba tầng khác nhau | Bề mặt · lối vào · chứng cứ — xem §5 |
 | D4 | **Chỉ chế độ sáng**, gỡ toàn bộ `dark:` | Bớt một bảng màu phải chăm; `/print` vốn luôn sáng |
 | D5 | **Hệ màu + tái cấu trúc màn hình** | Đổi màu suông không chữa được vấn đề phân cấp |

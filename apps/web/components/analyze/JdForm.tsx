@@ -53,7 +53,7 @@ export function JdForm({ cvId }: { cvId: string }) {
         onChange={(e) => setText(e.target.value)}
         rows={14}
         placeholder="Dán mô tả công việc vào đây — cả phần yêu cầu ứng viên, càng đầy đủ càng chính xác."
-        className="w-full rounded-lg border border-neutral-300 bg-white p-3 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+        className="w-full rounded-lg border border-border-strong bg-white p-3 text-sm  "
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -61,19 +61,19 @@ export function JdForm({ cvId }: { cvId: string }) {
           type="button"
           onClick={() => void submit()}
           disabled={busy || text.trim().length < MIN}
-          className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           {busy ? 'Đang phân tích…' : 'Phân tích'}
         </button>
         {tooShort && (
-          <span className="text-sm text-neutral-500">
+          <span className="text-sm text-ink-muted">
             Cần ít nhất {MIN} ký tự — dán thêm phần yêu cầu ứng viên giúp nhé.
           </span>
         )}
       </div>
 
       {error && (
-        <p role="alert" className="mt-3 rounded border border-red-300 bg-red-50 p-3 text-sm">
+        <p role="alert" className="mt-3 rounded border border-danger bg-danger-subtle p-3 text-sm">
           {error}
         </p>
       )}

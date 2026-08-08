@@ -7,8 +7,8 @@
  * Token thiết kế — spec 2026-08-07 §3.
  *
  * ── Vì sao ở đây chứ không rải trong component ──
- * Trước đây 586 lượt màu dùng thẳng palette Tailwind (`bg-sky-600`,
- * `text-neutral-500`) trên 38 file. Đổi một sắc độ phải sửa 38 chỗ, và chỗ
+ * Trước đây 586 lượt màu dùng thẳng palette Tailwind (`bg-brand`,
+ * `text-ink-muted`) trên 38 file. Đổi một sắc độ phải sửa 38 chỗ, và chỗ
  * thứ 39 sẽ lệch mà không ai biết.
  *
  * QUY TẮC MỘT DÒNG: teal chỉ dành cho thương hiệu và AI. Nhìn thấy teal là

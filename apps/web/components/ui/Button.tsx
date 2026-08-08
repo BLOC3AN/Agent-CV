@@ -6,7 +6,7 @@ import { devWarn } from './devWarn'
 /**
  * Nút dùng chung.
  *
- * Trước khi có file này, mẫu `rounded-lg bg-sky-600 px-4 py-2` được chép lại
+ * Trước khi có file này, mẫu `rounded-lg bg-brand px-4 py-2` được chép lại
  * 7 lần ở 7 chỗ — lần thứ 8 sẽ lệch một sắc độ hoặc một pixel padding mà
  * không ai phát hiện.
  *

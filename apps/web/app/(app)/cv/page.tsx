@@ -49,13 +49,13 @@ export default async function CvListPage() {
         <span className="flex-1" />
         <Link
           href="/import"
-          className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-600"
+          className="rounded-lg border border-border-strong px-3 py-1.5 text-sm "
         >
           Tải CV lên
         </Link>
         <Link
           href="/cv/new"
-          className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white"
+          className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white"
         >
           Nhập tay
         </Link>
@@ -63,29 +63,29 @@ export default async function CvListPage() {
 
       {rows.length === 0 ? (
         // Danh sách rỗng phải MỜI LÀM GÌ ĐÓ, không chỉ nói "chưa có gì"
-        <div className="mt-8 rounded-xl border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
-          <p className="text-neutral-600 dark:text-neutral-400">Bạn chưa có CV nào.</p>
-          <p className="mt-1 text-sm text-neutral-500">
+        <div className="mt-8 rounded-xl border border-dashed border-border-strong p-8 text-center ">
+          <p className="text-ink-muted ">Bạn chưa có CV nào.</p>
+          <p className="mt-1 text-sm text-ink-muted">
             Tải một file PDF lên, hoặc nhập tay nếu bạn chưa có CV.
           </p>
         </div>
       ) : (
-        <ul className="mt-6 divide-y divide-neutral-200 rounded-xl border border-neutral-200 dark:divide-neutral-700 dark:border-neutral-700">
+        <ul className="mt-6 divide-y divide-border rounded-xl border border-border  ">
           {rows.map((r) => (
             <li key={r.id}>
               <Link
                 href={`/builder/${r.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                className="flex items-center gap-3 px-4 py-3 hover:bg-canvas "
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{r.title ?? 'CV của tôi'}</p>
-                  <p className="text-sm text-neutral-500">
+                  <p className="text-sm text-ink-muted">
                     {/* Bản gắn với một tin tuyển dụng phải nói rõ là tin nào */}
                     {r.jd_title ? `Cho tin: ${r.jd_title} · ` : ''}
                     Sửa {when(r.updated_at)}
                   </p>
                 </div>
-                <span aria-hidden className="text-neutral-400">
+                <span aria-hidden className="text-ink-subtle">
                   →
                 </span>
               </Link>

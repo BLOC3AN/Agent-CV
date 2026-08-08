@@ -45,7 +45,7 @@ function makeHighlighter(paths: string[]): FieldRenderer {
       <Tag
         className={[
           className,
-          hit ? 'rounded bg-amber-200/80 ring-1 ring-amber-400 dark:bg-amber-500/30' : '',
+          hit ? 'rounded bg-warn-subtle/80 ring-1 ring-warn ' : '',
         ]
           .filter(Boolean)
           .join(' ')}
@@ -160,10 +160,10 @@ export function RevisionPreview({
       aria-label="Xem lại bản cũ"
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 sm:items-center sm:p-4"
     >
-      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-neutral-900">
-        <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-neutral-200 p-4 dark:border-neutral-700">
+      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl ">
+        <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border p-4 ">
           <h2 className="text-lg font-semibold">Bản {when}</h2>
-          <span className="text-sm text-neutral-500">
+          <span className="text-sm text-ink-muted">
             {snap ? AUTHOR_TEXT[snap.author] : ''}
             {snap ? ` · ${snap.ops.length} thay đổi` : ''}
           </span>
@@ -172,7 +172,7 @@ export function RevisionPreview({
             type="button"
             onClick={onClose}
             aria-label="Đóng"
-            className="rounded px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="rounded px-2 py-1 text-sm text-ink-muted hover:bg-canvas "
           >
             ✕
           </button>
@@ -180,20 +180,20 @@ export function RevisionPreview({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {error && (
-            <p role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-sm dark:bg-red-950/30">
+            <p role="alert" className="rounded border border-danger bg-danger-subtle p-2 text-sm ">
               {error}
             </p>
           )}
-          {!snap && !error && <p className="text-sm text-neutral-500">Đang dựng lại bản này…</p>}
+          {!snap && !error && <p className="text-sm text-ink-muted">Đang dựng lại bản này…</p>}
 
           {snap && (
             <>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 Đã thay đổi ở bản này
               </h3>
 
               {snap.ops.length === 0 && (
-                <p className="mt-2 text-sm text-neutral-500">Mốc này không đổi nội dung nào.</p>
+                <p className="mt-2 text-sm text-ink-muted">Mốc này không đổi nội dung nào.</p>
               )}
 
               <ul className="mt-2 space-y-2">
@@ -202,9 +202,9 @@ export function RevisionPreview({
                   return (
                     <li
                       key={`${op.path}-${i}`}
-                      className="rounded-lg border border-neutral-200 p-2 text-sm dark:border-neutral-700"
+                      className="rounded-lg border border-border p-2 text-sm "
                     >
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-ink-muted">
                         {OP_TEXT[op.op] ?? op.op}
                         {pointerSection(op.path) ? ` · ${pointerSection(op.path)}` : ''}
                       </div>
@@ -214,12 +214,12 @@ export function RevisionPreview({
                         chỉ phải học một lần.
                       */}
                       {old && op.op !== 'add' && (
-                        <p className="mt-1 text-neutral-500 line-through">{old}</p>
+                        <p className="mt-1 text-ink-muted line-through">{old}</p>
                       )}
                       {op.op === 'remove' ? (
-                        <p className="mt-1 text-red-600 dark:text-red-400">(xoá)</p>
+                        <p className="mt-1 text-danger ">(xoá)</p>
                       ) : (
-                        <p className="mt-1 rounded bg-amber-100 px-1 dark:bg-amber-500/20">
+                        <p className="mt-1 rounded bg-warn-subtle px-1 ">
                           {show(op.value)}
                         </p>
                       )}
@@ -228,12 +228,12 @@ export function RevisionPreview({
                 })}
               </ul>
 
-              <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-700">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border pt-4 ">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                   CV toàn bản
                 </h3>
 
-                <div className="flex overflow-hidden rounded border border-neutral-300 text-xs dark:border-neutral-600">
+                <div className="flex overflow-hidden rounded border border-border-strong text-xs ">
                   {(
                     [
                       ['after', 'Tại mốc này'],
@@ -248,7 +248,7 @@ export function RevisionPreview({
                       disabled={key === 'before' && snap.before === null}
                       className={[
                         'px-2 py-1 disabled:opacity-40',
-                        side === key ? 'bg-sky-600 text-white' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800',
+                        side === key ? 'bg-brand text-white' : 'hover:bg-canvas ',
                       ].join(' ')}
                     >
                       {label}
@@ -260,21 +260,21 @@ export function RevisionPreview({
                   type="button"
                   onClick={() => setShowCv((v) => !v)}
                   aria-expanded={showCv}
-                  className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-600"
+                  className="rounded border border-border-strong px-2 py-1 text-xs "
                 >
                   {showCv ? 'Ẩn CV' : 'Hiện CV'}
                 </button>
 
                 {showCv && changed.length > 0 && (
-                  <span className="text-xs text-neutral-500">
-                    Chỗ <mark className="bg-amber-200 dark:bg-amber-500/30">tô vàng</mark> là chỗ
+                  <span className="text-xs text-ink-muted">
+                    Chỗ <mark className="bg-warn-subtle ">tô vàng</mark> là chỗ
                     thay đổi
                   </span>
                 )}
               </div>
 
               {side === 'before' && (
-                <p className="mt-2 text-xs text-neutral-500">
+                <p className="mt-2 text-xs text-ink-muted">
                   Đây chính là bản bạn nhận được nếu bấm “Khôi phục về đây”.
                 </p>
               )}
@@ -282,7 +282,7 @@ export function RevisionPreview({
               {showCv && (
                 // Thu nhỏ để một trang A4 vừa bề ngang hộp thoại. `origin-top`
                 // để phần bị thu nhỏ không để lại khoảng trắng ở trên.
-                <div className="mt-3 overflow-x-auto rounded border border-neutral-200 bg-neutral-100 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+                <div className="mt-3 overflow-x-auto rounded border border-border bg-canvas p-3  ">
                   <div className="mx-auto w-fit origin-top scale-[0.72] sm:scale-90">
                     <FieldProvider renderer={makeHighlighter(changed)}>
                       <Template
@@ -299,13 +299,13 @@ export function RevisionPreview({
           )}
         </div>
 
-        <footer className="flex flex-wrap items-center gap-2 border-t border-neutral-200 p-4 dark:border-neutral-700">
+        <footer className="flex flex-wrap items-center gap-2 border-t border-border p-4 ">
           {canRestore && (
             <button
               type="button"
               onClick={() => void onRestore()}
               disabled={restoring || !snap}
-              className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+              className="rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
             >
               {restoring ? 'Đang khôi phục…' : 'Khôi phục về đây'}
             </button>
@@ -314,7 +314,7 @@ export function RevisionPreview({
             type="button"
             onClick={onClose}
             disabled={restoring}
-            className="rounded border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-600"
+            className="rounded border border-border-strong px-4 py-2 text-sm "
           >
             Đóng
           </button>
@@ -323,7 +323,7 @@ export function RevisionPreview({
             mất, không để người dùng tự phát hiện sau khi đã bấm.
           */}
           {snap && canRestore && (
-            <p className="text-xs text-amber-700 dark:text-amber-400">
+            <p className="text-xs text-warn ">
               Sẽ huỷ mốc này
               {snap.newerCount > 0 ? ` và ${snap.newerCount} mốc mới hơn` : ''}, đưa CV về trạng
               thái trước mốc này.

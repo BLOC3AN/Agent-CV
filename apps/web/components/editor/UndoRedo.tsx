@@ -30,7 +30,7 @@ export function UndoRedo() {
   }, [undo, redo])
 
   const cls =
-    'rounded px-2 py-1 text-sm text-neutral-600 hover:bg-neutral-100 disabled:opacity-30'
+    'rounded px-2 py-1 text-sm text-ink-muted hover:bg-canvas disabled:opacity-30'
 
   return (
     <div className="flex gap-0.5">
@@ -47,13 +47,13 @@ export function SaveStatus() {
   const state = useEditor((s) => s.saveState)
   const error = useEditor((s) => s.lastError)
 
-  if (state === 'saving') return <span className="text-xs text-neutral-400">Đang lưu…</span>
+  if (state === 'saving') return <span className="text-xs text-ink-subtle">Đang lưu…</span>
   if (state === 'error') {
     return (
-      <span className="text-xs text-red-600" role="alert">
+      <span className="text-xs text-danger" role="alert">
         Chưa lưu được{error ? ` — ${error}` : ''}
       </span>
     )
   }
-  return <span className="text-xs text-neutral-400">Đã lưu</span>
+  return <span className="text-xs text-ink-subtle">Đã lưu</span>
 }

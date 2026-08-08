@@ -33,18 +33,18 @@ export function DeleteAccount({ email }: { email: string }) {
   }
 
   return (
-    <section className="mt-10 rounded-xl border border-red-300 p-4 dark:border-red-900">
-      <h2 className="font-medium text-red-700 dark:text-red-400">Xoá tài khoản</h2>
+    <section className="mt-10 rounded-xl border border-danger p-4 ">
+      <h2 className="font-medium text-danger ">Xoá tài khoản</h2>
 
       {!open ? (
         <>
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+          <p className="mt-1 text-sm text-ink-muted ">
             Xoá vĩnh viễn tài khoản và toàn bộ dữ liệu. Không khôi phục được.
           </p>
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="mt-3 rounded-lg border border-red-400 px-4 py-2 text-sm text-red-700 dark:text-red-400"
+            className="mt-3 rounded-lg border border-danger px-4 py-2 text-sm text-danger "
           >
             Tôi muốn xoá tài khoản
           </button>
@@ -53,7 +53,7 @@ export function DeleteAccount({ email }: { email: string }) {
         <>
           {/* Nói RÕ cái sẽ mất — UC-13 bước 2 */}
           <p className="mt-1 text-sm">Những thứ sau sẽ bị xoá và không lấy lại được:</p>
-          <ul className="mt-2 list-inside list-disc text-sm text-neutral-600 dark:text-neutral-400">
+          <ul className="mt-2 list-inside list-disc text-sm text-ink-muted ">
             <li>Hồ sơ và toàn bộ lịch sử chỉnh sửa</li>
             <li>Các bản CV và file PDF đã xuất</li>
             <li>Tin tuyển dụng đã lưu và kết quả đối chiếu</li>
@@ -67,7 +67,7 @@ export function DeleteAccount({ email }: { email: string }) {
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               aria-label="Xác nhận email"
-              className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm  "
             />
           </label>
 
@@ -76,7 +76,7 @@ export function DeleteAccount({ email }: { email: string }) {
               type="button"
               onClick={() => void remove()}
               disabled={busy || confirm.trim().toLowerCase() !== email.toLowerCase()}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+              className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
             >
               {busy ? 'Đang xoá…' : 'Xoá vĩnh viễn'}
             </button>
@@ -84,13 +84,13 @@ export function DeleteAccount({ email }: { email: string }) {
               type="button"
               onClick={() => setOpen(false)}
               disabled={busy}
-              className="rounded-lg border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-600"
+              className="rounded-lg border border-border-strong px-4 py-2 text-sm "
             >
               Huỷ
             </button>
           </div>
           {error && (
-            <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="mt-2 text-sm text-danger ">
               {error}
             </p>
           )}

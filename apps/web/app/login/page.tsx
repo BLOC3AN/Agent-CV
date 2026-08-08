@@ -53,18 +53,18 @@ function LoginForm() {
   return (
     <main className="mx-auto max-w-md px-6 py-20">
       <h1 className="text-2xl font-semibold">Đăng nhập</h1>
-      <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+      <p className="mt-2 text-sm text-ink-muted ">
         Nhập email, chúng tôi gửi cho bạn một link đăng nhập. Không cần mật khẩu.
       </p>
 
       {err && (
-        <p role="alert" className="mt-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm dark:bg-amber-950/30">
+        <p role="alert" className="mt-4 rounded border border-warn bg-warn-subtle p-3 text-sm ">
           {err}
         </p>
       )}
 
       {state === 'sent' ? (
-        <div className="mt-6 rounded-lg border border-neutral-200 p-4 dark:border-neutral-700">
+        <div className="mt-6 rounded-lg border border-border p-4 ">
           <p className="text-sm">
             Đã tạo link đăng nhập cho <strong>{email}</strong>. Link hết hạn sau 15 phút.
           </p>
@@ -74,9 +74,9 @@ function LoginForm() {
             SMTP_URL (xem lib/mailer.ts).
           */}
           {devLink && (
-            <div className="mt-3 rounded bg-neutral-100 p-3 text-xs dark:bg-neutral-800">
+            <div className="mt-3 rounded bg-canvas p-3 text-xs ">
               <p className="font-medium">Máy này chưa cấu hình gửi email.</p>
-              <a href={devLink} className="mt-1 block break-all text-sky-700 underline dark:text-sky-400">
+              <a href={devLink} className="mt-1 block break-all text-brand-ink underline ">
                 {devLink}
               </a>
             </div>
@@ -84,7 +84,7 @@ function LoginForm() {
           <button
             type="button"
             onClick={() => setState('idle')}
-            className="mt-3 text-sm text-neutral-500 underline"
+            className="mt-3 text-sm text-ink-muted underline"
           >
             Dùng email khác
           </button>
@@ -98,24 +98,24 @@ function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="ban@example.com"
             aria-label="Email"
-            className="w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+            className="w-full rounded border border-border-strong px-3 py-2 text-sm  "
           />
           <button
             type="submit"
             disabled={state === 'sending' || !email.trim()}
-            className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            className="w-full rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
           >
             {state === 'sending' ? 'Đang gửi…' : 'Gửi link đăng nhập'}
           </button>
           {error && (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-danger ">
               {error}
             </p>
           )}
         </form>
       )}
 
-      <p className="mt-8 text-sm text-neutral-500">
+      <p className="mt-8 text-sm text-ink-muted">
         <Link href="/" className="underline">
           Quay lại trang chủ
         </Link>
