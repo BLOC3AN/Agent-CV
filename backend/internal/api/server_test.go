@@ -35,6 +35,25 @@ func TestApplyJSONPatchRejectsMissingPath(t *testing.T) {
 	}
 }
 
+func TestParseChatModelOutputPatch(t *testing.T) {
+	got := parseChatModelOutput("```json\n{\"kind\":\"patch\",\"summary\":\"Nhóm skills\",\"ops\":[{\"op\":\"add\",\"path\":\"/skills/0/group\",\"value\":\"MLOps\",\"rationale\":\"Dễ quét hơn\",\"grounding\":{\"type\":\"existing_field\",\"ref\":\"/skills/0\"},\"kbRefs\":[]}]}\n```")
+	if got.Kind != "patch" || len(got.Ops) != 1 || got.Summary != "Nhóm skills" {
+		t.Fatalf("unexpected parsed proposal: %#v", got)
+	}
+}
+
+func TestValidateChatProposalUsesProfileSkillShape(t *testing.T) {
+	profile := []byte(`{"skills":[{"name":"Python"},{"name":"Redis"}]}`)
+	valid := []json.RawMessage{json.RawMessage(`{"op":"add","path":"/skills/0/group","value":"Data","rationale":"Nhóm rõ hơn","grounding":{"type":"existing_field","ref":"/skills/0"},"kbRefs":[]}`)}
+	if err := validateChatProposal(profile, valid); err != nil {
+		t.Fatal(err)
+	}
+	invalid := []json.RawMessage{json.RawMessage(`{"op":"replace","path":"/skills/0","value":{"category":"Data","items":["Python"]},"rationale":"Đổi nhóm","grounding":{"type":"existing_field","ref":"/skills/0"},"kbRefs":[]}`)}
+	if err := validateChatProposal(profile, invalid); err == nil {
+		t.Fatal("expected category/items shape to be rejected")
+	}
+}
+
 func TestCancelJob(t *testing.T) {
 	s := NewServer()
 	s.jobs["job-1"] = &Job{ID: "job-1", Kind: "parse_cv", Status: "queued", CreatedAt: time.Now()}
@@ -86,11 +105,11 @@ func TestUploadCreatesFreshJobForEachUploadID(t *testing.T) {
 
 func TestReviewContractMatchesVerifiedPaths(t *testing.T) {
 	profile := map[string]any{
-		"basics": map[string]any{"name": "Ada"},
+		"basics":    map[string]any{"name": "Ada"},
 		"education": []any{map[string]any{"school": "MIT"}},
-		"skills": []any{map[string]any{"name": "Go"}},
+		"skills":    []any{map[string]any{"name": "Go"}},
 		"languages": []any{map[string]any{"name": "English"}},
-		"_meta": map[string]any{"verified": map[string]any{"/basics": true, "/education/0": true}},
+		"_meta":     map[string]any{"verified": map[string]any{"/basics": true, "/education/0": true}},
 	}
 	items, progress := reviewContract(profile)
 	if len(items) != 4 || progress["done"] != 2 || progress["complete"] != false {

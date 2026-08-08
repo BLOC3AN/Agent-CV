@@ -46,3 +46,18 @@ Tài liệu này mô tả giai đoạn cutover, không chỉ việc build binary
 3. Chuyển routing về Node.
 4. Không rollback schema bằng cách xoá migration; chỉ rollback binary/routing.
 5. Đối soát các job và revision phát sinh trong thời gian canary.
+
+## UC-GO-07 — Trợ lý đề xuất và áp dụng thay đổi CV
+
+1. Người dùng yêu cầu sửa CV; Go gửi hồ sơ và lịch sử vào model với JSON Schema
+   bắt buộc.
+2. Nếu chỉ hỏi, model trả `kind=reply`; hệ thống chỉ lưu tin nhắn, không sửa
+   profile.
+3. Nếu yêu cầu thay đổi, model trả `kind=patch`; Go validate JSON Patch theo
+   `ProfileSchema`, lưu `proposed_patches` ở trạng thái `pending`, không ghi
+   `profiles.data`.
+4. Frontend hiển thị diff/proposal. Người dùng xác nhận thì gọi
+   `/api/chat/proposals/:id` với các index được chọn.
+5. Go kiểm tra ownership, lock profile, apply patch, tạo revision `ai`, settle
+   proposal và trả profile mới. Nếu patch lỗi, profile và proposal không bị
+   báo thành công giả.

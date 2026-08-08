@@ -56,6 +56,8 @@
 | CUT-45 | Retry/backoff parity | Lỗi hạ tầng retry tối đa 3 lần với `retry_at`; lỗi dữ liệu terminal ngay; stale quá 30 phút sau lần 3 thành `STALE` |
 | CUT-46 | File retention parity | File quá 48 giờ được xóa; file dùng chung chỉ xóa khi job cuối hết hạn; lỗi filesystem không đánh dấu `file_purged_at` |
 | CUT-47 | Staging reconciliation | Script đối soát counts/checksums users/profiles/CV/jobs/revisions/matches, chỉ cho cutover khi khớp; script read-only |
+| CUT-48 | Chat reply → proposal → confirm → apply | Request sửa CV trả `kind=patch` + `proposalId`; confirm chỉ áp dụng op đã chọn, tạo revision `ai`; reply thường không đổi profile |
+| CUT-49 | Skills proposal sai shape | Proposal `category/items`, path dạng mảng hoặc field ngoài `name/level/canonical/group` bị reject; profile không đổi |
 
 ## Lệnh kiểm tra tối thiểu
 
@@ -73,5 +75,5 @@ GO_API_CUTOVER=true BUILDX_BUILDER=default docker compose -f backend/docker-comp
 curl -fsS http://localhost:3000/api/health
 ```
 
-Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-47
+Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-49
 trên database staging hoặc bản snapshot có thể khôi phục.

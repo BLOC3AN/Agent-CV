@@ -9,7 +9,7 @@ diện cùng lúc.
 ## Trạng thái
 
 `backend/cmd/api` và `backend/cmd/worker` hiện đã có production path cho
-auth, upload/job, profile/CV, KB, analyze, chat reply, export PDF, parse CV và
+auth, upload/job, profile/CV, KB, analyze, chat reply/proposal/apply, export PDF, parse CV và
 keyword/semantic matching. Các CV thật trong `var/storage` đã được chạy qua
 worker Go. Import review, import complete, job SSE (`progress/done/failed`),
 analyze SSE (`report/done`) và proposal JSON Patch cũng đã khớp contract mà
@@ -44,6 +44,7 @@ legacy; mỗi luồng mới phải có implementation và test ở Go trước.
   `Đồng ý`, `Xác nhận` (và biến thể không dấu) sẽ gọi endpoint proposal với
   toàn bộ operation. Không có proposal thì `OK` vẫn được gửi như một câu chat
   bình thường.
+
 
 Go đã có production path với PostgreSQL và storage thật. Migration chưa hoàn
 tất cho tới khi frontend đổi sang Go và các route/worker còn lại được chuyển.

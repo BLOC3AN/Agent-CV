@@ -41,6 +41,18 @@ type Server struct {
 	redis       *redis.Client
 }
 
+type chatModelProposal struct {
+	Summary string            `json:"summary"`
+	Ops     []json.RawMessage `json:"ops"`
+}
+
+type chatModelOutput struct {
+	Kind    string            `json:"kind"`
+	Text    string            `json:"text"`
+	Summary string            `json:"summary"`
+	Ops     []json.RawMessage `json:"ops"`
+}
+
 func NewServer() *Server { return &Server{jobs: make(map[string]*Job)} }
 
 // NewServerWithDB enables the production path. The zero-dependency constructor
@@ -1548,25 +1560,165 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	s.cacheChatMessages(r.Context(), userID, sessionID, history)
 	profileRaw := []byte{}
 	_ = s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 AND user_id=$2`, body.ProfileID, userID).Scan(&profileRaw)
-	prompt := []map[string]string{{"role": "system", "content": "Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ. Không tự ý thay đổi hồ sơ; nếu đề xuất thay đổi, mô tả rõ để người dùng xác nhận."}, {"role": "user", "content": "PROFILE:\n" + string(profileRaw) + "\n\nHISTORY:\n" + jsonString(history) + "\n\nUSER:\n" + body.Message}}
+	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": "PROFILE:\n" + string(profileRaw) + "\n\nHISTORY:\n" + jsonString(history) + "\n\nUSER:\n" + body.Message}}
 	answer, modelErr := callChatModel(r.Context(), prompt)
 	if modelErr != nil {
 		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "Model chưa khả dụng: "+modelErr.Error())
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "MODEL_UNAVAILABLE", "sessionId": sessionID})
 		return
 	}
+	modelOutput := parseChatModelOutput(answer)
+	var assistantContent = modelOutput.Text
+	if modelOutput.Kind == "patch" {
+		modelOutput.Ops = normalizeChatProposalOps(modelOutput.Ops)
+		if err := validateChatProposal(profileRaw, modelOutput.Ops); err != nil {
+			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa thể tạo đề xuất an toàn từ yêu cầu này: " + err.Error()}
+			assistantContent = modelOutput.Text
+		} else {
+			assistantContent = modelOutput.Summary
+		}
+	}
 	var assistantID string
-	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2) RETURNING id`, sessionID, answer).Scan(&assistantID); err != nil {
+	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2) RETURNING id`, sessionID, assistantContent).Scan(&assistantID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được câu trả lời"})
 		return
 	}
 	_, _ = s.db.ExecContext(r.Context(), `UPDATE chat_sessions SET updated_at=now() WHERE id=$1`, sessionID)
-	history = append(history, map[string]string{"role": "assistant", "content": answer})
+	history = append(history, map[string]string{"role": "assistant", "content": assistantContent})
 	s.cacheChatMessages(r.Context(), userID, sessionID, history)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	payload, _ := json.Marshal(map[string]any{"kind": "reply", "text": answer, "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID})
+	if modelOutput.Kind == "patch" {
+		var proposalID string
+		if err := s.db.QueryRowContext(r.Context(), `INSERT INTO proposed_patches(message_id,ops) VALUES($1,$2::jsonb) RETURNING id`, assistantID, jsonRawArray(modelOutput.Ops)).Scan(&proposalID); err != nil {
+			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa lưu được đề xuất để bạn duyệt. Hồ sơ chưa thay đổi."}
+			assistantContent = modelOutput.Text
+			_, _ = s.db.ExecContext(r.Context(), `UPDATE chat_messages SET content=$2 WHERE id=$1`, assistantID, assistantContent)
+		} else {
+			payload, _ := json.Marshal(map[string]any{"kind": "patch", "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID, "proposalId": proposalID, "summary": modelOutput.Summary, "ops": modelOutput.Ops, "rejected": []any{}})
+			fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+			return
+		}
+	}
+	payload, _ := json.Marshal(map[string]any{"kind": "reply", "text": assistantContent, "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID})
 	fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+}
+
+func chatSystemPrompt() string {
+	return `Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ và chỉ trả về DUY NHẤT một object JSON hợp lệ.
+
+Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
+{"kind":"reply","text":"..."}
+
+Nếu người dùng yêu cầu sửa, viết lại, nhóm, sắp xếp hoặc cập nhật hồ sơ, KHÔNG được nói đã cập nhật. Hãy trả đề xuất để người dùng duyệt:
+{"kind":"patch","summary":"...","ops":[{"op":"add|replace|remove","path":"/skills/0/group","value":"...","rationale":"...","grounding":{"type":"existing_field|user_message|kb|inference","ref":"..."},"kbRefs":[]}]}
+
+Quy tắc bắt buộc: không tự ghi hồ sơ; không bịa dữ kiện; tối đa 20 ops; skills luôn là mảng các object có name và chỉ được dùng name, level, canonical, group; muốn nhóm skills thì cập nhật field group tại từng /skills/N. value bắt buộc với add/replace. Mỗi op/path chỉ xuất hiện một lần.`
+}
+
+func parseChatModelOutput(raw string) chatModelOutput {
+	clean := strings.TrimSpace(raw)
+	if strings.HasPrefix(clean, "```") {
+		clean = strings.TrimPrefix(clean, "```")
+		if i := strings.IndexByte(clean, '\n'); i >= 0 {
+			clean = clean[i+1:]
+		}
+		clean = strings.TrimSuffix(strings.TrimSpace(clean), "```")
+	}
+	var out chatModelOutput
+	if json.Unmarshal([]byte(clean), &out) != nil {
+		return chatModelOutput{Kind: "reply", Text: raw}
+	}
+	if out.Kind == "patch" && out.Summary != "" && len(out.Ops) > 0 {
+		return out
+	}
+	if out.Kind == "reply" && out.Text != "" {
+		return out
+	}
+	return chatModelOutput{Kind: "reply", Text: raw}
+}
+
+func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
+	if len(ops) == 0 || len(ops) > 20 {
+		return fmt.Errorf("số lượng thay đổi không hợp lệ")
+	}
+	seen := map[string]bool{}
+	for _, raw := range ops {
+		var op struct {
+			Op        string          `json:"op"`
+			Path      string          `json:"path"`
+			Value     json.RawMessage `json:"value"`
+			Rationale string          `json:"rationale"`
+			Grounding struct {
+				Type string `json:"type"`
+				Ref  string `json:"ref"`
+			} `json:"grounding"`
+		}
+		if json.Unmarshal(raw, &op) != nil || op.Op == "" || op.Path == "" {
+			return fmt.Errorf("op không hợp lệ")
+		}
+		if op.Op != "add" && op.Op != "replace" && op.Op != "remove" {
+			return fmt.Errorf("op %q không được hỗ trợ", op.Op)
+		}
+		if !strings.HasPrefix(op.Path, "/") || strings.Contains(op.Path, "[") || seen[op.Op+" "+op.Path] {
+			return fmt.Errorf("path không hợp lệ hoặc bị trùng: %s", op.Path)
+		}
+		seen[op.Op+" "+op.Path] = true
+		if op.Op != "remove" && len(op.Value) == 0 {
+			return fmt.Errorf("op %s thiếu value", op.Path)
+		}
+		if len(op.Rationale) < 3 || op.Grounding.Type == "" || op.Grounding.Ref == "" {
+			return fmt.Errorf("op %s thiếu rationale hoặc grounding", op.Path)
+		}
+		if strings.HasPrefix(op.Path, "/skills/") {
+			tail := strings.TrimPrefix(op.Path, "/skills/")
+			if strings.Contains(tail, "/") && !strings.HasSuffix(op.Path, "/name") && !strings.HasSuffix(op.Path, "/level") && !strings.HasSuffix(op.Path, "/canonical") && !strings.HasSuffix(op.Path, "/group") {
+				return fmt.Errorf("skills chỉ được sửa name, level, canonical hoặc group")
+			}
+		}
+	}
+	updated, err := applyJSONPatch(profileRaw, jsonRawArray(ops))
+	if err != nil {
+		return fmt.Errorf("patch không áp dụng được: %v", err)
+	}
+	var profile struct {
+		Skills []map[string]any `json:"skills"`
+	}
+	if json.Unmarshal(updated, &profile) != nil {
+		return fmt.Errorf("hồ sơ sau patch không hợp lệ")
+	}
+	for _, skill := range profile.Skills {
+		if _, ok := skill["name"].(string); !ok {
+			return fmt.Errorf("mỗi skill phải có name dạng chuỗi")
+		}
+		for key := range skill {
+			if key != "name" && key != "level" && key != "canonical" && key != "group" {
+				return fmt.Errorf("field skill không được hỗ trợ: %s", key)
+			}
+		}
+	}
+	return nil
+}
+
+func normalizeChatProposalOps(ops []json.RawMessage) []json.RawMessage {
+	out := make([]json.RawMessage, 0, len(ops))
+	for _, raw := range ops {
+		var op map[string]any
+		if json.Unmarshal(raw, &op) == nil {
+			path, _ := op["path"].(string)
+			// Models often use replace for an optional group field that is not
+			// present yet. RFC 6902 add is also a replacement for an existing
+			// object member, so it is safe for both cases.
+			if op["op"] == "replace" && strings.HasPrefix(path, "/skills/") && strings.HasSuffix(path, "/group") {
+				op["op"] = "add"
+				if normalized, err := json.Marshal(op); err == nil {
+					raw = normalized
+				}
+			}
+		}
+		out = append(out, raw)
+	}
+	return out
 }
 
 func (s *Server) cacheChatMessages(ctx context.Context, userID, sessionID string, messages []map[string]string) {
@@ -1716,7 +1868,18 @@ func callChatModel(ctx context.Context, messages []map[string]string) (string, e
 		base = "http://100.68.50.41"
 	}
 	endpoint := strings.TrimRight(base, "/") + ":5011/v1/chat/completions"
-	request := map[string]any{"messages": messages, "temperature": 0.2, "max_tokens": 1200}
+	request := map[string]any{
+		"messages":    messages,
+		"temperature": 0.2,
+		"max_tokens":  1800,
+		"response_format": map[string]any{
+			"type": "json_schema",
+			"json_schema": map[string]any{
+				"name":   "cv_chat_result",
+				"schema": chatResponseSchema(),
+			},
+		},
+	}
 	raw := jsonString(request)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(raw))
 	if err != nil {
@@ -1743,6 +1906,45 @@ func callChatModel(ctx context.Context, messages []map[string]string) (string, e
 		return "", fmt.Errorf("empty model response")
 	}
 	return out.Choices[0].Message.Content, nil
+}
+
+func chatResponseSchema() map[string]any {
+	patchOp := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"required": []string{"op", "path", "value", "rationale", "grounding", "kbRefs"},
+		"properties": map[string]any{
+			"op":   map[string]any{"type": "string", "enum": []string{"add", "replace", "remove"}},
+			"path": map[string]any{"type": "string"},
+			"value": map[string]any{"anyOf": []any{
+				map[string]any{"type": "string"}, map[string]any{"type": "number"},
+				map[string]any{"type": "boolean"}, map[string]any{"type": "null"},
+				map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				map[string]any{"type": "object", "additionalProperties": true},
+			}},
+			"rationale": map[string]any{"type": "string"},
+			"grounding": map[string]any{
+				"type": "object", "additionalProperties": false,
+				"required": []string{"type", "ref"},
+				"properties": map[string]any{
+					"type": map[string]any{"type": "string", "enum": []string{"user_message", "existing_field", "kb", "inference"}},
+					"ref":  map[string]any{"type": "string"},
+				},
+			},
+			"kbRefs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		},
+	}
+	return map[string]any{"anyOf": []any{
+		map[string]any{
+			"type": "object", "additionalProperties": false,
+			"required":   []string{"kind", "text"},
+			"properties": map[string]any{"kind": map[string]any{"type": "string", "const": "reply"}, "text": map[string]any{"type": "string"}},
+		},
+		map[string]any{
+			"type": "object", "additionalProperties": false,
+			"required":   []string{"kind", "summary", "ops"},
+			"properties": map[string]any{"kind": map[string]any{"type": "string", "const": "patch"}, "summary": map[string]any{"type": "string"}, "ops": map[string]any{"type": "array", "minItems": 1, "maxItems": 20, "items": patchOp}},
+		},
+	}}
 }
 
 func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
