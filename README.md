@@ -58,8 +58,52 @@ route sẽ được chuyển sang Go theo quy trình trong
 
 Compose nằm ở `backend/docker-compose.yml`:
 
+Để chạy đầy đủ stack và cho frontend gọi trực tiếp Go API:
+
 ```bash
-docker compose -f backend/docker-compose.yml --profile full up -d --build
+GO_API_CUTOVER=true \
+BUILDX_BUILDER=default \
+docker compose -f backend/docker-compose.yml --env-file .env \
+  --profile full up -d --build
+```
+
+Sau khi chạy, mở [http://localhost:3000](http://localhost:3000).
+
+### Đăng nhập khi test local
+
+Hệ thống dùng magic link, không dùng mật khẩu:
+
+1. Mở [http://localhost:3000/login](http://localhost:3000/login).
+2. Nhập email bất kỳ hợp lệ, ví dụ `tester@example.com`.
+3. Bấm **Gửi link đăng nhập**.
+4. Vì local chưa cấu hình SMTP, màn hình sẽ hiện link đăng nhập trực tiếp.
+   Bấm link đó để tạo session và quay về trang chủ.
+
+Link có hiệu lực 15 phút; session giữ 30 ngày trên trình duyệt. Khi deploy
+thật, cấu hình SMTP để link được gửi qua email thay vì hiển thị trên màn hình.
+
+Nếu muốn gọi API kiểm tra nhanh:
+
+```bash
+curl http://localhost:3000/api/health
+curl -X POST http://localhost:3000/api/auth/request \
+  -H 'content-type: application/json' \
+  -d '{"email":"tester@example.com"}'
+```
+
+Response local sẽ có trường `devLink`; mở trường này trong trình duyệt để đăng
+nhập.
+
+Kiểm tra trạng thái service:
+
+```bash
+docker compose -f backend/docker-compose.yml --profile full ps
+```
+
+Tắt stack:
+
+```bash
+docker compose -f backend/docker-compose.yml --profile full down
 ```
 
 Nếu Docker đang chọn builder container bị lỗi DNS, dùng builder mặc định:
@@ -74,6 +118,10 @@ Hướng dẫn sửa DNS lâu dài cho Docker daemon: [`backend/docs/DOCKER_DNS.
 Các service gồm Go backend, Next frontend, Postgres, Redis, PDFKit và worker
 chuyển tiếp. Dev có giá trị `AUTH_SECRET` mặc định; production phải đặt secret
 riêng trong `.env` hoặc secret manager.
+
+`GO_API_CUTOVER=true` là cờ để middleware rewrite toàn bộ `/api/*` từ frontend
+sang Go backend. Đặt `false` để rollback về Node API route trong giai đoạn
+chuyển tiếp.
 
 ## Tài liệu
 
