@@ -70,3 +70,8 @@ bước build. Cần chạy script build binary trước `docker compose build b
 ./backend/scripts/build-go-image.sh
 BUILDX_BUILDER=default ./backend/scripts/build-all.sh
 ```
+
+Use case và gate trước khi Go làm backend chính nằm ở
+[`GO_CUTOVER_USECASES.md`](GO_CUTOVER_USECASES.md) và
+[`GO_CUTOVER_TESTCASES.md`](GO_CUTOVER_TESTCASES.md). Không chuyển 100% traffic
+chỉ dựa trên việc image build thành công.
