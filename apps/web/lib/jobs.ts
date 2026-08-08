@@ -62,7 +62,12 @@ export async function enqueue(input: {
     }
   }
 
-  if (!created) return { jobId: job.id, created: false, revived: false, queued: false }
+  // Redis có thể mất dữ liệu trong khi Postgres vẫn giữ job `queued`. Đẩy lại
+  // với chính jobId là an toàn: BullMQ dedupe nếu item cũ vẫn còn, đồng thời
+  // phục hồi được item đã mất sau khi Redis restart.
+  if (!created && job.status !== 'queued') {
+    return { jobId: job.id, created: false, revived: false, queued: false }
+  }
 
   try {
     await getQueue(input.kind).add(
@@ -76,7 +81,7 @@ export async function enqueue(input: {
         jobId: job.id,
       },
     )
-    return { jobId: job.id, created: true, revived, queued: true }
+    return { jobId: job.id, created, revived, queued: true }
   } catch {
     // Redis chết: job vẫn nằm ở `queued` trong DB. Trả về cho user biết đã nhận
     // việc, chứ không giả vờ thành công hoàn toàn.
