@@ -124,6 +124,10 @@ Chat giữ lịch sử bền vững trong PostgreSQL và cache tối đa 10 tin 
 đang chờ duyệt, trả lời `OK`/`Đồng ý`/`Xác nhận` sẽ tự động áp dụng toàn bộ đề
 xuất; mọi thay đổi vẫn đi qua endpoint proposal có kiểm tra ownership.
 
+Khung chat dùng theme CV hiện tại (màu nhấn, font, cỡ chữ và giãn dòng), rộng
+456px trên desktop. Nội dung assistant hỗ trợ Markdown/GFM, LaTeX (`$...$`,
+`$$...$$`) và Mermaid code fence với `securityLevel: strict`.
+
 `GO_API_CUTOVER=true` là cờ để middleware rewrite toàn bộ `/api/*` từ frontend
 sang Go backend. Đặt `false` để rollback về Node API route trong giai đoạn
 chuyển tiếp.

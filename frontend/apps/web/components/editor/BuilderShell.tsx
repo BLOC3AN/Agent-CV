@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import type { Profile } from '@hr/schema'
 import { FieldProvider, getTemplate, type Layout, type Theme } from '@hr/templates'
 import { useEditor } from '@/lib/editor-store'
@@ -147,7 +147,13 @@ export function BuilderShell(props: Props) {
         {drawer === 'chat' && (
           <aside
             aria-label="Trợ lý CV"
-            className="flex min-h-[360px] w-full shrink-0 flex-col border-t border-border bg-surface lg:min-h-0 lg:w-[380px] lg:border-l lg:border-t-0"
+            className="chat-theme flex min-h-[360px] w-full shrink-0 flex-col border-t border-border bg-surface lg:min-h-0 lg:w-[456px] lg:border-l lg:border-t-0"
+            style={{
+              '--chat-accent': theme.accent ?? '#0D9488',
+              '--chat-font': theme.fontFamily ?? 'inherit',
+              '--chat-scale': theme.scale ?? 1,
+              '--chat-line': theme.lineHeight ?? 1.5,
+            } as CSSProperties}
           >
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-[15px] font-semibold text-ink">Trợ lý CV</h2>

@@ -4,7 +4,38 @@ import { useEffect } from 'react'
 import type { Profile } from '@hr/schema'
 import { PatchReviewModal } from './PatchReviewModal'
 import { ClarifyForm } from './ClarifyForm'
+import { RichText } from './RichText'
 import { CHAT_MODELS, useChat, type ChatHint } from '@/lib/chat-store'
+
+let mermaidSequence = 0
+
+function useMermaidDiagrams(key: string) {
+  useEffect(() => {
+    let active = true
+    const nodes = document.querySelectorAll<HTMLElement>('[data-mermaid-source]')
+    if (nodes.length === 0) return
+    void import('mermaid').then(({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+      })
+      return Promise.all(
+        Array.from(nodes).map(async (node) => {
+          try {
+            const { svg } = await mermaid.render(`chat-mermaid-${++mermaidSequence}`, node.dataset.mermaidSource ?? '')
+            if (active) node.innerHTML = svg
+          } catch {
+            if (active) node.textContent = 'Mermaid không hợp lệ. Kiểm tra lại cú pháp biểu đồ.'
+          }
+        }),
+      )
+    })
+    return () => {
+      active = false
+    }
+  }, [key])
+}
 
 /**
  * Khung chat với trợ lý — UC-51, FRONTEND §4.
@@ -72,6 +103,8 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
   const appliedProfile = useChat((s) => s.appliedProfile)
   const consumeAppliedProfile = useChat((s) => s.consumeAppliedProfile)
 
+  useMermaidDiagrams(messages.map((m) => m.content).join('\n'))
+
   useEffect(() => {
     attach(profileId)
   }, [attach, profileId])
@@ -133,11 +166,11 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
             className={[
               'max-w-[90%] rounded-lg px-3 py-2 text-sm',
               m.role === 'user'
-                ? 'ml-auto bg-brand text-white'
+                ? 'chat-user ml-auto bg-brand text-white'
                 : 'bg-canvas',
             ].join(' ')}
           >
-            {m.content}
+            {m.role === 'assistant' ? <RichText content={m.content} /> : m.content}
 
             {(m.nextSteps?.length ?? 0) > 0 && (
               <ul className="mt-2 space-y-1 border-t border-border-strong pt-2">
