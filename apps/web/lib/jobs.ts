@@ -43,7 +43,24 @@ export async function enqueue(input: {
   idempotencyKey: string
   payload?: Record<string, unknown>
 }): Promise<{ jobId: string; created: boolean; revived: boolean; queued: boolean }> {
-  const { job, created, revived } = await jobRepo().enqueue(input)
+  let { job, created, revived } = await jobRepo().enqueue(input)
+
+  // Idempotency không được trả lại một job parse đã xong nhưng profile đích
+  // bị xóa sau đó. Nếu không kiểm tra, tải lại đúng file sẽ luôn tới review 404.
+  if (!created && input.kind === 'parse_cv' && job.status === 'done') {
+    const profileId = typeof job.result?.['profileId'] === 'string' ? job.result['profileId'] : null
+    if (profileId) {
+      const { rows } = await getPool().query(
+        'SELECT 1 FROM profiles WHERE id = $1 AND user_id = $2',
+        [profileId, input.userId],
+      )
+      if (rows.length === 0 && (await jobRepo().requeueDone(job.id, input.payload))) {
+        job = (await jobRepo().get(job.id))!
+        created = true
+        revived = true
+      }
+    }
+  }
 
   if (!created) return { jobId: job.id, created: false, revived: false, queued: false }
 

@@ -51,7 +51,12 @@ export default async function ReviewPage({
   const profile = profileId ? await profileRepo().get(profileId) : null
 
   if (!profileId || !profile) {
-    return <Notice title="Không tìm thấy hồ sơ của lượt tải lên này" />
+    return (
+      <FailureNotice
+        code="PROFILE_GONE"
+        message="Kết quả đọc cũ không còn hồ sơ tương ứng. Bạn tải lại file để hệ thống đọc lại nhé."
+      />
+    )
   }
 
   return (
@@ -98,6 +103,12 @@ function FailureNotice({ code, message }: { code: string; message: string }) {
       title: 'File không đọc được',
       body: 'File có thể bị hỏng hoặc đặt mật khẩu. Bạn thử xuất lại bản PDF mới rồi tải lên.',
       cta: 'Tải lên lại',
+      href: '/import',
+    },
+    PROFILE_GONE: {
+      title: 'Kết quả đọc cũ không còn dùng được',
+      body: message || 'Hồ sơ tạm của lượt tải lên này đã bị xóa. Bạn tải lại file để thử lại nhé.',
+      cta: 'Tải lại file',
       href: '/import',
     },
   }

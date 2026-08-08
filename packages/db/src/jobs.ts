@@ -166,6 +166,21 @@ export class JobRepo {
     return rows.length ? toJob(rows[0]!) : null
   }
 
+  /**
+   * Đưa một job đã xong về hàng đợi khi kết quả tham chiếu tới dữ liệu đã mất.
+   * Chỉ dùng cho các job có cơ chế tự kiểm tra tính toàn vẹn ở tầng gọi.
+   */
+  async requeueDone(id: string, payload: Record<string, unknown> = {}): Promise<boolean> {
+    const { rowCount } = await this.pool.query(
+      `UPDATE jobs
+          SET status = 'queued', payload = $2, result = NULL, error = NULL,
+              attempts = 0, started_at = NULL, finished_at = NULL
+        WHERE id = $1 AND status = 'done'`,
+      [id, payload],
+    )
+    return (rowCount ?? 0) > 0
+  }
+
   async listByUser(userId: string, limit = 20): Promise<JobRow[]> {
     const { rows } = await this.pool.query<RawRow>(
       `SELECT ${COLS} FROM jobs WHERE user_id = $1
