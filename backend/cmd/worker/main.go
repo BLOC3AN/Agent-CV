@@ -186,16 +186,167 @@ func matchAnalysis(ctx context.Context, db *sql.DB, j *job) error {
 		score["overall"] = int(keyword*0.6 + semantic*40)
 		delete(score, "degradedReason")
 	}
+	modelUsed := "go-semantic"
+	if len(gaps) > 0 {
+		if reordered, ok := rerankGaps(ctx, jd, gaps); ok {
+			gaps = reordered
+			modelUsed = "go-semantic+reranker"
+		}
+		if advices, ok := runGapAdvice(ctx, profile, jd, gaps); ok {
+			for _, advice := range advices {
+				for _, gap := range gaps {
+					if gap["id"] == advice.GapID {
+						gap["advice"] = advice.Advice
+						gap["kbRefs"] = advice.KBRefs
+					}
+				}
+			}
+			modelUsed = "go-semantic+reasoner"
+		}
+	}
 	scoreRaw := jsonString(score)
 	matchedRaw := jsonString(matched)
 	gapsRaw := jsonString(gaps)
 	var matchID string
-	if err := db.QueryRowContext(ctx, `INSERT INTO match_analyses(cv_id,jd_id,revision_id,score,matched,gaps,model_used,degraded) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,'go-semantic',$7) ON CONFLICT (cv_id,jd_id,revision_id) DO UPDATE SET score=EXCLUDED.score,matched=EXCLUDED.matched,gaps=EXCLUDED.gaps,model_used=EXCLUDED.model_used,degraded=EXCLUDED.degraded,created_at=now() RETURNING id`, p.CVID, p.JDID, revision, scoreRaw, matchedRaw, gapsRaw, degraded).Scan(&matchID); err != nil {
+	if err := db.QueryRowContext(ctx, `INSERT INTO match_analyses(cv_id,jd_id,revision_id,score,matched,gaps,model_used,degraded) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8) ON CONFLICT (cv_id,jd_id,revision_id) DO UPDATE SET score=EXCLUDED.score,matched=EXCLUDED.matched,gaps=EXCLUDED.gaps,model_used=EXCLUDED.model_used,degraded=EXCLUDED.degraded,created_at=now() RETURNING id`, p.CVID, p.JDID, revision, scoreRaw, matchedRaw, gapsRaw, modelUsed, degraded).Scan(&matchID); err != nil {
 		return err
 	}
 	result := jsonString(map[string]any{"matchId": matchID, "overall": score["overall"], "degraded": degraded})
 	_, err := db.ExecContext(ctx, `UPDATE jobs SET status='done',result=$2::jsonb,error=NULL,finished_at=now() WHERE id=$1`, j.ID, result)
 	return err
+}
+
+type gapAdvice struct {
+	GapID  string   `json:"gapId"`
+	Advice string   `json:"advice"`
+	KBRefs []string `json:"kbRefs"`
+}
+
+func runGapAdvice(ctx context.Context, profile, jd string, gaps []map[string]any) ([]gapAdvice, bool) {
+	compact := compactProfile(profile)
+	prompt := "CV PROFILE (PII removed):\n" + compact + "\n\nJOB DESCRIPTION:\n" + jd + "\n\nGAPS:\n" + jsonString(gaps)
+	request := map[string]any{"messages": []map[string]string{{"role": "system", "content": "You give concise CV improvement advice. Return JSON only: {\\\"advices\\\":[{\\\"gapId\\\":\\\"existing id\\\",\\\"advice\\\":\\\"actionable advice\\\",\\\"kbRefs\\\":[]}]}. Never invent gap IDs."}, {"role": "user", "content": prompt}}, "temperature": 0.2, "max_tokens": 1200}
+	var response struct {
+		Advices []gapAdvice `json:"advices"`
+	}
+	if !callReasonerJSON(ctx, request, &response) {
+		return nil, false
+	}
+	known := map[string]bool{}
+	for _, g := range gaps {
+		if id, ok := g["id"].(string); ok {
+			known[id] = true
+		}
+	}
+	out := make([]gapAdvice, 0, len(response.Advices))
+	for _, a := range response.Advices {
+		if known[a.GapID] && strings.TrimSpace(a.Advice) != "" {
+			out = append(out, a)
+		}
+	}
+	return out, true
+}
+
+func compactProfile(raw string) string {
+	var obj map[string]any
+	if json.Unmarshal([]byte(raw), &obj) != nil {
+		return raw
+	}
+	if basics, ok := obj["basics"].(map[string]any); ok {
+		delete(basics, "email")
+		delete(basics, "phone")
+		delete(basics, "address")
+	}
+	return jsonString(obj)
+}
+
+func callReasonerJSON(ctx context.Context, request map[string]any, out any) bool {
+	base := os.Getenv("MODEL_HOST")
+	if base == "" {
+		base = "http://100.68.50.41"
+	}
+	endpoint := strings.TrimRight(base, "/") + ":5011/v1/chat/completions"
+	raw := jsonString(request)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(raw))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		return false
+	}
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	var envelope struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if json.Unmarshal(body, &envelope) != nil || len(envelope.Choices) == 0 {
+		return false
+	}
+	content := strings.TrimSpace(envelope.Choices[0].Message.Content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimSuffix(strings.TrimSpace(content), "```")
+	return json.Unmarshal([]byte(strings.TrimSpace(content)), out) == nil
+}
+
+func rerankGaps(ctx context.Context, query string, gaps []map[string]any) ([]map[string]any, bool) {
+	base := os.Getenv("RERANKER_URL")
+	if base == "" {
+		host := os.Getenv("MODEL_HOST")
+		if host == "" {
+			host = "http://100.68.50.41"
+		}
+		base = strings.TrimRight(host, "/") + ":5014"
+	}
+	docs := make([]string, len(gaps))
+	for i, g := range gaps {
+		docs[i], _ = g["requirement"].(string)
+	}
+	reqBody := jsonString(map[string]any{"query": query, "documents": docs, "top_n": len(docs)})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base, "/")+"/v1/rerank", strings.NewReader(reqBody))
+	if err != nil {
+		return gaps, false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return gaps, false
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		return gaps, false
+	}
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
+	var out struct {
+		Results []struct {
+			Index int `json:"index"`
+		} `json:"results"`
+	}
+	if json.Unmarshal(body, &out) != nil || len(out.Results) == 0 {
+		return gaps, false
+	}
+	ordered := make([]map[string]any, 0, len(gaps))
+	seen := map[int]bool{}
+	for _, item := range out.Results {
+		if item.Index >= 0 && item.Index < len(gaps) && !seen[item.Index] {
+			ordered = append(ordered, gaps[item.Index])
+			seen[item.Index] = true
+		}
+	}
+	for i, g := range gaps {
+		if !seen[i] {
+			ordered = append(ordered, g)
+		}
+	}
+	return ordered, true
 }
 
 func keywordScore(profile, jd string) (map[string]any, []map[string]any, []map[string]any) {

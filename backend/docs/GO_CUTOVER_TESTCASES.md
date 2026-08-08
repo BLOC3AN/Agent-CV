@@ -48,6 +48,7 @@
 | CUT-37 | Proposal accept một phần | Chỉ op được chọn áp dụng, status `partial`, tạo revision `ai` |
 | CUT-38 | Proposal reject toàn bộ | Profile không đổi, status `rejected` |
 | CUT-39 | Proposal có index ngoài phạm vi | 422, proposal/profile không đổi |
+| CUT-40 | Match job với embedding + reasoner + reranker | `go-semantic+reasoner`, `degraded=false`, advice chỉ dùng gapId hợp lệ |
 
 ## Lệnh kiểm tra tối thiểu
 
