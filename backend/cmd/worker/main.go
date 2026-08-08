@@ -175,6 +175,12 @@ func matchAnalysis(ctx context.Context, db *sql.DB, j *job) error {
 		return fmt.Errorf("JD_NOT_FOUND")
 	}
 	score, matched, gaps := keywordScore(profile, jd)
+	if semantic, ok := semanticScore(ctx, profile, jd); ok {
+		keyword := toFloat(score["overall"])
+		score["breakdown"].(map[string]any)["semantic"] = int(semantic * 100)
+		score["overall"] = int(keyword*0.6 + semantic*40)
+		delete(score, "degradedReason")
+	}
 	scoreRaw := jsonString(score)
 	matchedRaw := jsonString(matched)
 	gapsRaw := jsonString(gaps)
@@ -220,6 +226,74 @@ func mapKeys(v []map[string]any) []string {
 		}
 	}
 	return r
+}
+
+func semanticScore(ctx context.Context, profile, jd string) (float64, bool) {
+	base := os.Getenv("EMBEDDER_URL")
+	if base == "" {
+		host := os.Getenv("MODEL_HOST")
+		if host == "" {
+			host = "http://100.68.50.41"
+		}
+		base = strings.TrimRight(host, "/") + ":8003"
+	}
+	payload := jsonString(map[string]any{"texts": []string{profile, jd}})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base, "/")+"/embed-batch", strings.NewReader(payload))
+	if err != nil {
+		return 0, false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, false
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		return 0, false
+	}
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
+	var out struct {
+		DenseVectors [][]float64 `json:"dense_vectors"`
+	}
+	if json.Unmarshal(body, &out) != nil || len(out.DenseVectors) < 2 {
+		return 0, false
+	}
+	return cosine(out.DenseVectors[0], out.DenseVectors[1]), true
+}
+
+func cosine(a, b []float64) float64 {
+	if len(a) == 0 || len(a) != len(b) {
+		return 0
+	}
+	var dot, na, nb float64
+	for i := range a {
+		dot += a[i] * b[i]
+		na += a[i] * a[i]
+		nb += b[i] * b[i]
+	}
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	return dot / (sqrt(na) * sqrt(nb))
+}
+func sqrt(x float64) float64 {
+	z := x
+	if z <= 0 {
+		return 0
+	}
+	for i := 0; i < 12; i++ {
+		z = (z + x/z) / 2
+	}
+	return z
+}
+func toFloat(v any) float64 {
+	switch x := v.(type) {
+	case int:
+		return float64(x)
+	case float64:
+		return x
+	}
+	return 0
 }
 func firstLine(s string) string {
 	for _, x := range strings.Split(s, "\n") {

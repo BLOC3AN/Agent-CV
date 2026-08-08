@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -17,6 +19,7 @@ import (
 	"time"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
+	"github.com/phpdave11/gofpdf"
 )
 
 type Job struct {
@@ -68,6 +71,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/kb/citations", s.kbCitations)
 	mux.HandleFunc("POST /api/analyze", s.startAnalyze)
 	mux.HandleFunc("GET /api/analyze/", s.getAnalyze)
+	mux.HandleFunc("POST /api/chat", s.chat)
 	return withJSON(mux)
 }
 
@@ -193,6 +197,10 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
 		return
 	}
+	if strings.HasSuffix(id, "/export") {
+		s.exportCV(w, r, strings.TrimSuffix(id, "/export"))
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		s.getCV(w, r, id)
@@ -203,6 +211,48 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method không hỗ trợ"})
 	}
+}
+
+func (s *Server) exportCV(w http.ResponseWriter, r *http.Request, id string) {
+	variant := r.URL.Query().Get("variant")
+	if variant != "ats" {
+		variant = "presentation"
+	}
+	var title, language string
+	var snapshot []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(title,'CV'),language,profile_snapshot FROM cv_documents WHERE id=$1`, id).Scan(&title, &language, &snapshot); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		return
+	}
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetTitle(title, true)
+	pdf.AddPage()
+	pdf.SetFont("Arial", "B", 18)
+	pdf.Cell(0, 12, title)
+	pdf.Ln(14)
+	pdf.SetFont("Arial", "", 10)
+	pdf.Cell(0, 7, "Language: "+language+" | Variant: "+variant)
+	pdf.Ln(10)
+	pdf.SetFont("Arial", "", 9)
+	var pretty bytes.Buffer
+	if json.Indent(&pretty, snapshot, "", "  ") == nil {
+		for _, line := range strings.Split(pretty.String(), "\n") {
+			pdf.MultiCell(0, 5, line, "", "L", false)
+		}
+	}
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được PDF"})
+		return
+	}
+	safe := strings.NewReplacer("/", "-", " ", "-").Replace(title)
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-%s.pdf\"", safe, variant))
+	w.Header().Set("Content-Length", fmt.Sprint(out.Len()))
+	_, _ = w.Write(out.Bytes())
 }
 
 func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
@@ -1068,6 +1118,101 @@ func (s *Server) getAnalyze(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(matchedRaw, &matched)
 	_ = json.Unmarshal(gapsRaw, &gaps)
 	writeJSON(w, http.StatusOK, map[string]any{"ready": true, "id": id, "jd": map[string]any{"id": jdID, "title": title.String, "seniority": seniority.String}, "overall": score["overall"], "breakdown": score["breakdown"], "matched": matched, "gaps": gaps, "missingAtsKeywords": score["missingAtsKeywords"], "degraded": degraded, "degradedReason": score["degradedReason"], "createdAt": created})
+}
+
+func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Chat cần PostgreSQL"})
+		return
+	}
+	var body struct {
+		ProfileID string              `json:"profileId"`
+		Message   string              `json:"message"`
+		Answers   []map[string]string `json:"answers"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || body.ProfileID == "" || len(strings.TrimSpace(body.Message)) < 2 || len(body.Message) > 2000 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body chat không hợp lệ"})
+		return
+	}
+	userID := s.currentUserID(r)
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		return
+	}
+	var sessionID string
+	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO chat_sessions(user_id,profile_id) VALUES($1,$2) RETURNING id`, userID, body.ProfileID).Scan(&sessionID); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		return
+	}
+	var userMessageID string
+	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'user',$2) RETURNING id`, sessionID, body.Message).Scan(&userMessageID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được tin nhắn"})
+		return
+	}
+	history := []map[string]string{}
+	rows, _ := s.db.QueryContext(r.Context(), `SELECT role,content FROM chat_messages WHERE session_id=$1 ORDER BY created_at DESC LIMIT 12`, sessionID)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var role, content string
+			if rows.Scan(&role, &content) == nil {
+				history = append(history, map[string]string{"role": role, "content": content})
+			}
+		}
+	}
+	profileRaw := []byte{}
+	_ = s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1`, body.ProfileID).Scan(&profileRaw)
+	prompt := []map[string]string{{"role": "system", "content": "Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ. Không tự ý thay đổi hồ sơ; nếu đề xuất thay đổi, mô tả rõ để người dùng xác nhận."}, {"role": "user", "content": "PROFILE:\n" + string(profileRaw) + "\n\nHISTORY:\n" + jsonString(history) + "\n\nUSER:\n" + body.Message}}
+	answer, modelErr := callChatModel(r.Context(), prompt)
+	if modelErr != nil {
+		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "Model chưa khả dụng: "+modelErr.Error())
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "MODEL_UNAVAILABLE", "sessionId": sessionID})
+		return
+	}
+	var assistantID string
+	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2) RETURNING id`, sessionID, answer).Scan(&assistantID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được câu trả lời"})
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	payload, _ := json.Marshal(map[string]any{"kind": "reply", "text": answer, "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID})
+	fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+}
+
+func callChatModel(ctx context.Context, messages []map[string]string) (string, error) {
+	base := os.Getenv("MODEL_HOST")
+	if base == "" {
+		base = "http://100.68.50.41"
+	}
+	endpoint := strings.TrimRight(base, "/") + ":5011/v1/chat/completions"
+	request := map[string]any{"messages": messages, "temperature": 0.2, "max_tokens": 1200}
+	raw := jsonString(request)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(raw))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
+	if res.StatusCode >= 300 {
+		return "", fmt.Errorf("model HTTP %d", res.StatusCode)
+	}
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if json.Unmarshal(body, &out) != nil || len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
+		return "", fmt.Errorf("empty model response")
+	}
+	return out.Choices[0].Message.Content, nil
 }
 
 func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
