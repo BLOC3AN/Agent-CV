@@ -45,6 +45,10 @@ legacy; mỗi luồng mới phải có implementation và test ở Go trước.
   toàn bộ operation. Không có proposal thì `OK` vẫn được gửi như một câu chat
   bình thường.
 
+Frontend hiển thị nội dung assistant bằng Markdown/GFM, KaTeX và Mermaid
+(`securityLevel: strict`); khung chat kế thừa theme CV và rộng 456px trên
+desktop.
+
 
 Go đã có production path với PostgreSQL và storage thật. Migration chưa hoàn
 tất cho tới khi frontend đổi sang Go và các route/worker còn lại được chuyển.
