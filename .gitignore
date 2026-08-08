@@ -28,6 +28,11 @@ eval/golden/*.json
 !eval/**/README.md
 # INVENTORY.md chỉ mô tả cấu trúc, KHÔNG chứa PII
 !eval/cv/INVENTORY.md
+backend/legacy-eval/cv/*.pdf
+backend/legacy-eval/cv/*.png
+backend/legacy-eval/cv/*.docx
+backend/legacy-eval/cv/.filemap.txt
+backend/legacy-eval/golden/*.json
 
 # Ghi chú đánh giá thủ công có thể chứa trích đoạn CV
 eval/manual-log.md

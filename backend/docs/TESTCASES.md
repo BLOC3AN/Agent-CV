@@ -732,3 +732,7 @@ Tỉ lệ op AI được user chấp nhận   ← đo trực tiếp chất lư�
 Tỉ lệ user hoàn tất màn rà soát   ← đo chất lượng parse
 Tỉ lệ user bấm "Không có số liệu" ← đo mức độ AI hỏi đúng chỗ
 ```
+# Migration addendum
+
+Bộ test riêng cho migration Go nằm tại [MIGRATION_TESTCASES.md](MIGRATION_TESTCASES.md).
+Các test migration phải pass trước khi chuyển một route production khỏi Node.

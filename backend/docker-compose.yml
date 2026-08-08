@@ -18,6 +18,17 @@ x-env: &env
   NODE_ENV: ${NODE_ENV:-development}
 
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hr-backend
+    restart: unless-stopped
+    environment:
+      BACKEND_ADDR: :8080
+    ports:
+      - '8080:8080'
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: hr-postgres
@@ -69,7 +80,7 @@ services:
   # về layout extraction.
   pdfkit:
     build:
-      context: ./services/pdfkit
+      context: ./legacy-node-services/pdfkit
     container_name: hr-pdfkit
     restart: unless-stopped
     ports:
@@ -87,8 +98,8 @@ services:
 
   web:
     build:
-      context: .
-      dockerfile: apps/web/Dockerfile
+      context: ..
+      dockerfile: frontend/apps/web/Dockerfile
     container_name: hr-web
     restart: unless-stopped
     environment:
@@ -106,8 +117,8 @@ services:
   # BullMQ: parse CV, export PDF (Playwright), embed
   worker:
     build:
-      context: .
-      dockerfile: services/worker/Dockerfile
+      context: ..
+      dockerfile: frontend/services/worker/Dockerfile
     container_name: hr-worker
     restart: unless-stopped
     environment:

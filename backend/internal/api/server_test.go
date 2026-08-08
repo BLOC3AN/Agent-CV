@@ -1,0 +1,48 @@
+package api
+
+import (
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"net/textproto"
+	"strings"
+	"testing"
+)
+
+func TestHealth(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	w := httptest.NewRecorder()
+	NewServer().Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("health status = %d", w.Code)
+	}
+}
+
+func TestUploadCreatesFreshJobForEachUploadID(t *testing.T) {
+	s := NewServer()
+	for _, id := range []string{"upload-a", "upload-b"} {
+		var body strings.Builder
+		mw := multipart.NewWriter(&body)
+		_ = mw.WriteField("uploadId", id)
+		h := make(textproto.MIMEHeader)
+		h.Set("Content-Disposition", `form-data; name="file"; filename="cv.pdf"`)
+		h.Set("Content-Type", "application/pdf")
+		part, err := mw.CreatePart(h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = part.Write([]byte("%PDF-1.7"))
+		_ = mw.Close()
+
+		r := httptest.NewRequest(http.MethodPost, "/api/uploads/cv", strings.NewReader(body.String()))
+		r.Header.Set("Content-Type", mw.FormDataContentType())
+		w := httptest.NewRecorder()
+		s.Routes().ServeHTTP(w, r)
+		if w.Code != http.StatusAccepted {
+			t.Fatalf("upload status = %d", w.Code)
+		}
+	}
+	if len(s.jobs) != 2 {
+		t.Fatalf("jobs = %d, want 2", len(s.jobs))
+	}
+}

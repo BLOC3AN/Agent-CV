@@ -16,6 +16,7 @@ export const alias = {
   '@hr/worker/pdfkit': path.resolve(root, 'services/worker/src/pdfkit-client.ts'),
   '@hr/worker/storage': path.resolve(root, 'services/worker/src/storage.ts'),
   '@hr/worker': path.resolve(root, 'services/worker/src/index.ts'),
+  '@hr/worker/cv-chunk': path.resolve(root, 'services/worker/src/cv-chunk.ts'),
 }
 
 export default defineConfig({

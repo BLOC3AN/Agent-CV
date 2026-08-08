@@ -20,12 +20,13 @@
       "@hr/matching": ["./packages/matching/src/index.ts"],
       "@hr/kb": ["./packages/kb/src/index.ts"],
       "@hr/worker": ["./services/worker/src/index.ts"],
+      "@hr/worker/cv-chunk": ["./services/worker/src/cv-chunk.ts"],
       "@hr/worker/queues": ["./services/worker/src/queues.ts"],
       "@hr/worker/pdfkit": ["./services/worker/src/pdfkit-client.ts"],
       "@hr/worker/storage": ["./services/worker/src/storage.ts"],
       "@hr/templates": ["./packages/templates/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*", "packages/*/test/**/*", "services/worker/src/**/*", "services/worker/test/**/*", "eval/**/*", "db/**/*.ts"],
+  "include": ["packages/*/src/**/*", "packages/*/test/**/*", "services/worker/src/**/*", "services/worker/test/**/*", "../backend/legacy-eval/**/*", "../backend/db/**/*.ts"],
   "exclude": ["node_modules", "dist", "**/.next", "apps/web"]
 }

@@ -20,16 +20,16 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Cài phụ thuộc trước, copy nguồn sau: sửa code không phải cài lại npm.
-COPY package.json package-lock.json ./
-COPY apps/web/package.json         apps/web/
-COPY packages/schema/package.json  packages/schema/
-COPY packages/ai/package.json      packages/ai/
-COPY packages/db/package.json      packages/db/
-COPY packages/kb/package.json      packages/kb/
-COPY packages/matching/package.json packages/matching/
-COPY packages/pdf/package.json     packages/pdf/
-COPY packages/templates/package.json packages/templates/
-COPY services/worker/package.json  services/worker/
+COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/apps/web/package.json         apps/web/
+COPY frontend/packages/schema/package.json  packages/schema/
+COPY frontend/packages/ai/package.json      packages/ai/
+COPY frontend/packages/db/package.json      packages/db/
+COPY frontend/packages/kb/package.json      packages/kb/
+COPY frontend/packages/matching/package.json packages/matching/
+COPY frontend/packages/pdf/package.json     packages/pdf/
+COPY frontend/packages/templates/package.json packages/templates/
+COPY frontend/services/worker/package.json  services/worker/
 # Phải copy package.json của MỌI workspace trong package-lock, kể cả workspace
 # worker không dùng: thiếu một file thì npm coi lock là lệch và dừng. Trước đây
 # thiếu `kb` và `matching` — đúng hai package worker gọi trong match_analysis.
@@ -39,9 +39,9 @@ RUN npm ci --omit=dev --ignore-scripts
 # không có bước build trung gian (TDD §12.3).
 RUN npm i -g tsx@4.19.2
 
-COPY tsconfig.base.json tsconfig.json config.yml ./
-COPY packages/  packages/
-COPY services/worker/ services/worker/
+COPY frontend/tsconfig.base.json frontend/tsconfig.json config.yml ./
+COPY frontend/packages/  packages/
+COPY frontend/services/worker/ services/worker/
 
 # Thư mục lưu file upload khi STORAGE_DRIVER=local
 RUN mkdir -p /app/var/storage
