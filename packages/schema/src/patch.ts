@@ -145,6 +145,7 @@ export type PatchStatus = z.infer<typeof PatchStatusSchema>
 export const AgentPlanSchema = z.object({
   intent: z.enum([
     'rewrite_section',
+    'enrich_content',
     'add_content',
     'remove_content',
     'ask_question',

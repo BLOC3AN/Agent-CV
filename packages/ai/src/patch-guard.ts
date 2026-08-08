@@ -104,6 +104,13 @@ export function validateOps(
         rejected.push({ op, reason: mismatch })
         continue
       }
+      if (typeof before === 'string' && typeof op.value === 'string' && nearDuplicateText(before, op.value)) {
+        rejected.push({
+          op,
+          reason: 'Nội dung mới gần như sao chép nội dung cũ; cần viết lại có giá trị hơn',
+        })
+        continue
+      }
       if (sameJsonValue(before, op.value)) {
         rejected.push({ op, reason: 'Nội dung không thay đổi' })
         continue
@@ -215,6 +222,33 @@ function missingArrayAppendPath(profile: Profile, pointer: string): string | nul
 
 function sameJsonValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
+}
+
+/**
+ * Chặn kiểu "paraphrase vài từ" thường xảy ra khi user yêu cầu làm giàu.
+ * Không dùng cho chuỗi ngắn: với headline/tên riêng, thay một từ đã là thay đổi
+ * có ý nghĩa. Đây là guard chất lượng, không phải bộ chấm văn phong.
+ */
+function nearDuplicateText(before: string, after: string): boolean {
+  const a = normalizeText(before)
+  const b = normalizeText(after)
+  if (a.length < 40 || b.length < 40) return false
+  const tokensA = new Set(a.split(' ').filter(Boolean))
+  const tokensB = new Set(b.split(' ').filter(Boolean))
+  const intersection = [...tokensA].filter((token) => tokensB.has(token)).length
+  const union = new Set([...tokensA, ...tokensB]).size
+  const jaccard = union === 0 ? 1 : intersection / union
+  const lengthRatio = Math.min(a.length, b.length) / Math.max(a.length, b.length)
+  return jaccard >= 0.82 && lengthRatio >= 0.82
+}
+
+function normalizeText(value: string): string {
+  return value
+    .toLocaleLowerCase('vi')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
 }
 
 /** Giá trị tại một JSON Pointer, hoặc `undefined` nếu không có. */

@@ -50,12 +50,14 @@ export interface PlanInput {
   /** Vài lượt chat gần nhất, đã nén nếu dài */
   history: { role: 'user' | 'assistant'; content: string }[]
   language: Language
+  hint?: ProposePatchInput['hint']
 }
 
 const PLAN_VI = `Bạn phân tích yêu cầu của người dùng về CV của họ. Trả về DUY NHẤT một object JSON.
 
 "intent" — chọn MỘT:
 - rewrite_section : muốn viết lại / làm gọn / cải thiện một mục đã có
+- enrich_content  : làm giàu nội dung bằng bối cảnh, vai trò, cách làm và giá trị
 - add_content     : muốn thêm nội dung mới
 - remove_content  : muốn bớt / xoá nội dung
 - ask_question    : đang hỏi, chưa yêu cầu sửa gì
@@ -75,8 +77,8 @@ Quy tắc:
 
 const PLAN_EN = `Analyse what the user wants done to their CV. Return ONLY a JSON object.
 
-"intent" — pick ONE: rewrite_section, add_content, remove_content, ask_question,
-explain, other.
+"intent" — pick ONE: rewrite_section, enrich_content, add_content, remove_content,
+ask_question, explain, other.
 
 "targetPath" — JSON Pointer to the relevant section ("/work", "/work/0",
 "/projects/1/highlights"). Use null when unclear.
@@ -133,6 +135,13 @@ export const planAgentStepTask = defineTask<PlanInput, AgentPlan>({
       content: `Yêu cầu: ${input.message}`,
       max: 800,
       droppable: false,
+    },
+    {
+      key: 'hint',
+      role: 'user',
+      content: input.hint ? `Gợi ý cách biến đổi từ giao diện: ${input.hint}` : '',
+      max: 300,
+      droppable: true,
     },
   ],
 })
@@ -249,6 +258,8 @@ export interface ProposePatchInput {
    * thua; chỉ ra ĐÚNG op vừa hỏng thì có.
    */
   corrections?: string[]
+  /** Hint có cấu trúc từ gợi ý UI, giúp model chọn phép biến đổi phù hợp. */
+  hint?: 'enrich_content' | 'tighten_bullets' | 'strong_verbs' | 'rewrite_summary'
 }
 
 const PATCH_VI = `Bạn đề xuất thay đổi cho CV dưới dạng JSON Patch (RFC 6902). Trả về DUY NHẤT một object JSON.
@@ -301,6 +312,21 @@ QUY TẮC CỨNG:
   của người dùng nói rõ cần dịch hoặc chỉ định ngôn ngữ đích. Nếu không, viết
   lại tự nhiên bằng đúng ngôn ngữ của field nguồn; giữ nguyên tên riêng và tên
   công nghệ.
+
+KHI YÊU CẦU LÀ "LÀM GIÀU" / "ENRICH_CONTENT":
+- Không chỉ thay từ đồng nghĩa hoặc đảo lại câu. Hãy viết lại có chiều sâu hơn.
+- Với bullet kinh nghiệm/dự án, cố gắng thể hiện: hành động, bối cảnh/phạm vi,
+  vấn đề hoặc mục tiêu, cách tiếp cận/quyết định kỹ thuật, và giá trị đạt được.
+- Chỉ dùng dữ kiện, công nghệ, con số và quan hệ nhân-quả đã có trong hồ sơ,
+  câu trả lời người dùng hoặc KB. Không được biến suy đoán thành sự thật.
+- Nếu thiếu kết quả định lượng, mô tả giá trị định tính một cách thận trọng;
+  không tự tạo phần trăm, số người dùng, thời gian hay tác động đo được.
+- Bản mới phải khác đáng kể về cấu trúc hoặc mức độ diễn đạt. Nếu không thể
+  làm giàu mà không bịa, hãy giữ nguyên và ghi rõ cần người dùng bổ sung fact.
+
+HINT TỪ GIAO DIỆN (nếu có) là chỉ dẫn về CÁCH BIẾN ĐỔI, không phải dữ kiện mới:
+enrich_content = làm giàu chiều sâu; tighten_bullets = cô đọng;
+strong_verbs = tăng động từ chủ động; rewrite_summary = viết lại summary.
 
 "summary" — một câu tóm tắt bạn đã đề xuất gì.`
 
@@ -422,7 +448,7 @@ export const proposePatchTask = defineTask<ProposePatchInput, PatchProposal>({
       role: 'user',
       content: `Yêu cầu: ${input.message}\nÝ định: ${input.intent}${
         input.targetPath ? `\nMục liên quan: ${input.targetPath}` : ''
-      }`,
+      }${input.hint ? `\nHINT CÁCH BIẾN ĐỔI: ${input.hint}` : ''}`,
       max: 800,
       droppable: false,
     },

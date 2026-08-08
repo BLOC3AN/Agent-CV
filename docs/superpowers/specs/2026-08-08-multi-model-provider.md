@@ -44,6 +44,9 @@ Schema mode. Cloud token budget hiện dùng ước lượng bảo thủ vì API
 endpoint tokenizer local; usage từ response vẫn được ghi nhận khi provider trả
 về.
 
+DeepSeek V4 Flash được cấu hình `thinking: disabled` cho chat tương tác để ưu
+tiên tốc độ; có thể bật lại trong `config.yml` nếu cần suy luận sâu.
+
 ## Tiêu chí nghiệm thu
 
 - Chọn từng model trong selector không reload trang.
@@ -59,3 +62,12 @@ Khi đang chờ model, nút `Gửi` đổi thành `Dừng`. Bấm `Dừng` sẽ 
 provider. Lượt huỷ không retry, không fallback sang model khác, không làm mở
 circuit breaker và không ghi một tin nhắn lỗi giả vào lịch sử. Sau khi huỷ,
 người dùng có thể sửa câu hỏi hoặc chọn model khác rồi gửi lại.
+
+## Hint từ gợi ý trong chat
+
+Các gợi ý UI gửi thêm hint có cấu trúc, không chỉ gửi câu chữ hiển thị:
+`enrich_content`, `tighten_bullets`, `strong_verbs`, `rewrite_summary`. Hint được
+đưa vào cả bước planning và propose patch. Với `enrich_content`, model được
+khuyến khích bổ sung bối cảnh, mục tiêu, cách tiếp cận và giá trị dựa trên fact
+đã có; không được tự tạo số liệu hoặc công nghệ. Patch gần như sao chép nội dung
+cũ sẽ bị guard loại và yêu cầu model sinh lại.

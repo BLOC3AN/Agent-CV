@@ -31,6 +31,7 @@ const Body = z.object({
     .max(3)
     .default([]),
   modelRef: z.enum(['local.reasoner', 'openai.luna', 'deepseek.v4']).default('local.reasoner'),
+  hint: z.enum(['enrich_content', 'tighten_bullets', 'strong_verbs', 'rewrite_summary']).optional(),
 })
 
 /** Bao nhiêu lượt gần nhất đưa nguyên văn vào prompt trước khi phải nén. */
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
-  const { profileId, message, answers, modelRef } = parsed.data
+  const { profileId, message, answers, modelRef, hint } = parsed.data
 
   let userId: string
   try {
@@ -126,6 +127,7 @@ export async function POST(req: Request) {
           {
             gateway: new Gateway(),
             modelRef,
+            ...(hint ? { hint } : {}),
             signal: req.signal,
             messageIds,
             // Bắn từng bước về ngay khi bắt đầu, KHÔNG chờ nó xong

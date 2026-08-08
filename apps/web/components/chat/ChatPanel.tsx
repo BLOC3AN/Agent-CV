@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import type { Profile } from '@hr/schema'
 import { PatchReviewModal } from './PatchReviewModal'
 import { ClarifyForm } from './ClarifyForm'
-import { CHAT_MODELS, useChat } from '@/lib/chat-store'
+import { CHAT_MODELS, useChat, type ChatHint } from '@/lib/chat-store'
 
 /**
  * Khung chat với trợ lý — UC-51, FRONTEND §4.
@@ -27,19 +27,22 @@ import { CHAT_MODELS, useChat } from '@/lib/chat-store'
  * `/projects/0/...`, mọi op bị loại, và người dùng nhận một câu lỗi trách
  * ngược lại họ. Đo thật trên CV có 1 kinh nghiệm, 0 dự án.
  */
-function suggestionsFor(p: Profile): string[] {
-  const out: string[] = []
-  if (p.work.length > 0) out.push('Làm gọn mục kinh nghiệm')
-  if (p.projects.length > 0) out.push('Thêm số liệu cho dự án đầu tiên')
-  if (p.basics.summary) out.push('Viết lại phần giới thiệu cho gọn hơn')
+function suggestionsFor(p: Profile): { text: string; hint?: ChatHint }[] {
+  const out: { text: string; hint?: ChatHint }[] = []
+  if (p.work.length > 0) out.push({ text: 'Làm gọn mục kinh nghiệm', hint: 'tighten_bullets' })
   if (p.work.some((w) => w.highlights.length > 0)) {
-    out.push('Viết lại các gạch đầu dòng bằng động từ mạnh')
+    out.push({ text: 'Làm giàu nội dung các điểm nổi bật', hint: 'enrich_content' })
   }
-  if (p.skills.length > 8) out.push('Rút gọn danh sách kỹ năng')
+  if (p.projects.length > 0) out.push({ text: 'Thêm số liệu cho dự án đầu tiên' })
+  if (p.basics.summary) out.push({ text: 'Viết lại phần giới thiệu cho gọn hơn', hint: 'rewrite_summary' })
+  if (p.work.some((w) => w.highlights.length > 0)) {
+    out.push({ text: 'Viết lại các gạch đầu dòng bằng động từ mạnh', hint: 'strong_verbs' })
+  }
+  if (p.skills.length > 8) out.push({ text: 'Rút gọn danh sách kỹ năng' })
 
   // CV quá sơ sài thì không gợi ý sửa — gợi ý BỔ SUNG
   if (out.length === 0) {
-    return ['CV của tôi còn thiếu gì?', 'Nên thêm mục nào cho CV mạnh hơn?']
+    return [{ text: 'CV của tôi còn thiếu gì?' }, { text: 'Nên thêm mục nào cho CV mạnh hơn?' }]
   }
   return out.slice(0, 4)
 }
@@ -102,13 +105,13 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
             <p>Bạn muốn sửa gì trong CV? Ví dụ:</p>
             <ul className="mt-2 space-y-1">
               {suggestions.map((s) => (
-                <li key={s}>
+                <li key={s.text}>
                   <button
                     type="button"
-                    onClick={() => void send(s)}
+                  onClick={() => void send(s.text, [], s.hint)}
                     className="text-left underline underline-offset-2 hover:text-brand"
                   >
-                    {s}
+                    {s.text}
                   </button>
                 </li>
               ))}

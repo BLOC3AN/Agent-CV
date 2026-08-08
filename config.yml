@@ -235,6 +235,7 @@ providers:
       v4:
         model_id: "deepseek-v4-flash"
         structured_output: json_object
+        thinking: disabled       # Neura Plus ưu tiên tốc độ cho chat CV
 
 # ============================================================================
 # ĐỊNH TUYẾN TASK

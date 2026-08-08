@@ -30,6 +30,7 @@ export interface ChatMessage {
 }
 
 export type ChatModelRef = 'local.reasoner' | 'openai.luna' | 'deepseek.v4'
+export type ChatHint = 'enrich_content' | 'tighten_bullets' | 'strong_verbs' | 'rewrite_summary'
 
 export const CHAT_MODELS: { ref: ChatModelRef; label: string; description: string }[] = [
   { ref: 'local.reasoner', label: 'Neura flash', description: 'Local model' },
@@ -70,7 +71,7 @@ interface ChatState {
   setModelRef: (modelRef: ChatModelRef) => void
   stop: () => void
   say: (m: ChatMessage) => void
-  send: (text: string, answers?: { question: string; answer: string }[]) => Promise<void>
+  send: (text: string, answers?: { question: string; answer: string }[], hint?: ChatHint) => Promise<void>
 }
 
 /**
@@ -146,7 +147,7 @@ export const useChat = create<ChatState>((set, get) => ({
   stop: () => get().activeController?.abort(),
   say: (m) => set({ messages: [...get().messages, m] }),
 
-  async send(text, answers = []) {
+  async send(text, answers = [], hint) {
     const { profileId, busy, modelRef } = get()
     if (!profileId || busy || !text.trim()) return
 
@@ -165,7 +166,7 @@ export const useChat = create<ChatState>((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller?.signal,
-        body: JSON.stringify({ profileId, message: text, answers, modelRef }),
+        body: JSON.stringify({ profileId, message: text, answers, modelRef, ...(hint ? { hint } : {}) }),
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 

@@ -7,7 +7,12 @@ import type {
 } from '@hr/schema'
 import type { Gateway } from './gateway.js'
 import type { TaskDefinition } from './types.js'
-import { planAgentStepTask, insightMiningTask, proposePatchTask } from './tasks/agent.js'
+import {
+  planAgentStepTask,
+  insightMiningTask,
+  proposePatchTask,
+  type ProposePatchInput,
+} from './tasks/agent.js'
 import { answerQuestionTask, type AnswerInput } from './tasks/answer.js'
 import { redactKeepShape, stripPII } from './pii.js'
 import { expandCompactPath, humanizePointers, sectionLabel } from './paths.js'
@@ -58,6 +63,7 @@ export interface ChatTurnInput {
   language?: Language
   /** Optional UI-selected chat model; server validates the allow-list. */
   modelRef?: string
+  hint?: ProposePatchInput['hint']
 }
 
 /** Các bước người dùng CHỜ — mỗi bước là một lượt gọi model. */
@@ -129,6 +135,7 @@ export async function runChatTurn(
     compactProfile,
     history: input.history,
     language,
+    hint: input.hint,
   })
   if (!plan.ok) {
     return {
@@ -221,6 +228,7 @@ export async function runChatTurn(
     answers: input.answers ?? [],
     kbChunks: input.kbChunks ?? [],
     language,
+    hint: input.hint,
   })
   if (!res.ok) {
     return {

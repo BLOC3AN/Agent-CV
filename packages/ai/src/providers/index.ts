@@ -90,6 +90,10 @@ export class ProviderRegistry {
           modelId: m.model_id,
           kind: 'deepseek',
           structuredOutput: 'json_object',
+          thinking:
+            m['thinking'] === 'enabled' || m['thinking'] === 'disabled'
+              ? m['thinking']
+              : 'disabled',
         }))
       }
     }

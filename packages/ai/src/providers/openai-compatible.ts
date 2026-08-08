@@ -8,6 +8,7 @@ export interface OpenAICompatibleOptions {
   kind: Extract<ProviderKind, 'openai' | 'deepseek'>
   /** DeepSeek V4 currently accepts JSON mode; OpenAI accepts JSON schema. */
   structuredOutput: 'json_schema' | 'json_object'
+  thinking?: 'enabled' | 'disabled'
 }
 
 interface CompletionResponse {
@@ -41,6 +42,9 @@ export class OpenAICompatibleProvider implements ChatProvider {
     // GPT-5.6 only accepts its default temperature value; task temperatures
     // are still forwarded to DeepSeek-compatible models.
     if (this.opts.kind !== 'openai') body['temperature'] = req.temperature
+    if (this.opts.kind === 'deepseek' && this.opts.thinking) {
+      body['thinking'] = { type: this.opts.thinking }
+    }
     // GPT-5.6 rejects the legacy max_tokens parameter. DeepSeek keeps the
     // OpenAI-compatible max_tokens spelling.
     body[this.opts.kind === 'openai' ? 'max_completion_tokens' : 'max_tokens'] = req.maxTokens
