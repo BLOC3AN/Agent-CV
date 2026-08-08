@@ -10,6 +10,13 @@
 | MIG-API-06 | GET job không tồn tại | 404 |
 | MIG-API-07 | Go backend không sẵn sàng | frontend không đánh dấu upload thành công |
 | MIG-API-08 | Node route và Go route cùng input | response schema tương thích |
+| MIG-AUTH-01 | Request magic link với email hợp lệ | 200, dev trả `devLink`, token được lưu dạng hash |
+| MIG-AUTH-02 | Verify token hợp lệ hai lần | lần đầu tạo session/cookie, lần hai bị từ chối |
+| MIG-PROFILE-01 | Tạo profile tiếng Anh | 201, `language=en`, dữ liệu không bị dịch |
+| MIG-PROFILE-02 | Patch profile bằng RFC 6902 | 200, tạo revision mới |
+| MIG-PROFILE-03 | Undo revision cuối | 200, profile quay về snapshot trước patch |
+| MIG-CV-01 | Tạo CV thủ công | 201, tạo đồng thời profile và CV snapshot |
+| MIG-CV-02 | GET/PATCH/DELETE CV | đúng snapshot, cập nhật metadata, xoá CV và profile |
 | MIG-STRUCT-01 | Source root | chỉ còn README/config/env và metadata ẩn |
 | MIG-STRUCT-02 | `go test ./...` | pass |
 
@@ -18,4 +25,9 @@
 ```bash
 cd backend
 go test ./...
+
+# smoke test PostgreSQL + Docker backend
+./scripts/build-go-image.sh
+docker compose -f docker-compose.yml --env-file ../.env up -d --build backend
+curl -fsS http://localhost:8080/api/health
 ```

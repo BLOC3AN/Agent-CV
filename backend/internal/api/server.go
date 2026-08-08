@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -52,6 +53,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /api/profiles/", s.patchProfile)
 	mux.HandleFunc("GET /api/profiles/", s.profileSubresource)
 	mux.HandleFunc("POST /api/profiles/", s.profileMutation)
+	mux.HandleFunc("POST /api/cv", s.createCV)
+	mux.HandleFunc("GET /api/cv/", s.cvRoute)
+	mux.HandleFunc("PATCH /api/cv/", s.cvRoute)
+	mux.HandleFunc("DELETE /api/cv/", s.cvRoute)
 	mux.HandleFunc("POST /api/uploads/cv", s.uploadCV)
 	mux.HandleFunc("GET /api/jobs/", s.job)
 	return withJSON(mux)
@@ -105,6 +110,198 @@ func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "profile": profile})
+}
+
+func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV cần PostgreSQL"})
+		return
+	}
+	var body struct {
+		Name     string `json:"name"`
+		Headline string `json:"headline"`
+		Email    string `json:"email"`
+		Phone    string `json:"phone"`
+		Language string `json:"language"`
+		UserID   string `json:"userId"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || strings.TrimSpace(body.Name) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Bạn cần điền họ tên"})
+		return
+	}
+	userID := strings.TrimSpace(body.UserID)
+	if userID == "" {
+		userID = s.currentUserID(r)
+	}
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		return
+	}
+	if body.Language != "en" {
+		body.Language = "vi"
+	}
+	basics := map[string]any{"name": strings.TrimSpace(body.Name)}
+	if strings.TrimSpace(body.Headline) != "" {
+		basics["headline"] = strings.TrimSpace(body.Headline)
+	}
+	if strings.TrimSpace(body.Email) != "" {
+		basics["email"] = strings.TrimSpace(body.Email)
+	}
+	if strings.TrimSpace(body.Phone) != "" {
+		basics["phone"] = strings.TrimSpace(body.Phone)
+	}
+	profile := map[string]any{"schemaVersion": 1, "language": body.Language, "basics": basics, "_meta": map[string]any{"source": "manual", "verified": map[string]any{}}}
+	profileJSON := jsonString(profile)
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		return
+	}
+	defer tx.Rollback()
+	var profileID, cvID string
+	if err = tx.QueryRowContext(r.Context(), `INSERT INTO profiles (user_id, data, language) VALUES ($1,$2::jsonb,$3) RETURNING id`, userID, profileJSON, body.Language).Scan(&profileID); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không tạo được profile"})
+		return
+	}
+	if err = tx.QueryRowContext(r.Context(), `INSERT INTO cv_documents (user_id, profile_id, profile_snapshot, title, language) VALUES ($1,$2,$3::jsonb,$4,$5) RETURNING id`, userID, profileID, profileJSON, strings.TrimSpace(body.Name), body.Language).Scan(&cvID); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không tạo được CV"})
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được CV"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"cvId": cvID, "profileId": profileID})
+}
+
+func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV cần PostgreSQL"})
+		return
+	}
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/cv/"), "/")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.getCV(w, r, id)
+	case http.MethodPatch:
+		s.patchCV(w, r, id)
+	case http.MethodDelete:
+		s.deleteCV(w, r, id)
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method không hỗ trợ"})
+	}
+}
+
+func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
+	var cv map[string]any = make(map[string]any)
+	var profileRaw, themeRaw, layoutRaw []byte
+	var cvID string
+	var title, language, templateID string
+	var updated time.Time
+	err := s.db.QueryRowContext(r.Context(), `SELECT id, profile_snapshot, template_id, theme, layout, language, title, updated_at FROM cv_documents WHERE id = $1`, id).Scan(&cvID, &profileRaw, &templateID, &themeRaw, &layoutRaw, &language, &title, &updated)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		return
+	}
+	cv["id"] = cvID
+	var snapshot, theme, layout any
+	_ = json.Unmarshal(profileRaw, &snapshot)
+	_ = json.Unmarshal(themeRaw, &theme)
+	_ = json.Unmarshal(layoutRaw, &layout)
+	cv["profileSnapshot"] = snapshot
+	cv["templateId"] = templateID
+	cv["theme"] = theme
+	cv["layout"] = layout
+	cv["language"] = language
+	cv["title"] = title
+	cv["updatedAt"] = updated
+	writeJSON(w, http.StatusOK, map[string]any{"cv": cv})
+}
+
+func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
+	var body struct {
+		Title      *string         `json:"title"`
+		TemplateID *string         `json:"templateId"`
+		Theme      json.RawMessage `json:"theme"`
+		Layout     json.RawMessage `json:"layout"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 512<<10)).Decode(&body) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		return
+	}
+	sets, args := []string{}, []any{}
+	n := 1
+	if body.Title != nil {
+		sets = append(sets, fmt.Sprintf("title = $%d", n))
+		args = append(args, *body.Title)
+		n++
+	}
+	if body.TemplateID != nil {
+		sets = append(sets, fmt.Sprintf("template_id = $%d", n))
+		args = append(args, *body.TemplateID)
+		n++
+	}
+	if len(body.Theme) > 0 {
+		sets = append(sets, fmt.Sprintf("theme = $%d::jsonb", n))
+		args = append(args, string(body.Theme))
+		n++
+	}
+	if len(body.Layout) > 0 {
+		sets = append(sets, fmt.Sprintf("layout = $%d::jsonb", n))
+		args = append(args, string(body.Layout))
+		n++
+	}
+	if len(sets) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không có gì để đổi"})
+		return
+	}
+	args = append(args, id)
+	var cvID string
+	err := s.db.QueryRowContext(r.Context(), "UPDATE cv_documents SET "+strings.Join(sets, ", ")+fmt.Sprintf(" WHERE id = $%d RETURNING id", n), args...).Scan(&cvID)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không cập nhật được CV"})
+		return
+	}
+	s.getCV(w, r, cvID)
+}
+
+func (s *Server) deleteCV(w http.ResponseWriter, r *http.Request, id string) {
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		return
+	}
+	defer tx.Rollback()
+	var profileID string
+	if err = tx.QueryRowContext(r.Context(), `DELETE FROM cv_documents WHERE id = $1 RETURNING profile_id`, id).Scan(&profileID); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), `DELETE FROM profiles WHERE id = $1`, profileID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không xóa được profile"})
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được xóa CV"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 
 func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
