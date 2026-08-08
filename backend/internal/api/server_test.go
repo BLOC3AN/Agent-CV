@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,30 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestApplyJSONPatch(t *testing.T) {
+	document := []byte(`{"basics":{"name":"Old"},"language":"en"}`)
+	ops := json.RawMessage(`[{"op":"replace","path":"/basics/name","value":"New"},{"op":"add","path":"/basics/headline","value":"Engineer"}]`)
+	updated, err := applyJSONPatch(document, ops)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(updated, &got); err != nil {
+		t.Fatal(err)
+	}
+	basics := got["basics"].(map[string]any)
+	if basics["name"] != "New" || basics["headline"] != "Engineer" {
+		t.Fatalf("unexpected profile: %#v", got)
+	}
+}
+
+func TestApplyJSONPatchRejectsMissingPath(t *testing.T) {
+	_, err := applyJSONPatch([]byte(`{"basics":{}}`), []byte(`[{"op":"replace","path":"/missing","value":true}]`))
+	if err == nil {
+		t.Fatal("expected invalid patch error")
+	}
+}
 
 func TestHealth(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/health", nil)

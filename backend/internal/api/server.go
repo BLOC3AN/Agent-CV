@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	jsonpatch "github.com/evanphx/json-patch/v5"
 )
 
 type Job struct {
@@ -47,7 +49,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/auth/verify", s.authVerify)
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
 	mux.HandleFunc("POST /api/profiles", s.createProfile)
-	mux.HandleFunc("GET /api/profiles/", s.getProfile)
+	mux.HandleFunc("PATCH /api/profiles/", s.patchProfile)
+	mux.HandleFunc("GET /api/profiles/", s.profileSubresource)
+	mux.HandleFunc("POST /api/profiles/", s.profileMutation)
 	mux.HandleFunc("POST /api/uploads/cv", s.uploadCV)
 	mux.HandleFunc("GET /api/jobs/", s.job)
 	return withJSON(mux)
@@ -124,6 +128,187 @@ func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profile": profile})
+}
+
+func (s *Server) patchProfile(w http.ResponseWriter, r *http.Request) {
+	id, suffix := profilePath(r.URL.Path)
+	if suffix != "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
+		return
+	}
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		return
+	}
+	var body struct {
+		Ops       json.RawMessage `json:"ops"`
+		Author    string          `json:"author"`
+		MessageID string          `json:"messageId"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body) != nil || len(body.Ops) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		return
+	}
+	var ops []any
+	if json.Unmarshal(body.Ops, &ops) != nil || len(ops) == 0 || len(ops) > 50 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ops không hợp lệ"})
+		return
+	}
+	if body.Author == "" {
+		body.Author = "user"
+	}
+	if body.Author != "user" && body.Author != "ai" && body.Author != "import" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "author không hợp lệ"})
+		return
+	}
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		return
+	}
+	defer tx.Rollback()
+	var old []byte
+	if err = tx.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id = $1 FOR UPDATE`, id).Scan(&old); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		return
+	}
+	updated, err := applyJSONPatch(old, body.Ops)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Patch không áp dụng được: " + err.Error()})
+		return
+	}
+	var revisionID int64
+	var messageArg any
+	if body.MessageID != "" {
+		messageArg = body.MessageID
+	}
+	err = tx.QueryRowContext(r.Context(), `UPDATE profiles SET data = $2::jsonb WHERE id = $1 RETURNING id`, id, string(updated)).Scan(new(string))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được profile"})
+		return
+	}
+	err = tx.QueryRowContext(r.Context(), `INSERT INTO profile_revisions (profile_id, patch, inverse, author, message_id) VALUES ($1,$2::jsonb,$3::jsonb,$4,$5) RETURNING id`, id, string(body.Ops), jsonString(map[string]any{"snapshot": json.RawMessage(old)}), body.Author, messageArg).Scan(&revisionID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được revision"})
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được profile"})
+		return
+	}
+	var profile any
+	_ = json.Unmarshal(updated, &profile)
+	writeJSON(w, http.StatusOK, map[string]any{"profile": profile, "revisionId": revisionID, "applied": len(ops), "rejected": []any{}})
+}
+
+func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
+	id, suffix := profilePath(r.URL.Path)
+	if suffix == "" {
+		s.getProfile(w, r)
+		return
+	}
+	if suffix != "revisions" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
+		return
+	}
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		return
+	}
+	rows, err := s.db.QueryContext(r.Context(), `SELECT id, author, patch, created_at FROM profile_revisions WHERE profile_id = $1 ORDER BY id DESC`, id)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		return
+	}
+	defer rows.Close()
+	items := make([]map[string]any, 0)
+	for rows.Next() {
+		var revisionID int64
+		var author string
+		var patchRaw []byte
+		var created time.Time
+		if rows.Scan(&revisionID, &author, &patchRaw, &created) != nil {
+			continue
+		}
+		var patch any
+		_ = json.Unmarshal(patchRaw, &patch)
+		items = append(items, map[string]any{"id": revisionID, "author": author, "patch": patch, "createdAt": created})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"revisions": items})
+}
+
+func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {
+	id, suffix := profilePath(r.URL.Path)
+	if suffix != "undo" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
+		return
+	}
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		return
+	}
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		return
+	}
+	defer tx.Rollback()
+	var revisionID int64
+	var inverse []byte
+	err = tx.QueryRowContext(r.Context(), `SELECT id, inverse FROM profile_revisions WHERE profile_id = $1 ORDER BY id DESC LIMIT 1 FOR UPDATE`, id).Scan(&revisionID, &inverse)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Không có gì để hoàn tác"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		return
+	}
+	var snapshot struct {
+		Snapshot json.RawMessage `json:"snapshot"`
+	}
+	if json.Unmarshal(inverse, &snapshot) != nil || len(snapshot.Snapshot) == 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Revision không hợp lệ"})
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE profiles SET data = $2::jsonb WHERE id = $1`, id, string(snapshot.Snapshot)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không undo được profile"})
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), `DELETE FROM profile_revisions WHERE id = $1`, revisionID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không cập nhật lịch sử"})
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được undo"})
+		return
+	}
+	var profile any
+	_ = json.Unmarshal(snapshot.Snapshot, &profile)
+	writeJSON(w, http.StatusOK, map[string]any{"profile": profile})
+}
+
+func profilePath(path string) (string, string) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(path, "/api/profiles/"), "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		return "", ""
+	}
+	suffix := ""
+	if len(parts) > 1 {
+		suffix = parts[1]
+	}
+	return parts[0], suffix
+}
+
+func applyJSONPatch(document, rawOps []byte) ([]byte, error) {
+	patch, err := jsonpatch.DecodePatch(rawOps)
+	if err != nil {
+		return nil, err
+	}
+	return patch.Apply(document)
 }
 
 func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {

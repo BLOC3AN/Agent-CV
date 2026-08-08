@@ -2,7 +2,10 @@ module github.com/hr-agent/backend
 
 go 1.22
 
-require github.com/jackc/pgx/v5 v5.7.2
+require (
+	github.com/evanphx/json-patch/v5 v5.9.11
+	github.com/jackc/pgx/v5 v5.7.2
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
