@@ -21,6 +21,7 @@ import (
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/phpdave11/gofpdf"
+	"github.com/redis/go-redis/v9"
 )
 
 type Job struct {
@@ -37,6 +38,7 @@ type Server struct {
 	jobs        map[string]*Job
 	db          *sql.DB
 	storageRoot string
+	redis       *redis.Client
 }
 
 func NewServer() *Server { return &Server{jobs: make(map[string]*Job)} }
@@ -44,7 +46,13 @@ func NewServer() *Server { return &Server{jobs: make(map[string]*Job)} }
 // NewServerWithDB enables the production path. The zero-dependency constructor
 // remains useful for unit tests and local smoke tests.
 func NewServerWithDB(db *sql.DB, storageRoot string) *Server {
-	return &Server{jobs: make(map[string]*Job), db: db, storageRoot: storageRoot}
+	var client *redis.Client
+	if raw := os.Getenv("REDIS_URL"); raw != "" {
+		if opts, err := redis.ParseURL(raw); err == nil {
+			client = redis.NewClient(opts)
+		}
+	}
+	return &Server{jobs: make(map[string]*Job), db: db, storageRoot: storageRoot, redis: client}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -1510,7 +1518,11 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var sessionID string
-	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO chat_sessions(user_id,profile_id) SELECT $1,p.id FROM profiles p WHERE p.id=$2 AND p.user_id=$1 RETURNING id`, userID, body.ProfileID).Scan(&sessionID); err != nil {
+	err := s.db.QueryRowContext(r.Context(), `SELECT id FROM chat_sessions WHERE user_id=$1 AND profile_id=$2 ORDER BY updated_at DESC LIMIT 1`, userID, body.ProfileID).Scan(&sessionID)
+	if err == sql.ErrNoRows {
+		err = s.db.QueryRowContext(r.Context(), `INSERT INTO chat_sessions(user_id,profile_id) SELECT $1,p.id FROM profiles p WHERE p.id=$2 AND p.user_id=$1 RETURNING id`, userID, body.ProfileID).Scan(&sessionID)
+	}
+	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
 		return
 	}
@@ -1520,7 +1532,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	history := []map[string]string{}
-	rows, _ := s.db.QueryContext(r.Context(), `SELECT role,content FROM chat_messages WHERE session_id=$1 ORDER BY created_at DESC LIMIT 12`, sessionID)
+	rows, _ := s.db.QueryContext(r.Context(), `SELECT role,content FROM (SELECT role,content,created_at FROM chat_messages WHERE session_id=$1 ORDER BY created_at DESC LIMIT 12) recent ORDER BY created_at ASC`, sessionID)
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -1530,6 +1542,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// PostgreSQL remains the source of truth; Redis is a bounded, disposable
+	// cache so a reload can restore the last ten messages without loading the
+	// whole conversation.
+	s.cacheChatMessages(r.Context(), userID, sessionID, history)
 	profileRaw := []byte{}
 	_ = s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 AND user_id=$2`, body.ProfileID, userID).Scan(&profileRaw)
 	prompt := []map[string]string{{"role": "system", "content": "Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ. Không tự ý thay đổi hồ sơ; nếu đề xuất thay đổi, mô tả rõ để người dùng xác nhận."}, {"role": "user", "content": "PROFILE:\n" + string(profileRaw) + "\n\nHISTORY:\n" + jsonString(history) + "\n\nUSER:\n" + body.Message}}
@@ -1544,10 +1560,35 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được câu trả lời"})
 		return
 	}
+	_, _ = s.db.ExecContext(r.Context(), `UPDATE chat_sessions SET updated_at=now() WHERE id=$1`, sessionID)
+	history = append(history, map[string]string{"role": "assistant", "content": answer})
+	s.cacheChatMessages(r.Context(), userID, sessionID, history)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	payload, _ := json.Marshal(map[string]any{"kind": "reply", "text": answer, "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID})
 	fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+}
+
+func (s *Server) cacheChatMessages(ctx context.Context, userID, sessionID string, messages []map[string]string) {
+	if s.redis == nil || userID == "" || sessionID == "" {
+		return
+	}
+	key := "chat:memory:" + userID + ":" + sessionID
+	values := make([]interface{}, 0, len(messages))
+	start := 0
+	if len(messages) > 10 {
+		start = len(messages) - 10
+	}
+	for _, message := range messages[start:] {
+		values = append(values, jsonString(message))
+	}
+	pipe := s.redis.Pipeline()
+	pipe.Del(ctx, key)
+	if len(values) > 0 {
+		pipe.RPush(ctx, key, values...)
+	}
+	pipe.Expire(ctx, key, 7*24*time.Hour)
+	_, _ = pipe.Exec(ctx)
 }
 
 func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {

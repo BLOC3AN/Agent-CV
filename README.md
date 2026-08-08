@@ -119,6 +119,11 @@ Các service gồm Go backend, Next frontend, Postgres, Redis, PDFKit và worker
 chuyển tiếp. Dev có giá trị `AUTH_SECRET` mặc định; production phải đặt secret
 riêng trong `.env` hoặc secret manager.
 
+Chat giữ lịch sử bền vững trong PostgreSQL và cache tối đa 10 tin gần nhất theo
+`chat:memory:{userID}:{sessionID}` trong Redis (TTL 7 ngày). Khi một đề xuất
+đang chờ duyệt, trả lời `OK`/`Đồng ý`/`Xác nhận` sẽ tự động áp dụng toàn bộ đề
+xuất; mọi thay đổi vẫn đi qua endpoint proposal có kiểm tra ownership.
+
 `GO_API_CUTOVER=true` là cờ để middleware rewrite toàn bộ `/api/*` từ frontend
 sang Go backend. Đặt `false` để rollback về Node API route trong giai đoạn
 chuyển tiếp.

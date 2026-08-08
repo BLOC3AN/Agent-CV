@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ProfileSchema, type Profile } from '@hr/schema'
 import { ChatPanel } from '@/components/chat/ChatPanel'
-import { resetChat } from '@/lib/chat-store'
+import { resetChat, useChat } from '@/lib/chat-store'
 
 /**
  * TC-51-* — khung chat, kiểm ở tầng GIAO DIỆN.
@@ -105,6 +105,50 @@ function sseResponse(events: [string, unknown][]): Response {
 }
 
 describe('UC-56 — hỏi trợ lý', () => {
+  it('OK khi có đề xuất sẽ tự áp dụng toàn bộ thay đổi đang chờ', async () => {
+    const onProfileChange = vi.fn()
+    const updated = profile({ basics: { name: 'Nguyễn Văn A', summary: 'Đã cập nhật', links: [] } })
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ profile: updated, applied: 2 }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<ChatPanel profileId="p-1" profile={profile()} onProfileChange={onProfileChange} />)
+
+    useChat.getState().setProposal({
+      proposalId: 'proposal-1',
+      summary: 'Đề xuất cập nhật',
+      ops: [
+        {
+          op: 'replace',
+          path: '/basics/summary',
+          value: 'Đã cập nhật',
+          rationale: 'Rõ hơn',
+          grounding: { type: 'existing_field', ref: '/basics/summary' },
+          kbRefs: [],
+        },
+        {
+          op: 'replace',
+          path: '/basics/name',
+          value: 'Nguyễn Văn A',
+          rationale: 'Giữ nguyên tên',
+          grounding: { type: 'existing_field', ref: '/basics/name' },
+          kbRefs: [],
+        },
+      ],
+      rejected: [],
+    })
+
+    await useChat.getState().send('OK')
+
+    await waitFor(() => expect(onProfileChange).toHaveBeenCalledWith(updated))
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/chat/proposals/proposal-1',
+      expect.objectContaining({ body: JSON.stringify({ profileId: 'p-1', accept: [0, 1] }) }),
+    )
+    expect(screen.getByText(/Đã áp dụng 2 thay đổi/)).toBeInTheDocument()
+  })
+
   it('hiện câu trả lời của trợ lý, không phải câu "chưa rõ bạn muốn sửa gì"', async () => {
     const user = userEvent.setup()
     vi.stubGlobal(

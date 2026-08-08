@@ -69,10 +69,18 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
   const setModelRef = useChat((s) => s.setModelRef)
   const say = useChat((s) => s.say)
   const send = useChat((s) => s.send)
+  const appliedProfile = useChat((s) => s.appliedProfile)
+  const consumeAppliedProfile = useChat((s) => s.consumeAppliedProfile)
 
   useEffect(() => {
     attach(profileId)
   }, [attach, profileId])
+
+  useEffect(() => {
+    if (!appliedProfile) return
+    onProfileChange(appliedProfile)
+    consumeAppliedProfile()
+  }, [appliedProfile, consumeAppliedProfile, onProfileChange])
 
   const suggestions = suggestionsFor(profile)
 

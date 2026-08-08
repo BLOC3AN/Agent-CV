@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import type { ClarifyRequest, PatchOp } from '@hr/schema'
+import type { ClarifyRequest, PatchOp, Profile } from '@hr/schema'
 
 /**
  * Phiên chat với trợ lý — sống ở đây, KHÔNG trong state của ChatPanel.
@@ -62,6 +62,7 @@ interface ChatState {
   clarify: ChatClarify | null
   modelRef: ChatModelRef
   activeController: AbortController | null
+  appliedProfile: Profile | null
 
   /** Gắn store vào một hồ sơ; xoá hội thoại nếu là hồ sơ khác */
   attach: (profileId: string) => void
@@ -71,6 +72,7 @@ interface ChatState {
   setModelRef: (modelRef: ChatModelRef) => void
   stop: () => void
   say: (m: ChatMessage) => void
+  consumeAppliedProfile: () => Profile | null
   send: (text: string, answers?: { question: string; answer: string }[], hint?: ChatHint) => Promise<void>
 }
 
@@ -124,6 +126,7 @@ export const useChat = create<ChatState>((set, get) => ({
   clarify: null,
   modelRef: 'local.reasoner',
   activeController: null,
+  appliedProfile: null,
 
   attach: (profileId) => {
     if (get().profileId === profileId) return
@@ -137,6 +140,7 @@ export const useChat = create<ChatState>((set, get) => ({
       proposal: null,
       clarify: null,
       activeController: null,
+      appliedProfile: null,
     })
   },
 
@@ -146,10 +150,17 @@ export const useChat = create<ChatState>((set, get) => ({
   setModelRef: (modelRef) => set({ modelRef }),
   stop: () => get().activeController?.abort(),
   say: (m) => set({ messages: [...get().messages, m] }),
+  consumeAppliedProfile: () => {
+    const profile = get().appliedProfile
+    if (profile) set({ appliedProfile: null })
+    return profile
+  },
 
   async send(text, answers = [], hint) {
-    const { profileId, busy, modelRef } = get()
+    const { profileId, busy, modelRef, proposal } = get()
     if (!profileId || busy || !text.trim()) return
+
+    const confirmation = /^(ok|okay|yes|y|đồng ý|dong y|xác nhận|xac nhan|được|duoc)$/i.test(text.trim())
 
     set({
       busy: true,
@@ -162,6 +173,24 @@ export const useChat = create<ChatState>((set, get) => ({
 
     const controller = get().activeController
     try {
+      if (confirmation && proposal) {
+        const res = await fetch(`/api/chat/proposals/${proposal.proposalId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId, accept: proposal.ops.map((_, i) => i) }),
+        })
+        const data = (await res.json()) as { profile?: Profile; applied?: number; error?: string }
+        if (!res.ok || !data.profile) throw new Error(data.error ?? `HTTP ${res.status}`)
+        set({
+          proposal: null,
+          appliedProfile: data.profile,
+          messages: [
+            ...get().messages,
+            { role: 'assistant', content: `Đã áp dụng ${data.applied ?? proposal.ops.length} thay đổi vào hồ sơ.` },
+          ],
+        })
+        return
+      }
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -239,5 +268,6 @@ export function resetChat(): void {
     clarify: null,
     modelRef: 'local.reasoner',
     activeController: null,
+    appliedProfile: null,
   })
 }

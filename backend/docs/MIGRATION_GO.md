@@ -32,6 +32,19 @@ legacy; mỗi luồng mới phải có implementation và test ở Go trước.
   embedding/model không khả dụng, kết quả được đánh dấu degraded.
   Kết quả được ghi lại vào `jobs`/`match_analyses`, không để job treo.
 
+### Chat memory và xác nhận đề xuất
+
+- PostgreSQL là source of truth cho `chat_sessions` và `chat_messages`. Một
+  profile chỉ dùng lại session gần nhất của đúng `userID + profileID`, nên
+  lượt nhắn tiếp theo (ví dụ `OK`) không bị tách khỏi ngữ cảnh cũ.
+- Redis lưu một bản cache tối đa 10 message gần nhất tại
+  `chat:memory:{userID}:{sessionID}`, TTL 7 ngày. Cache mất không làm mất lịch
+  sử dụng vì lịch sử vẫn đọc từ PostgreSQL.
+- Khi frontend đang có proposal, các câu xác nhận chính xác `OK`, `Yes`,
+  `Đồng ý`, `Xác nhận` (và biến thể không dấu) sẽ gọi endpoint proposal với
+  toàn bộ operation. Không có proposal thì `OK` vẫn được gửi như một câu chat
+  bình thường.
+
 Go đã có production path với PostgreSQL và storage thật. Migration chưa hoàn
 tất cho tới khi frontend đổi sang Go và các route/worker còn lại được chuyển.
 
