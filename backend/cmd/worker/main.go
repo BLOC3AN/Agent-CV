@@ -175,7 +175,9 @@ func matchAnalysis(ctx context.Context, db *sql.DB, j *job) error {
 		return fmt.Errorf("JD_NOT_FOUND")
 	}
 	score, matched, gaps := keywordScore(profile, jd)
+	degraded := true
 	if semantic, ok := semanticScore(ctx, profile, jd); ok {
+		degraded = false
 		keyword := toFloat(score["overall"])
 		score["breakdown"].(map[string]any)["semantic"] = int(semantic * 100)
 		score["overall"] = int(keyword*0.6 + semantic*40)
@@ -185,10 +187,10 @@ func matchAnalysis(ctx context.Context, db *sql.DB, j *job) error {
 	matchedRaw := jsonString(matched)
 	gapsRaw := jsonString(gaps)
 	var matchID string
-	if err := db.QueryRowContext(ctx, `INSERT INTO match_analyses(cv_id,jd_id,revision_id,score,matched,gaps,model_used,degraded) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,'go-keyword',true) ON CONFLICT (cv_id,jd_id,revision_id) DO UPDATE SET score=EXCLUDED.score,matched=EXCLUDED.matched,gaps=EXCLUDED.gaps,created_at=now() RETURNING id`, p.CVID, p.JDID, revision, scoreRaw, matchedRaw, gapsRaw).Scan(&matchID); err != nil {
+	if err := db.QueryRowContext(ctx, `INSERT INTO match_analyses(cv_id,jd_id,revision_id,score,matched,gaps,model_used,degraded) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,'go-semantic',$7) ON CONFLICT (cv_id,jd_id,revision_id) DO UPDATE SET score=EXCLUDED.score,matched=EXCLUDED.matched,gaps=EXCLUDED.gaps,model_used=EXCLUDED.model_used,degraded=EXCLUDED.degraded,created_at=now() RETURNING id`, p.CVID, p.JDID, revision, scoreRaw, matchedRaw, gapsRaw, degraded).Scan(&matchID); err != nil {
 		return err
 	}
-	result := jsonString(map[string]any{"matchId": matchID, "overall": score["overall"], "degraded": true})
+	result := jsonString(map[string]any{"matchId": matchID, "overall": score["overall"], "degraded": degraded})
 	_, err := db.ExecContext(ctx, `UPDATE jobs SET status='done',result=$2::jsonb,error=NULL,finished_at=now() WHERE id=$1`, j.ID, result)
 	return err
 }
