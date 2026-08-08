@@ -46,6 +46,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/request", s.authRequest)
 	mux.HandleFunc("GET /api/auth/verify", s.authVerify)
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
+	mux.HandleFunc("POST /api/profiles", s.createProfile)
+	mux.HandleFunc("GET /api/profiles/", s.getProfile)
 	mux.HandleFunc("POST /api/uploads/cv", s.uploadCV)
 	mux.HandleFunc("GET /api/jobs/", s.job)
 	return withJSON(mux)
@@ -60,6 +62,68 @@ func withJSON(next http.Handler) http.Handler {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "backend-go"})
+}
+
+func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		return
+	}
+	var body struct {
+		Profile json.RawMessage `json:"profile"`
+		UserID  string          `json:"userId"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body) != nil || len(body.Profile) == 0 || string(body.Profile) == "null" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Profile không hợp lệ"})
+		return
+	}
+	userID := strings.TrimSpace(body.UserID)
+	if userID == "" {
+		userID = s.currentUserID(r)
+	}
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		return
+	}
+	var id, language string
+	var profile map[string]any
+	if json.Unmarshal(body.Profile, &profile) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Profile phải là object JSON"})
+		return
+	}
+	language, _ = profile["language"].(string)
+	if language != "en" {
+		language = "vi"
+	}
+	err := s.db.QueryRowContext(r.Context(), `INSERT INTO profiles (user_id, data, language) VALUES ($1, $2::jsonb, $3) RETURNING id`, userID, string(body.Profile), language).Scan(&id)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không tạo được profile"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "profile": profile})
+}
+
+func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/profiles/")
+	id = strings.TrimSuffix(id, "/")
+	var raw []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id = $1`, id).Scan(&raw); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		return
+	}
+	var profile any
+	if json.Unmarshal(raw, &profile) != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Profile bị hỏng"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"profile": profile})
 }
 
 func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {
