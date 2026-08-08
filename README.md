@@ -62,6 +62,15 @@ Compose nằm ở `backend/docker-compose.yml`:
 docker compose -f backend/docker-compose.yml --profile full up -d --build
 ```
 
+Nếu Docker đang chọn builder container bị lỗi DNS, dùng builder mặc định:
+
+```bash
+./backend/scripts/build-go-image.sh
+BUILDX_BUILDER=default ./backend/scripts/build-all.sh
+```
+
+Hướng dẫn sửa DNS lâu dài cho Docker daemon: [`backend/docs/DOCKER_DNS.md`](backend/docs/DOCKER_DNS.md).
+
 Các service gồm Go backend, Next frontend, Postgres, Redis, PDFKit và worker
 chuyển tiếp. Dev có giá trị `AUTH_SECRET` mặc định; production phải đặt secret
 riêng trong `.env` hoặc secret manager.

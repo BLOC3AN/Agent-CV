@@ -46,3 +46,10 @@ go run ./cmd/api
 
 Docker image Go dùng `scratch` và binary local để không phụ thuộc registry ở
 bước build. Cần chạy script build binary trước `docker compose build backend`.
+
+Để build cả stack trên máy đang có builder container lỗi DNS:
+
+```bash
+./backend/scripts/build-go-image.sh
+BUILDX_BUILDER=default ./backend/scripts/build-all.sh
+```
