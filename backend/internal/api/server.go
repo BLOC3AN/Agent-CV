@@ -61,6 +61,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/jobs/", s.job)
 	mux.HandleFunc("DELETE /api/jobs/", s.job)
 	mux.HandleFunc("GET /api/imports/", s.importRoute)
+	mux.HandleFunc("POST /api/imports/", s.importComplete)
+	mux.HandleFunc("DELETE /api/account", s.deleteAccount)
+	mux.HandleFunc("GET /api/kb", s.kbRoute)
+	mux.HandleFunc("PATCH /api/kb", s.kbRoute)
+	mux.HandleFunc("POST /api/kb/citations", s.kbCitations)
 	return withJSON(mux)
 }
 
@@ -441,6 +446,14 @@ func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {
 	id, suffix := profilePath(r.URL.Path)
+	if suffix == "verify" {
+		s.verifyProfile(w, r, id)
+		return
+	}
+	if suffix == "revert" {
+		s.revertProfile(w, r, id)
+		return
+	}
 	if suffix != "undo" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
 		return
@@ -487,6 +500,90 @@ func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {
 	}
 	var profile any
 	_ = json.Unmarshal(snapshot.Snapshot, &profile)
+	writeJSON(w, http.StatusOK, map[string]any{"profile": profile})
+}
+
+func (s *Server) verifyProfile(w http.ResponseWriter, r *http.Request, id string) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		return
+	}
+	var body struct {
+		Paths    []string `json:"paths"`
+		Verified *bool    `json:"verified"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || len(body.Paths) == 0 || len(body.Paths) > 200 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		return
+	}
+	verified := true
+	if body.Verified != nil {
+		verified = *body.Verified
+	}
+	var raw []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id = $1`, id).Scan(&raw); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		return
+	}
+	var profile map[string]any
+	if json.Unmarshal(raw, &profile) != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Profile bị hỏng"})
+		return
+	}
+	meta, _ := profile["_meta"].(map[string]any)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	marks, _ := meta["verified"].(map[string]any)
+	if marks == nil {
+		marks = map[string]any{}
+	}
+	for _, path := range body.Paths {
+		if !strings.HasPrefix(path, "/") {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Path không hợp lệ"})
+			return
+		}
+		marks[path] = verified
+	}
+	meta["verified"] = marks
+	profile["_meta"] = meta
+	updated := jsonString(profile)
+	if _, err := s.db.ExecContext(r.Context(), `UPDATE profiles SET data = $2::jsonb WHERE id = $1`, id, updated); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được xác nhận"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"profile": profile, "progress": map[string]any{"complete": verified}})
+}
+
+func (s *Server) revertProfile(w http.ResponseWriter, r *http.Request, id string) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		return
+	}
+	var body struct {
+		RevisionID string `json:"revisionId"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || body.RevisionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Thiếu revisionId"})
+		return
+	}
+	var snapshot []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT inverse->'snapshot' FROM profile_revisions WHERE profile_id = $1 AND id = $2`, id, body.RevisionID).Scan(&snapshot); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không có mốc lịch sử này"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Revision không hợp lệ"})
+		return
+	}
+	if _, err := s.db.ExecContext(r.Context(), `UPDATE profiles SET data = $2::jsonb WHERE id = $1`, id, string(snapshot)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không khôi phục được profile"})
+		return
+	}
+	var profile any
+	_ = json.Unmarshal(snapshot, &profile)
 	writeJSON(w, http.StatusOK, map[string]any{"profile": profile})
 }
 
@@ -724,6 +821,171 @@ func (s *Server) importRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	r.URL.Path = "/api/jobs/" + id
 	s.job(w, r)
+}
+
+func (s *Server) importComplete(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/imports/"), "/complete"), "/")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
+		return
+	}
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import cần PostgreSQL"})
+		return
+	}
+	var userID, status string
+	var resultRaw []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT user_id, status, COALESCE(result,'{}') FROM jobs WHERE id = $1`, id).Scan(&userID, &status, &resultRaw); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy job"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
+		return
+	}
+	if status != "done" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Job đang ở trạng thái " + status})
+		return
+	}
+	var result map[string]any
+	_ = json.Unmarshal(resultRaw, &result)
+	profileID, _ := result["profileId"].(string)
+	if profileID == "" {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Job không có hồ sơ"})
+		return
+	}
+	var existing string
+	if err := s.db.QueryRowContext(r.Context(), `SELECT id FROM cv_documents WHERE profile_id = $1 ORDER BY created_at LIMIT 1`, profileID).Scan(&existing); err == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"cvId": existing, "created": false})
+		return
+	}
+	var profileRaw []byte
+	var language, title string
+	if err := s.db.QueryRowContext(r.Context(), `SELECT data, language, COALESCE(data->'basics'->>'name','CV của tôi') FROM profiles WHERE id = $1`, profileID).Scan(&profileRaw, &language, &title); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		return
+	}
+	var cvID string
+	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO cv_documents (user_id, profile_id, profile_snapshot, title, language) VALUES ($1,$2,$3::jsonb,$4,$5) RETURNING id`, userID, profileID, string(profileRaw), title, language).Scan(&cvID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được CV"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"cvId": cvID, "created": true})
+}
+
+func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Account cần PostgreSQL"})
+		return
+	}
+	userID := s.currentUserID(r)
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		return
+	}
+	var body struct {
+		ConfirmEmail string `json:"confirmEmail"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || strings.TrimSpace(body.ConfirmEmail) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Thiếu xác nhận"})
+		return
+	}
+	var email string
+	if err := s.db.QueryRowContext(r.Context(), `SELECT email FROM users WHERE id = $1`, userID).Scan(&email); err != nil || !strings.EqualFold(strings.TrimSpace(body.ConfirmEmail), email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Email xác nhận không khớp với tài khoản đang đăng nhập."})
+		return
+	}
+	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không xoá được tài khoản"})
+		return
+	}
+	s.authLogout(w, r)
+}
+
+func (s *Server) kbRoute(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "KB cần PostgreSQL"})
+		return
+	}
+	if r.Method == http.MethodPatch {
+		s.patchKB(w, r)
+		return
+	}
+	rows, err := s.db.QueryContext(r.Context(), `SELECT s.id, s.title, s.author_name, s.author_title, s.language, s.status, s.version, (SELECT count(*) FROM kb_chunks c WHERE c.source_id=s.id) FROM kb_sources s ORDER BY s.created_at DESC`)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được KB"})
+		return
+	}
+	defer rows.Close()
+	sources := make([]map[string]any, 0)
+	for rows.Next() {
+		var id, title, author, language, status string
+		var authorTitle sql.NullString
+		var version, count int
+		if rows.Scan(&id, &title, &author, &authorTitle, &language, &status, &version, &count) != nil {
+			continue
+		}
+		sources = append(sources, map[string]any{"id": id, "title": title, "authorName": author, "authorTitle": authorTitle.String, "language": language, "status": status, "version": version, "chunkCount": count, "canActivate": strings.TrimSpace(author) != "" && author != "Chưa có người duyệt"})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sources": sources})
+}
+
+func (s *Server) patchKB(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SourceID    string  `json:"sourceId"`
+		Status      *string `json:"status"`
+		AuthorName  *string `json:"authorName"`
+		AuthorTitle *string `json:"authorTitle"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || body.SourceID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		return
+	}
+	if body.Status != nil && *body.Status == "active" && (body.AuthorName == nil || strings.TrimSpace(*body.AuthorName) == "" || *body.AuthorName == "Chưa có người duyệt") {
+		var author string
+		_ = s.db.QueryRowContext(r.Context(), `SELECT author_name FROM kb_sources WHERE id=$1`, body.SourceID).Scan(&author)
+		if strings.TrimSpace(author) == "" || author == "Chưa có người duyệt" {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Chưa thể kích hoạt khi thiếu người chịu trách nhiệm"})
+			return
+		}
+	}
+	result, err := s.db.ExecContext(r.Context(), `UPDATE kb_sources SET status=COALESCE($2,status), author_name=COALESCE($3,author_name), author_title=COALESCE($4,author_title) WHERE id=$1`, body.SourceID, body.Status, body.AuthorName, body.AuthorTitle)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không cập nhật được nguồn"})
+		return
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy nguồn"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) kbCitations(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "KB cần PostgreSQL"})
+		return
+	}
+	var body struct {
+		ChunkIDs []string `json:"chunkIds"`
+		Language string   `json:"language"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || len(body.ChunkIDs) > 50 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		return
+	}
+	if body.Language != "en" {
+		body.Language = "vi"
+	}
+	citations := make([]map[string]any, 0)
+	for _, id := range body.ChunkIDs {
+		var text, title, author, authorTitle string
+		err := s.db.QueryRowContext(r.Context(), `SELECT c.text,s.title,s.author_name,COALESCE(s.author_title,'') FROM kb_chunks c JOIN kb_sources s ON s.id=c.source_id WHERE (c.id::text=$1 OR c.breadcrumb=$1) AND c.language=$2 AND s.status='active'`, id, body.Language).Scan(&text, &title, &author, &authorTitle)
+		if err == nil {
+			citations = append(citations, map[string]any{"chunkId": id, "text": text, "title": title, "authorName": author, "authorTitle": authorTitle})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"citations": citations})
 }
 
 func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {

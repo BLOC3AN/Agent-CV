@@ -24,6 +24,14 @@
 | CUT-18 | Canary lỗi 5xx/timeout | Routing fallback về Node, không mất session/job |
 | CUT-19 | Rollback sau khi có job đang chạy | Không có job chạy song song hoặc bị tạo bản sao |
 | CUT-20 | Đối soát dữ liệu sau cutover | Count/checksum profiles, CV, jobs, revisions khớp trước cutover |
+| CUT-21 | Profile verify với path hợp lệ | `_meta.verified` cập nhật đúng, không tạo revision rỗng |
+| CUT-22 | Profile revert tới revision | Profile quay về snapshot của revision, API trả lỗi rõ nếu revision không tồn tại |
+| CUT-23 | Import complete khi job chưa done | 409, không tạo CV |
+| CUT-24 | Import complete gọi lặp | Lần sau trả cùng CV, không tạo bản ghi thứ hai |
+| CUT-25 | KB activate thiếu author | 422, nguồn vẫn không active |
+| CUT-26 | KB citations chunk active | Trả source/author/text đúng language |
+| CUT-27 | Xoá account sai confirmEmail | 400, dữ liệu không bị xoá |
+| CUT-28 | Xoá account đúng email | Cascade users/profile/CV/session đúng, cookie bị xoá |
 
 ## Lệnh kiểm tra tối thiểu
 
