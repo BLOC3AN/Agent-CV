@@ -70,7 +70,18 @@ export async function enqueue(input: {
   }
 
   try {
-    await getQueue(input.kind).add(
+    const queue = getQueue(input.kind)
+    if (!created && job.status === 'queued') {
+      // Redis có thể còn một BullMQ job terminal cũ cùng jobId trong khi DB đã
+      // đưa job về queued. BullMQ sẽ dedupe theo jobId và không tạo item mới,
+      // nên dọn bản terminal trước khi dispatch lại.
+      const existing = await queue.getJob(job.id)
+      if (existing) {
+        const state = await existing.getState()
+        if (state === 'completed' || state === 'failed') await existing.remove()
+      }
+    }
+    await queue.add(
       input.kind,
       { jobId: job.id },
       {
