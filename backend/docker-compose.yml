@@ -114,11 +114,14 @@ services:
       # Dev default giúp `docker compose` quản lý từng service; production
       # phải ghi đè bằng AUTH_SECRET thật trong .env/secret manager.
       AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me}
+      GO_API_CUTOVER: ${GO_API_CUTOVER:-false}
+      GO_BACKEND_URL: http://backend:8080
     ports:
       - '3000:3000'
     volumes:
       - uploads:/app/var/storage
     depends_on:
+      backend: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     profiles: ['full']
