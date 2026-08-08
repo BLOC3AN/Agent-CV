@@ -42,7 +42,7 @@ export interface SkillHit {
 
 const DEFAULT_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../kb/taxonomy/it-software.yaml',
+	'../../../../backend/kb/taxonomy/it-software.yaml',
 )
 
 export class SkillTaxonomy {

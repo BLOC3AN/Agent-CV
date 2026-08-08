@@ -38,7 +38,9 @@ tất cho tới khi frontend đổi sang Go và các route/worker còn lại đ�
 ## Còn lại cần chuyển
 
 Các edge case còn phải hoàn tất trước khi xóa Node route là ownership/authorization
-đầy đủ cho mọi read/mutation, retry/retention parity và đối soát staging.
+đầy đủ cho mọi read/mutation, retry/retention parity và đối soát staging. Go đã
+được khóa ownership theo session cho resource người dùng; các gate còn lại phải
+được chạy trên staging bằng CUT-44 đến CUT-47 trước khi tháo rollback route.
 `embed_profile` và OCR/image branch nằm ngoài phạm vi hiện tại; semantic matching
 đã có fallback degraded và LLM advice/reranker đã chạy trong worker Go.
 
@@ -78,6 +80,16 @@ bước build. Cần chạy script build binary trước `docker compose build b
 ./backend/scripts/build-go-image.sh
 BUILDX_BUILDER=default ./backend/scripts/build-all.sh
 ```
+
+Đối soát read-only giữa snapshot trước cutover và staging:
+
+```bash
+./backend/scripts/reconcile-staging.sh \
+  "$BASELINE_DATABASE_URL" "$STAGING_DATABASE_URL"
+```
+
+Script in count/checksum theo bảng; chỉ mismatch là phải dừng cutover và điều
+tra, không tự sửa hoặc xóa dữ liệu.
 
 Use case và gate trước khi Go làm backend chính nằm ở
 [`GO_CUTOVER_USECASES.md`](GO_CUTOVER_USECASES.md) và

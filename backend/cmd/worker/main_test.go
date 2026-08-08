@@ -36,3 +36,16 @@ func TestLooksLikeCVRejectsNonCVText(t *testing.T) {
 		t.Fatal("education section must be accepted")
 	}
 }
+
+func TestRetryableErrorClassification(t *testing.T) {
+	for _, message := range []string{"PDF_EXTRACT_FAILED: timeout", "MODEL_UNAVAILABLE", "dial ECONNRESET"} {
+		if !retryableError(message) {
+			t.Fatalf("expected retryable: %q", message)
+		}
+	}
+	for _, message := range []string{"NO_CV_SECTIONS", "FILE_MISSING", "CV_NOT_FOUND", "PROFILE_CREATE_FAILED: invalid uuid"} {
+		if retryableError(message) {
+			t.Fatalf("expected terminal: %q", message)
+		}
+	}
+}

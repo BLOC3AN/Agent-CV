@@ -22,6 +22,7 @@ import (
 type job struct {
 	ID, Kind, UserID string
 	Payload          []byte
+	Attempts         int
 }
 
 func main() {
@@ -39,6 +40,7 @@ func main() {
 	}
 	log.Printf("go worker ready")
 	lastReap := time.Now()
+	purgeOnce := time.Now().Add(-time.Hour)
 	for {
 		if time.Since(lastReap) >= 30*time.Second {
 			if n, err := reapStale(db); err != nil {
@@ -47,6 +49,14 @@ func main() {
 				log.Printf("requeued %d stale jobs", n)
 			}
 			lastReap = time.Now()
+		}
+		if time.Since(purgeOnce) >= time.Hour {
+			if n, err := purgeExpiredFiles(db, os.Getenv("STORAGE_ROOT")); err != nil {
+				log.Printf("retention: %v", err)
+			} else if n > 0 {
+				log.Printf("retention: purged %d files", n)
+			}
+			purgeOnce = time.Now()
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		j, err := claim(ctx, db)
@@ -62,24 +72,28 @@ func main() {
 		}
 		if err := process(context.Background(), db, j); err != nil {
 			log.Printf("job %s failed: %v", j.ID, err)
-			_, _ = db.Exec(`UPDATE jobs SET status='failed', error=$2, finished_at=now() WHERE id=$1`, j.ID, err.Error())
+			markFailure(db, j, err)
 		}
 	}
 }
 
 func reapStale(db *sql.DB) (int64, error) {
-	res, err := db.Exec(`UPDATE jobs SET status='queued', started_at=NULL, error='WORKER_RESTART_RETRY' WHERE status='running' AND started_at < now() - interval '10 minutes' AND attempts < 3`)
+	res, err := db.Exec(`UPDATE jobs SET status='queued', started_at=NULL, finished_at=NULL, retry_at=now()+interval '5 seconds', error='WORKER_RESTART_RETRY' WHERE status='running' AND started_at < now() - interval '30 minutes' AND attempts < 3`)
 	if err != nil {
 		return 0, err
 	}
 	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	_, err = db.Exec(`UPDATE jobs SET status='failed', error='STALE: worker did not finish after 3 attempts', finished_at=now() WHERE status='running' AND started_at < now() - interval '30 minutes' AND attempts >= 3`)
 	return n, err
 }
 
 func claim(ctx context.Context, db *sql.DB) (*job, error) {
 	var j job
 	var userID sql.NullString
-	err := db.QueryRowContext(ctx, `WITH picked AS (SELECT id FROM jobs WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs SET status='running',attempts=attempts+1,started_at=COALESCE(started_at,now()) WHERE id=(SELECT id FROM picked) RETURNING id,kind,user_id,payload`).Scan(&j.ID, &j.Kind, &userID, &j.Payload)
+	err := db.QueryRowContext(ctx, `WITH picked AS (SELECT id FROM jobs WHERE status='queued' AND (retry_at IS NULL OR retry_at <= now()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs SET status='running',attempts=attempts+1,started_at=now(),retry_at=NULL WHERE id=(SELECT id FROM picked) RETURNING id,kind,user_id,payload,attempts`).Scan(&j.ID, &j.Kind, &userID, &j.Payload, &j.Attempts)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -90,6 +104,48 @@ func claim(ctx context.Context, db *sql.DB) (*job, error) {
 		j.UserID = userID.String
 	}
 	return &j, nil
+}
+
+func retryableError(message string) bool {
+	m := strings.ToUpper(message)
+	return strings.Contains(m, "PDF_EXTRACT_FAILED") || strings.Contains(m, "MODEL_UNAVAILABLE") || strings.Contains(m, "TIMEOUT") || strings.Contains(m, "ECONN") || strings.Contains(m, "CONNECTION REFUSED")
+}
+
+func markFailure(db *sql.DB, j *job, err error) {
+	message := err.Error()
+	if retryableError(message) && j.Attempts < 3 {
+		_, _ = db.Exec(`UPDATE jobs SET status='queued', error=$2, started_at=NULL, finished_at=NULL, retry_at=now() + (power(2, $3 - 1) * interval '5 seconds') WHERE id=$1 AND status='running'`, j.ID, message, j.Attempts)
+		return
+	}
+	_, _ = db.Exec(`UPDATE jobs SET status='failed', error=$2, finished_at=now(), retry_at=NULL WHERE id=$1 AND status='running'`, j.ID, message)
+}
+
+func purgeExpiredFiles(db *sql.DB, root string) (int64, error) {
+	rows, err := db.Query(`SELECT id,payload->>'storageKey' FROM jobs WHERE file_purged_at IS NULL AND payload ? 'storageKey' AND created_at < now()-interval '48 hours' ORDER BY created_at LIMIT 500`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	var purged int64
+	for rows.Next() {
+		var id, key string
+		if err := rows.Scan(&id, &key); err != nil {
+			continue
+		}
+		var shared int
+		if err := db.QueryRow(`SELECT count(*) FROM jobs WHERE payload->>'storageKey'=$1 AND id<>$2 AND file_purged_at IS NULL`, key, id).Scan(&shared); err != nil {
+			continue
+		}
+		if shared == 0 {
+			if err := os.Remove(filepath.Join(root, key)); err != nil && !os.IsNotExist(err) {
+				continue
+			}
+		}
+		if _, err := db.Exec(`UPDATE jobs SET file_purged_at=now() WHERE id=$1 AND file_purged_at IS NULL`, id); err == nil {
+			purged++
+		}
+	}
+	return purged, rows.Err()
 }
 
 func process(ctx context.Context, db *sql.DB, j *job) error {

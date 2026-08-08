@@ -143,8 +143,8 @@ export type RouteConfig = z.infer<typeof RouteSchema>
 export type LocalModelConfig = z.infer<typeof LocalModelSchema>
 
 function repoRoot(): string {
-  // packages/ai/src/config.ts → ../../..
-  return resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+	// frontend/packages/ai/src/config.ts → workspace root
+	return resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
 }
 
 let cached: AppConfig | null = null

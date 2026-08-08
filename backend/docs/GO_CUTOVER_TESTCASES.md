@@ -52,6 +52,10 @@
 | CUT-41 | Restart worker khi job đang running | Reaper đưa job về queued tối đa 3 attempts, không kẹt vô hạn |
 | CUT-42 | Frontend với `GO_API_CUTOVER=true` | `/api/health`, auth, upload/job đi qua Go; UI vẫn render được |
 | CUT-43 | Contract SSE/import review | Job phát `progress/done/failed`; analyze phát `report/done`; import status trả `profile/items/progress/quality`; complete chưa verify trả 409 |
+| CUT-44 | Cross-user resource access | User B đọc/sửa/xóa profile, CV, job, import, analyze hoặc proposal của User A đều nhận 401/404 và dữ liệu A không đổi |
+| CUT-45 | Retry/backoff parity | Lỗi hạ tầng retry tối đa 3 lần với `retry_at`; lỗi dữ liệu terminal ngay; stale quá 30 phút sau lần 3 thành `STALE` |
+| CUT-46 | File retention parity | File quá 48 giờ được xóa; file dùng chung chỉ xóa khi job cuối hết hạn; lỗi filesystem không đánh dấu `file_purged_at` |
+| CUT-47 | Staging reconciliation | Script đối soát counts/checksums users/profiles/CV/jobs/revisions/matches, chỉ cho cutover khi khớp; script read-only |
 
 ## Lệnh kiểm tra tối thiểu
 
@@ -69,5 +73,5 @@ GO_API_CUTOVER=true BUILDX_BUILDER=default docker compose -f backend/docker-comp
 curl -fsS http://localhost:3000/api/health
 ```
 
-Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-43
+Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-47
 trên database staging hoặc bản snapshot có thể khôi phục.

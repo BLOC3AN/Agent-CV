@@ -11,7 +11,7 @@ import { RubricSchema, type Rubric } from './rubric.js'
  * đổi nguồn đọc; chữ ký giữ nguyên nên lớp chấm điểm không phải sửa.
  */
 
-const SEED = resolve(dirname(fileURLToPath(import.meta.url)), '../../../kb/seed/it-software-vn.yaml')
+const SEED = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../backend/kb/seed/it-software-vn.yaml')
 
 export function loadRubrics(path = SEED): Rubric[] {
   const raw = parseYaml(readFileSync(path, 'utf8')) as { rubrics?: unknown[] }
