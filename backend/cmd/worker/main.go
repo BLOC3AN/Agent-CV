@@ -38,7 +38,16 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("go worker ready")
+	lastReap := time.Now()
 	for {
+		if time.Since(lastReap) >= 30*time.Second {
+			if n, err := reapStale(db); err != nil {
+				log.Printf("reaper: %v", err)
+			} else if n > 0 {
+				log.Printf("requeued %d stale jobs", n)
+			}
+			lastReap = time.Now()
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		j, err := claim(ctx, db)
 		cancel()
@@ -56,6 +65,15 @@ func main() {
 			_, _ = db.Exec(`UPDATE jobs SET status='failed', error=$2, finished_at=now() WHERE id=$1`, j.ID, err.Error())
 		}
 	}
+}
+
+func reapStale(db *sql.DB) (int64, error) {
+	res, err := db.Exec(`UPDATE jobs SET status='queued', started_at=NULL, error='WORKER_RESTART_RETRY' WHERE status='running' AND started_at < now() - interval '10 minutes' AND attempts < 3`)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	return n, err
 }
 
 func claim(ctx context.Context, db *sql.DB) (*job, error) {

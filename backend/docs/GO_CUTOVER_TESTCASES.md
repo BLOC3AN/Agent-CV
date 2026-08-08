@@ -49,6 +49,7 @@
 | CUT-38 | Proposal reject toàn bộ | Profile không đổi, status `rejected` |
 | CUT-39 | Proposal có index ngoài phạm vi | 422, proposal/profile không đổi |
 | CUT-40 | Match job với embedding + reasoner + reranker | `go-semantic+reasoner`, `degraded=false`, advice chỉ dùng gapId hợp lệ |
+| CUT-41 | Restart worker khi job đang running | Reaper đưa job về queued tối đa 3 attempts, không kẹt vô hạn |
 
 ## Lệnh kiểm tra tối thiểu
 
