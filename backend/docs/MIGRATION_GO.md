@@ -25,15 +25,17 @@ legacy; mỗi luồng mới phải có implementation và test ở Go trước.
 - `POST /api/uploads/cv`: kiểm tra PDF, giới hạn 12 MB, lưu storage volume và
   tạo job bền vững trong PostgreSQL; mỗi `uploadId` là một lượt upload độc lập.
 - `GET /api/jobs/{id}`: đọc trạng thái job từ PostgreSQL.
+- Go worker claim job bằng PostgreSQL `FOR UPDATE SKIP LOCKED`, xử lý
+  `parse_cv` qua PDFKit và `match_analysis` bằng keyword scoring degraded mode.
+  Kết quả được ghi lại vào `jobs`/`match_analyses`, không để job treo.
 
 Go đã có production path với PostgreSQL và storage thật. Migration chưa hoàn
 tất cho tới khi frontend đổi sang Go và các route/worker còn lại được chuyển.
 
 ## Còn lại cần chuyển
 
-Profiles và revisions/patch/undo/verify, CV CRUD/export, imports/pages,
-matching/analyze, chat/proposals, KB/citations, job stream và worker xử lý
-`parse_cv`, `match_analysis`, `export_pdf`, `embed_profile`.
+CV export, chat/proposals, semantic embedding/reranking, LLM gap advice,
+OCR/image branch và `embed_profile` vẫn cần model/PDF adapter Go riêng.
 
 Image Go được build offline từ binary local:
 

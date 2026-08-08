@@ -37,6 +37,9 @@
 | CUT-31 | Analyze JD hợp lệ | Lưu JD, tạo `match_analysis` job, trả jobId ngay |
 | CUT-32 | GET analyze chưa có kết quả | 200 với `ready=false` |
 | CUT-33 | GET analyze đã có kết quả | Giữ nguyên score/matched/gaps/degraded |
+| CUT-34 | Go worker parse PDF text layer | Job done, profile có name/email, language giữ theo CV |
+| CUT-35 | Go worker PDF thiếu file | Job failed có `FILE_MISSING`, không chạy vô hạn |
+| CUT-36 | Go worker match không có embedder | Job done, `degraded=true`, score keyword có thể giải thích |
 
 ## Lệnh kiểm tra tối thiểu
 
