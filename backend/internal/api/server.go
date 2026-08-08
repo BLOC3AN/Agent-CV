@@ -66,6 +66,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/kb", s.kbRoute)
 	mux.HandleFunc("PATCH /api/kb", s.kbRoute)
 	mux.HandleFunc("POST /api/kb/citations", s.kbCitations)
+	mux.HandleFunc("POST /api/analyze", s.startAnalyze)
+	mux.HandleFunc("GET /api/analyze/", s.getAnalyze)
 	return withJSON(mux)
 }
 
@@ -986,6 +988,86 @@ func (s *Server) kbCitations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"citations": citations})
+}
+
+func (s *Server) startAnalyze(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Analyze cần PostgreSQL"})
+		return
+	}
+	var body struct {
+		CVID          string `json:"cvId"`
+		JDText        string `json:"jdText"`
+		SourceURL     string `json:"sourceUrl"`
+		Language      string `json:"language"`
+		CreateVariant bool   `json:"createVariant"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body) != nil || body.CVID == "" || len(strings.TrimSpace(body.JDText)) < 50 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mô tả công việc quá ngắn hoặc body không hợp lệ"})
+		return
+	}
+	userID := s.currentUserID(r)
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		return
+	}
+	if body.Language != "en" {
+		body.Language = "vi"
+	}
+	var owns string
+	if err := s.db.QueryRowContext(r.Context(), `SELECT id FROM cv_documents WHERE id=$1 AND user_id=$2`, body.CVID, userID).Scan(&owns); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		return
+	}
+	var jdID, jobID string
+	err := s.db.QueryRowContext(r.Context(), `INSERT INTO job_descriptions (user_id, raw_text, source_url, language) VALUES ($1,$2,NULLIF($3,''),$4) RETURNING id`, userID, body.JDText, body.SourceURL, body.Language).Scan(&jdID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được JD"})
+		return
+	}
+	payload := jsonString(map[string]any{"cvId": body.CVID, "jdId": jdID, "createVariant": body.CreateVariant})
+	key := "match_analysis:" + body.CVID + ":" + jdID
+	err = s.db.QueryRowContext(r.Context(), `INSERT INTO jobs (user_id, kind, idempotency_key, payload) VALUES ($1,'match_analysis',$2,$3::jsonb) ON CONFLICT (idempotency_key) DO UPDATE SET status=jobs.status RETURNING id`, userID, key, payload).Scan(&jobID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được job phân tích"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": jobID, "cvId": body.CVID, "jdId": jdID, "variantCreated": false, "queued": true})
+}
+
+func (s *Server) getAnalyze(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Analyze cần PostgreSQL"})
+		return
+	}
+	cvID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/analyze/"), "/")
+	if cvID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		return
+	}
+	var id, jdID string
+	var scoreRaw, matchedRaw, gapsRaw []byte
+	var degraded bool
+	var created time.Time
+	var title, seniority sql.NullString
+	err := s.db.QueryRowContext(r.Context(), `SELECT m.id,m.score,m.matched,m.gaps,m.degraded,m.created_at,m.jd_id,j.requirements->>'title',j.requirements->>'seniority' FROM match_analyses m JOIN job_descriptions j ON j.id=m.jd_id WHERE m.cv_id=$1 ORDER BY m.created_at DESC LIMIT 1`, cvID).Scan(&id, &scoreRaw, &matchedRaw, &gapsRaw, &degraded, &created, &jdID, &title, &seniority)
+	if err == sql.ErrNoRows {
+		writeJSON(w, http.StatusOK, map[string]bool{"ready": false})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		return
+	}
+	var score map[string]any
+	var matched, gaps any
+	_ = json.Unmarshal(scoreRaw, &score)
+	_ = json.Unmarshal(matchedRaw, &matched)
+	_ = json.Unmarshal(gapsRaw, &gaps)
+	writeJSON(w, http.StatusOK, map[string]any{"ready": true, "id": id, "jd": map[string]any{"id": jdID, "title": title.String, "seniority": seniority.String}, "overall": score["overall"], "breakdown": score["breakdown"], "matched": matched, "gaps": gaps, "missingAtsKeywords": score["missingAtsKeywords"], "degraded": degraded, "degradedReason": score["degradedReason"], "createdAt": created})
 }
 
 func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {

@@ -32,6 +32,11 @@
 | CUT-26 | KB citations chunk active | Trả source/author/text đúng language |
 | CUT-27 | Xoá account sai confirmEmail | 400, dữ liệu không bị xoá |
 | CUT-28 | Xoá account đúng email | Cascade users/profile/CV/session đúng, cookie bị xoá |
+| CUT-29 | Analyze JD ngắn | 400, không tạo JD/job |
+| CUT-30 | Analyze với CV không thuộc user | 404, không tạo job |
+| CUT-31 | Analyze JD hợp lệ | Lưu JD, tạo `match_analysis` job, trả jobId ngay |
+| CUT-32 | GET analyze chưa có kết quả | 200 với `ready=false` |
+| CUT-33 | GET analyze đã có kết quả | Giữ nguyên score/matched/gaps/degraded |
 
 ## Lệnh kiểm tra tối thiểu
 
