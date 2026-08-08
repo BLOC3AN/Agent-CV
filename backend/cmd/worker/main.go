@@ -78,12 +78,16 @@ func reapStale(db *sql.DB) (int64, error) {
 
 func claim(ctx context.Context, db *sql.DB) (*job, error) {
 	var j job
-	err := db.QueryRowContext(ctx, `WITH picked AS (SELECT id FROM jobs WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs SET status='running', attempts=attempts+1, started_at=COALESCE(started_at,now()) WHERE id=(SELECT id FROM picked) RETURNING id,kind,user_id,payload`).Scan(&j.ID, &j.Kind, &j.UserID, &j.Payload)
+	var userID sql.NullString
+	err := db.QueryRowContext(ctx, `WITH picked AS (SELECT id FROM jobs WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs SET status='running',attempts=attempts+1,started_at=COALESCE(started_at,now()) WHERE id=(SELECT id FROM picked) RETURNING id,kind,user_id,payload`).Scan(&j.ID, &j.Kind, &userID, &j.Payload)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	if userID.Valid {
+		j.UserID = userID.String
 	}
 	return &j, nil
 }
