@@ -243,7 +243,9 @@ func (s *Server) exportCV(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	var title, language string
 	var snapshot []byte
-	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(title,'CV'),language,profile_snapshot FROM cv_documents WHERE id=$1 AND user_id=$2`, id, userID).Scan(&title, &language, &snapshot); err == sql.ErrNoRows {
+	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(c.title,'CV'), COALESCE(c.language, p.language, 'en'), p.data
+		FROM cv_documents c JOIN profiles p ON p.id=c.profile_id
+		WHERE c.id=$1 AND c.user_id=$2 AND p.user_id=$2`, id, userID).Scan(&title, &language, &snapshot); err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
 		return
 	} else if err != nil {
@@ -533,7 +535,7 @@ func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
 		return
 	}
-	rows, err := s.db.QueryContext(r.Context(), `SELECT pr.id, pr.author, pr.patch, pr.created_at FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id = $1 AND p.user_id=$2 ORDER BY pr.id DESC`, id, userID)
+	rows, err := s.db.QueryContext(r.Context(), `SELECT pr.id, pr.author, pr.patch, pr.created_at FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id = $1 AND p.user_id=$2 ORDER BY pr.id DESC LIMIT 50`, id, userID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
 		return
@@ -550,7 +552,11 @@ func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
 		}
 		var patch any
 		_ = json.Unmarshal(patchRaw, &patch)
-		items = append(items, map[string]any{"id": revisionID, "author": author, "patch": patch, "createdAt": created})
+		opCount := 0
+		if ops, ok := patch.([]any); ok {
+			opCount = len(ops)
+		}
+		items = append(items, map[string]any{"id": fmt.Sprint(revisionID), "author": author, "createdAt": created, "opCount": opCount})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"revisions": items})
 }
@@ -565,17 +571,43 @@ func (s *Server) revisionPreview(w http.ResponseWriter, r *http.Request, profile
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
 		return
 	}
-	var snapshot []byte
-	if err := s.db.QueryRowContext(r.Context(), `SELECT inverse->'snapshot' FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id=$1 AND pr.id=$2 AND p.user_id=$3`, profileID, revisionID, userID).Scan(&snapshot); err == sql.ErrNoRows {
+	var patchRaw, inverseRaw []byte
+	var author string
+	var created time.Time
+	if err := s.db.QueryRowContext(r.Context(), `SELECT pr.patch, pr.inverse, pr.author, pr.created_at FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id=$1 AND pr.id=$2 AND p.user_id=$3`, profileID, revisionID, userID).Scan(&patchRaw, &inverseRaw, &author, &created); err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không có mốc lịch sử này"})
 		return
 	} else if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Revision không hợp lệ"})
 		return
 	}
-	var profile any
-	_ = json.Unmarshal(snapshot, &profile)
-	writeJSON(w, http.StatusOK, map[string]any{"profile": profile, "revisionId": revisionID})
+	var inverse struct {
+		Snapshot json.RawMessage `json:"snapshot"`
+	}
+	if json.Unmarshal(inverseRaw, &inverse) != nil || len(inverse.Snapshot) == 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Revision không hợp lệ"})
+		return
+	}
+	afterRaw, err := applyJSONPatch(inverse.Snapshot, patchRaw)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Không dựng được bản CV của revision"})
+		return
+	}
+	var before, after any
+	if json.Unmarshal(inverse.Snapshot, &before) != nil || json.Unmarshal(afterRaw, &after) != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Revision bị hỏng"})
+		return
+	}
+	var ops any
+	if json.Unmarshal(patchRaw, &ops) != nil {
+		ops = []any{}
+	}
+	var newerCount int
+	if err := s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id=$1 AND pr.id>$2 AND p.user_id=$3`, profileID, revisionID, userID).Scan(&newerCount); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không đọc được lịch sử"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"revisionId": fmt.Sprint(revisionID), "author": author, "createdAt": created, "ops": ops, "after": after, "before": before, "newerCount": newerCount})
 }
 
 func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {

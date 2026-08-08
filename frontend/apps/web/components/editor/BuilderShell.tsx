@@ -190,10 +190,11 @@ export function BuilderShell(props: Props) {
 function ExportButton({ cvId }: { cvId: string }) {
   return (
     <a
-      href={`/api/cv/${cvId}/export`}
+      href={`/api/cv/${cvId}/export?variant=presentation`}
+      download
       className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-white hover:bg-ink-muted"
     >
-      Xuất PDF
+      Tải xuống PDF
     </a>
   )
 }

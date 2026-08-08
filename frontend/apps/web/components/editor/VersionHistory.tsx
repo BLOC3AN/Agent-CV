@@ -57,7 +57,8 @@ export function VersionHistory({
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/profiles/${profileId}/revisions`)
-      const data = (await res.json()) as { revisions?: Revision[] }
+      const data = (await res.json()) as { revisions?: Revision[]; error?: string }
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       setItems(data.revisions ?? [])
     } catch (e) {
       setError((e as Error).message)

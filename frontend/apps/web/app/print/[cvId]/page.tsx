@@ -30,19 +30,21 @@ export default async function PrintPage({ params, searchParams }: Props) {
     : 'presentation'
 
   const { rows } = await getPool().query<{
-    profile_snapshot: unknown
+    profile: unknown
     template_id: string
     theme: unknown
     layout: unknown
   }>(
-    `SELECT profile_snapshot, template_id, theme, layout
-     FROM cv_documents WHERE id = $1`,
+    `SELECT p.data AS profile, c.template_id, c.theme, c.layout
+     FROM cv_documents c
+     JOIN profiles p ON p.id = c.profile_id
+     WHERE c.id = $1`,
     [cvId],
   )
   if (rows.length === 0) notFound()
 
   const row = rows[0]!
-  const profile = ProfileSchema.parse(row.profile_snapshot)
+  const profile = ProfileSchema.parse(row.profile)
   const Template = getTemplate(row.template_id).component
 
   return (
