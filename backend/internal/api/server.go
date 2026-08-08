@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -462,7 +463,12 @@ func (s *Server) patchProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/profiles/"), "/"), "/")
 	id, suffix := profilePath(r.URL.Path)
+	if len(parts) == 3 && parts[1] == "revisions" {
+		s.revisionPreview(w, r, id, parts[2])
+		return
+	}
 	if suffix == "" {
 		s.getProfile(w, r)
 		return
@@ -495,6 +501,24 @@ func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
 		items = append(items, map[string]any{"id": revisionID, "author": author, "patch": patch, "createdAt": created})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"revisions": items})
+}
+
+func (s *Server) revisionPreview(w http.ResponseWriter, r *http.Request, profileID, revisionID string) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Revision cần PostgreSQL"})
+		return
+	}
+	var snapshot []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT inverse->'snapshot' FROM profile_revisions WHERE profile_id=$1 AND id=$2`, profileID, revisionID).Scan(&snapshot); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không có mốc lịch sử này"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Revision không hợp lệ"})
+		return
+	}
+	var profile any
+	_ = json.Unmarshal(snapshot, &profile)
+	writeJSON(w, http.StatusOK, map[string]any{"profile": profile, "revisionId": revisionID})
 }
 
 func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {
@@ -868,12 +892,72 @@ func (s *Server) importRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
 		return
 	}
+	if strings.HasSuffix(id, "/pages") {
+		s.importPages(w, r, strings.TrimSuffix(id, "/pages"))
+		return
+	}
 	if strings.HasSuffix(id, "/complete") {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "Import complete chưa chuyển sang Go"})
 		return
 	}
 	r.URL.Path = "/api/jobs/" + id
 	s.job(w, r)
+}
+
+func (s *Server) importPages(w http.ResponseWriter, r *http.Request, jobID string) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import cần PostgreSQL"})
+		return
+	}
+	var payload []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT payload FROM jobs WHERE id=$1`, jobID).Scan(&payload); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy job"})
+		return
+	}
+	var p struct {
+		StorageKey string `json:"storageKey"`
+		Filename   string `json:"filename"`
+	}
+	if json.Unmarshal(payload, &p) != nil || p.StorageKey == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job không có file gốc"})
+		return
+	}
+	data, err := os.ReadFile(filepath.Join(s.storageRoot, p.StorageKey))
+	if err != nil {
+		writeJSON(w, http.StatusGone, map[string]any{"expired": true, "pages": []any{}, "blocks": []any{}})
+		return
+	}
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, _ := mw.CreateFormFile("file", p.Filename)
+	_, _ = part.Write(data)
+	_ = mw.Close()
+	base := os.Getenv("PDFKIT_URL")
+	if base == "" {
+		base = "http://localhost:8100"
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, strings.TrimRight(base, "/")+"/render?dpi=150&maxPages=20", &buf)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không gọi được PDFKit"})
+		return
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "PDFKit không khả dụng"})
+		return
+	}
+	defer res.Body.Close()
+	out, _ := io.ReadAll(io.LimitReader(res.Body, 32<<20))
+	if res.StatusCode >= 300 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Không render được PDF"})
+		return
+	}
+	var rendered struct {
+		Pages []any `json:"pages"`
+	}
+	_ = json.Unmarshal(out, &rendered)
+	writeJSON(w, http.StatusOK, map[string]any{"expired": false, "dpi": 150, "scale": 150.0 / 72.0, "pages": rendered.Pages, "blocks": []any{}})
 }
 
 func (s *Server) importComplete(w http.ResponseWriter, r *http.Request) {
@@ -1095,6 +1179,10 @@ func (s *Server) getAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cvID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/analyze/"), "/")
+	if strings.HasSuffix(cvID, "/stream") {
+		s.streamAnalyze(w, r, strings.TrimSuffix(cvID, "/stream"))
+		return
+	}
 	if cvID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
 		return
@@ -1119,6 +1207,39 @@ func (s *Server) getAnalyze(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(matchedRaw, &matched)
 	_ = json.Unmarshal(gapsRaw, &gaps)
 	writeJSON(w, http.StatusOK, map[string]any{"ready": true, "id": id, "jd": map[string]any{"id": jdID, "title": title.String, "seniority": seniority.String}, "overall": score["overall"], "breakdown": score["breakdown"], "matched": matched, "gaps": gaps, "missingAtsKeywords": score["missingAtsKeywords"], "degraded": degraded, "degradedReason": score["degradedReason"], "createdAt": created})
+}
+
+func (s *Server) streamAnalyze(w http.ResponseWriter, r *http.Request, cvID string) {
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return
+	}
+	for i := 0; i < 60; i++ {
+		var id string
+		var score, matched, gaps []byte
+		var degraded bool
+		var created time.Time
+		err := s.db.QueryRowContext(r.Context(), `SELECT id,score,matched,gaps,degraded,created_at FROM match_analyses WHERE cv_id=$1 ORDER BY created_at DESC LIMIT 1`, cvID).Scan(&id, &score, &matched, &gaps, &degraded, &created)
+		if err == nil {
+			var scoreV, matchedV, gapsV any
+			_ = json.Unmarshal(score, &scoreV)
+			_ = json.Unmarshal(matched, &matchedV)
+			_ = json.Unmarshal(gaps, &gapsV)
+			data, _ := json.Marshal(map[string]any{"ready": true, "id": id, "score": scoreV, "matched": matchedV, "gaps": gapsV, "degraded": degraded, "createdAt": created})
+			fmt.Fprintf(w, "event: snapshot\ndata: %s\n\n", data)
+			flusher.Flush()
+			return
+		}
+		fmt.Fprintf(w, "event: progress\ndata: {\"ready\":false}\n\n")
+		flusher.Flush()
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
