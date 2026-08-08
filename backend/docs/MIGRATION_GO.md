@@ -80,3 +80,7 @@ Use case và gate trước khi Go làm backend chính nằm ở
 [`GO_CUTOVER_USECASES.md`](GO_CUTOVER_USECASES.md) và
 [`GO_CUTOVER_TESTCASES.md`](GO_CUTOVER_TESTCASES.md). Không chuyển 100% traffic
 chỉ dựa trên việc image build thành công.
+
+Frontend cutover hiện được bảo vệ bởi `GO_API_CUTOVER` (mặc định `false`). Smoke
+test thực tế với flag `true` đã xác nhận `/api/health`, magic-link request và
+upload/job đi qua Go trong khi trang Next vẫn render bình thường.

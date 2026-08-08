@@ -50,6 +50,7 @@
 | CUT-39 | Proposal có index ngoài phạm vi | 422, proposal/profile không đổi |
 | CUT-40 | Match job với embedding + reasoner + reranker | `go-semantic+reasoner`, `degraded=false`, advice chỉ dùng gapId hợp lệ |
 | CUT-41 | Restart worker khi job đang running | Reaper đưa job về queued tối đa 3 attempts, không kẹt vô hạn |
+| CUT-42 | Frontend với `GO_API_CUTOVER=true` | `/api/health`, auth, upload/job đi qua Go; UI vẫn render được |
 
 ## Lệnh kiểm tra tối thiểu
 
@@ -61,6 +62,10 @@ cd ..
 BUILDX_BUILDER=default ./backend/scripts/build-all.sh
 docker compose -f backend/docker-compose.yml --env-file .env config --quiet
 curl -fsS http://localhost:8080/api/health
+
+# frontend cutover smoke test
+GO_API_CUTOVER=true BUILDX_BUILDER=default docker compose -f backend/docker-compose.yml --env-file .env --profile full up -d --build web
+curl -fsS http://localhost:3000/api/health
 ```
 
 Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-36
