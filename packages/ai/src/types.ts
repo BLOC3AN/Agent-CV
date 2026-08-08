@@ -6,7 +6,7 @@ import type { z } from 'zod'
  * biết đang gọi Qwen hay Claude.
  */
 
-export type ProviderKind = 'local' | 'anthropic'
+export type ProviderKind = 'local' | 'anthropic' | 'openai' | 'deepseek'
 
 export type ModelAlias =
   | 'reasoner'
@@ -45,6 +45,7 @@ export type GatewayErrorCode =
   | 'PROVIDER_DISABLED'
   | 'BAD_INPUT'
   | 'RATE_LIMITED'
+  | 'ABORTED'
   | 'UNKNOWN'
 
 export class GatewayError extends Error {

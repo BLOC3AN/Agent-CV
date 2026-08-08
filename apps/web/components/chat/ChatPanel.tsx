@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import type { Profile } from '@hr/schema'
 import { PatchReviewModal } from './PatchReviewModal'
 import { ClarifyForm } from './ClarifyForm'
-import { useChat } from '@/lib/chat-store'
+import { CHAT_MODELS, useChat } from '@/lib/chat-store'
 
 /**
  * Khung chat với trợ lý — UC-51, FRONTEND §4.
@@ -58,9 +58,12 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
   const step = useChat((s) => s.step)
   const proposal = useChat((s) => s.proposal)
   const clarify = useChat((s) => s.clarify)
+  const modelRef = useChat((s) => s.modelRef)
+  const stop = useChat((s) => s.stop)
   const setInput = useChat((s) => s.setInput)
   const setProposal = useChat((s) => s.setProposal)
   const setClarify = useChat((s) => s.setClarify)
+  const setModelRef = useChat((s) => s.setModelRef)
   const say = useChat((s) => s.say)
   const send = useChat((s) => s.send)
 
@@ -75,6 +78,23 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Trợ lý CV
       </h2>
+
+      <label className="mb-3 flex items-center gap-2 text-sm text-ink-muted">
+        <span>Model</span>
+        <select
+          aria-label="Chọn model"
+          value={modelRef}
+          disabled={busy}
+          onChange={(e) => setModelRef(e.target.value as typeof modelRef)}
+          className="rounded border border-border-strong bg-white px-2 py-1 text-sm text-ink"
+        >
+          {CHAT_MODELS.map((model) => (
+            <option key={model.ref} value={model.ref}>
+              {model.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div className="min-h-[200px] flex-1 space-y-3 overflow-y-auto rounded-lg border border-border p-3">
         {messages.length === 0 && (
@@ -170,13 +190,23 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           aria-label="Tin nhắn cho trợ lý"
           className="flex-1 rounded border border-border-strong px-3 py-2 text-sm"
         />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-        >
-          Gửi
-        </button>
+        {busy ? (
+          <button
+            type="button"
+            onClick={stop}
+            className="rounded border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          >
+            Dừng
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!input.trim()}
+            className="rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          >
+            Gửi
+          </button>
+        )}
       </form>
 
       {proposal && (

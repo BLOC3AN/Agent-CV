@@ -186,8 +186,8 @@ providers:
         role: "Sắp xếp lại kết quả matching / KB trước khi đưa vào prompt"
 
   # --------------------------------------------------------------------------
-  # CLOUD — code hỗ trợ sẵn, TẮT ở giai đoạn 1
-  # Bật sau gọi vốn: enabled: true + đổi routing.*.primary
+  # CLOUD — provider được bật cho lựa chọn thủ công trong chat.
+  # Các task nền vẫn giữ routing local; không tự động chuyển cloud.
   # --------------------------------------------------------------------------
   anthropic:
     enabled: false
@@ -212,6 +212,29 @@ providers:
       streaming: true
     guardrails:
       never_send_raw_pii: true           # phải qua redact_pii (local) trước
+
+  openai:
+    enabled: true
+    base_url: "https://api.openai.com/v1"
+    api_key_env: OPENAI_API_KEY
+    models:
+      luna:
+        model_id: "gpt-5.6-luna"
+        context: 1050000
+        max_output: 128000
+        reasoning_effort: medium
+        structured_output: true
+
+  deepseek:
+    enabled: true
+    base_url: "https://api.deepseek.com"
+    # Tương thích với .env hiện tại đang dùng DEEPSEAK_API_KEY (sai chính tả).
+    # Có thể đổi sang DEEPSEEK_API_KEY sau khi chuẩn hoá secret.
+    api_key_env: DEEPSEAK_API_KEY
+    models:
+      v4:
+        model_id: "deepseek-v4-flash"
+        structured_output: json_object
 
 # ============================================================================
 # ĐỊNH TUYẾN TASK

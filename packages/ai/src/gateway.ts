@@ -232,6 +232,13 @@ export class Gateway {
             : new GatewayError('UNKNOWN', (err as Error).message, err)
         lastError = ge
 
+        // User cancellation is not a provider failure and must not trigger
+        // retries, fallback, or circuit-breaker penalties.
+        if (opts.signal?.aborted) {
+          lastError = new GatewayError('ABORTED', 'Lượt chat đã được người dùng dừng')
+          break
+        }
+
         // Lỗi schema/ngân sách KHÔNG phải lỗi hạ tầng → không tính vào breaker
         if (
           ge.code !== 'SCHEMA_INVALID' &&
@@ -249,7 +256,8 @@ export class Gateway {
         if (
           ge.code === 'BUDGET_EXCEEDED' ||
           ge.code === 'PII_GUARD' ||
-          ge.code === 'BAD_INPUT'
+          ge.code === 'BAD_INPUT' ||
+          ge.code === 'ABORTED'
         ) {
           break
         }

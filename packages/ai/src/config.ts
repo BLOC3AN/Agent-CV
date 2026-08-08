@@ -76,6 +76,22 @@ const ConfigSchema = z
           models: z.record(z.object({ model_id: z.string() }).passthrough()),
         })
         .passthrough(),
+      openai: z
+        .object({
+          enabled: z.boolean(),
+          base_url: z.string().default('https://api.openai.com/v1'),
+          api_key_env: z.string().default('OPENAI_API_KEY'),
+          models: z.record(z.object({ model_id: z.string() }).passthrough()),
+        })
+        .passthrough(),
+      deepseek: z
+        .object({
+          enabled: z.boolean(),
+          base_url: z.string().default('https://api.deepseek.com'),
+          api_key_env: z.string().default('DEEPSEEK_API_KEY'),
+          models: z.record(z.object({ model_id: z.string() }).passthrough()),
+        })
+        .passthrough(),
     }),
 
     routing: z.record(RouteSchema),

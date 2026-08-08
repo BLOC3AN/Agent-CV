@@ -66,6 +66,16 @@ Các biến cần đặt cho một lượt chạy local đầy đủ:
 | `SMTP_URL` | gửi mail thật | Bỏ trống ở dev thì magic link được in ra console thay vì gửi đi ([apps/web/lib/mailer.ts](apps/web/lib/mailer.ts)). Ở `NODE_ENV=production` mà thiếu thì đăng nhập ném lỗi |
 | `MAIL_FROM` | gửi mail thật | Mặc định `HR-Agent <no-reply@localhost>` |
 | `WEB_BASE_URL` | export PDF | Worker dùng để mở trang `/print`. Mặc định `http://localhost:3000` |
+
+### Model chat
+
+Thanh tin nhắn cho phép chọn ba model: `Neura flash` (local, mặc định),
+`Neura Pro` (OpenAI GPT-5.6 Luna) và `Neura Plus` (DeepSeek V4 Flash). Điền
+`OPENAI_API_KEY` và `DEEPSEEK_API_KEY` trong `.env` để dùng hai provider cloud.
+`.env` hiện tại có thể dùng tên cũ `DEEPSEAK_API_KEY`.
+
+Trong lúc model đang sinh, nút `Dừng` sẽ huỷ luồng SSE ngay; sau đó có thể đổi
+model hoặc sửa câu hỏi và gửi lại.
 | `AUTH_SECRET` | `--profile full` | Chỉ docker-compose đọc; compose từ chối khởi động nếu trống |
 
 ### 3. Khởi động hạ tầng local

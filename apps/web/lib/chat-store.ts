@@ -29,6 +29,14 @@ export interface ChatMessage {
   nextSteps?: string[]
 }
 
+export type ChatModelRef = 'local.reasoner' | 'openai.luna' | 'deepseek.v4'
+
+export const CHAT_MODELS: { ref: ChatModelRef; label: string; description: string }[] = [
+  { ref: 'local.reasoner', label: 'Neura flash', description: 'Local model' },
+  { ref: 'openai.luna', label: 'Neura Pro', description: 'GPT-5.6 Luna' },
+  { ref: 'deepseek.v4', label: 'Neura Plus', description: 'DeepSeek V4 Flash' },
+]
+
 export interface ChatProposal {
   proposalId: string
   summary: string
@@ -51,12 +59,16 @@ interface ChatState {
   step: string | null
   proposal: ChatProposal | null
   clarify: ChatClarify | null
+  modelRef: ChatModelRef
+  activeController: AbortController | null
 
   /** Gắn store vào một hồ sơ; xoá hội thoại nếu là hồ sơ khác */
   attach: (profileId: string) => void
   setInput: (v: string) => void
   setProposal: (p: ChatProposal | null) => void
   setClarify: (c: ChatClarify | null) => void
+  setModelRef: (modelRef: ChatModelRef) => void
+  stop: () => void
   say: (m: ChatMessage) => void
   send: (text: string, answers?: { question: string; answer: string }[]) => Promise<void>
 }
@@ -109,9 +121,12 @@ export const useChat = create<ChatState>((set, get) => ({
   step: null,
   proposal: null,
   clarify: null,
+  modelRef: 'local.reasoner',
+  activeController: null,
 
   attach: (profileId) => {
     if (get().profileId === profileId) return
+    get().activeController?.abort()
     set({
       profileId,
       messages: [],
@@ -120,31 +135,37 @@ export const useChat = create<ChatState>((set, get) => ({
       step: null,
       proposal: null,
       clarify: null,
+      activeController: null,
     })
   },
 
   setInput: (input) => set({ input }),
   setProposal: (proposal) => set({ proposal }),
   setClarify: (clarify) => set({ clarify }),
+  setModelRef: (modelRef) => set({ modelRef }),
+  stop: () => get().activeController?.abort(),
   say: (m) => set({ messages: [...get().messages, m] }),
 
   async send(text, answers = []) {
-    const { profileId, busy } = get()
+    const { profileId, busy, modelRef } = get()
     if (!profileId || busy || !text.trim()) return
 
     set({
       busy: true,
+      activeController: new AbortController(),
       step: null,
       clarify: null,
       input: '',
       messages: [...get().messages, { role: 'user', content: text }],
     })
 
+    const controller = get().activeController
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId, message: text, answers }),
+        signal: controller?.signal,
+        body: JSON.stringify({ profileId, message: text, answers, modelRef }),
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
@@ -192,6 +213,7 @@ export const useChat = create<ChatState>((set, get) => ({
         })
       }
     } catch (e) {
+      if (controller?.signal.aborted) return
       set({
         messages: [
           ...get().messages,
@@ -199,7 +221,7 @@ export const useChat = create<ChatState>((set, get) => ({
         ],
       })
     } finally {
-      set({ busy: false, step: null })
+      set({ busy: false, step: null, activeController: null })
     }
   },
 }))
@@ -214,5 +236,7 @@ export function resetChat(): void {
     step: null,
     proposal: null,
     clarify: null,
+    modelRef: 'local.reasoner',
+    activeController: null,
   })
 }

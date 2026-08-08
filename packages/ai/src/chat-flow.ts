@@ -6,6 +6,7 @@ import type {
   Profile,
 } from '@hr/schema'
 import type { Gateway } from './gateway.js'
+import type { TaskDefinition } from './types.js'
 import { planAgentStepTask, insightMiningTask, proposePatchTask } from './tasks/agent.js'
 import { answerQuestionTask, type AnswerInput } from './tasks/answer.js'
 import { redactKeepShape, stripPII } from './pii.js'
@@ -55,6 +56,8 @@ export interface ChatTurnInput {
    */
   analysis?: AnswerInput['analysis']
   language?: Language
+  /** Optional UI-selected chat model; server validates the allow-list. */
+  modelRef?: string
 }
 
 /** Các bước người dùng CHỜ — mỗi bước là một lượt gọi model. */
@@ -70,6 +73,8 @@ export const STEP_LABEL: Record<ChatStep, string> = {
 
 export interface ChatFlowDeps {
   gateway: Gateway
+  modelRef?: string
+  signal?: AbortSignal
   /** Id các tin nhắn có thật trong phiên — dùng để kiểm `grounding` */
   messageIds: Set<string>
   /**
@@ -103,6 +108,11 @@ export async function runChatTurn(
   deps: ChatFlowDeps,
   input: ChatTurnInput,
 ): Promise<ChatTurnResult> {
+  const run = <TInput, TOutput>(task: TaskDefinition<TInput, TOutput>, input: TInput) =>
+    deps.gateway.run(task, input, {
+      ...(deps.modelRef ? { forceModel: deps.modelRef } : {}),
+      ...(deps.signal ? { signal: deps.signal } : {}),
+    })
   const language = input.language ?? profileLanguage(input.profile)
   // Che PII BẮT BUỘC trước mọi lời gọi model (§15.2 R1).
   //
@@ -114,7 +124,7 @@ export async function runChatTurn(
 
   // ── [1] Hiểu ý định ────────────────────────────────────────────────
   deps.onStep?.('planning')
-  const plan = await deps.gateway.run(planAgentStepTask, {
+  const plan = await run(planAgentStepTask, {
     message: input.message,
     compactProfile,
     history: input.history,
@@ -140,7 +150,7 @@ export async function runChatTurn(
   // người dùng cho một câu hỏi hoàn toàn hợp lệ — BR-56.1 cấm hẳn việc đó.
   if (intent === 'ask_question' || intent === 'explain') {
     deps.onStep?.('answering')
-    const ans = await deps.gateway.run(answerQuestionTask, {
+    const ans = await run(answerQuestionTask, {
       question: input.message,
       compactProfile,
       analysis: input.analysis ?? null,
@@ -179,7 +189,7 @@ export async function runChatTurn(
   if (needsInfo.length > 0 && !hasAnswers && !askedBefore) {
     deps.onStep?.('asking')
     const target = targetPath ?? '/work'
-    const res = await deps.gateway.run(insightMiningTask, {
+    const res = await run(insightMiningTask, {
       targetPath: target,
       targetLabel: sectionLabel(target),
       targetContent: readPath(input.profile, target),
@@ -202,7 +212,7 @@ export async function runChatTurn(
 
   // ── [3] Đề xuất patch ──────────────────────────────────────────────
   deps.onStep?.('proposing')
-  const res = await deps.gateway.run(proposePatchTask, {
+  const res = await run(proposePatchTask, {
     message: input.message,
     intent,
     targetPath,
@@ -237,7 +247,7 @@ export async function runChatTurn(
   // thêm 5-10 giây người dùng ngồi chờ.
   if (valid.length === 0 && rejected.length > 0) {
     deps.onStep?.('proposing')
-    const retry = await deps.gateway.run(proposePatchTask, {
+    const retry = await run(proposePatchTask, {
       message: input.message,
       intent,
       targetPath,
@@ -282,7 +292,7 @@ export async function runChatTurn(
   if (valid.length === 0 && askedBefore && !hasAnswers && needsInfo.length > 0) {
     deps.onStep?.('asking')
     const target = targetPath ?? '/work'
-    const ask = await deps.gateway.run(insightMiningTask, {
+    const ask = await run(insightMiningTask, {
       targetPath: target,
       targetLabel: sectionLabel(target),
       targetContent: readPath(input.profile, target),
@@ -325,6 +335,15 @@ export async function runChatTurn(
  * dài hoặc yêu cầu quá mơ hồ — thử lại y hệt sẽ hỏng y hệt.
  */
 function errorMessage(step: ChatStep, code: string): string {
+  if (code === 'PROVIDER_DISABLED') {
+    return 'Model cloud chưa sẵn sàng. Bạn kiểm tra API key hoặc chọn Neura flash để tiếp tục nhé.'
+  }
+  if (code === 'BAD_INPUT') {
+    return 'Model cloud không chấp nhận cấu hình request hiện tại. Bạn chọn lại model hoặc thử Neura flash nhé.'
+  }
+  if (code === 'RATE_LIMITED') {
+    return 'Model cloud đang giới hạn lượt gọi. Bạn thử lại sau khoảng một phút hoặc chọn Neura flash nhé.'
+  }
   if (code === 'TIMEOUT' || code === 'MODEL_UNAVAILABLE' || code === 'CIRCUIT_OPEN') {
     return 'Máy chủ AI đang quá tải. Bạn thử lại sau khoảng một phút giúp nhé.'
   }

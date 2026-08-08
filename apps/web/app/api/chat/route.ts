@@ -30,6 +30,7 @@ const Body = z.object({
     .array(z.object({ question: z.string(), answer: z.string().min(1) }))
     .max(3)
     .default([]),
+  modelRef: z.enum(['local.reasoner', 'openai.luna', 'deepseek.v4']).default('local.reasoner'),
 })
 
 /** Bao nhiêu lượt gần nhất đưa nguyên văn vào prompt trước khi phải nén. */
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
-  const { profileId, message, answers } = parsed.data
+  const { profileId, message, answers, modelRef } = parsed.data
 
   let userId: string
   try {
@@ -124,6 +125,8 @@ export async function POST(req: Request) {
         const result = await runChatTurn(
           {
             gateway: new Gateway(),
+            modelRef,
+            signal: req.signal,
             messageIds,
             // Bắn từng bước về ngay khi bắt đầu, KHÔNG chờ nó xong
             onStep: (step) => send('step', { step, label: STEP_LABEL[step] }),
@@ -157,7 +160,10 @@ export async function POST(req: Request) {
           },
         )
 
-        if (result.kind === 'error') {
+        if (req.signal.aborted || (result.kind === 'error' && result.code === 'ABORTED')) {
+          // Cancellation is intentional: do not persist a fake assistant error
+          // and do not emit an SSE error after the client has stopped reading.
+        } else if (result.kind === 'error') {
           await chat.addMessage({ sessionId, role: 'assistant', content: result.message })
           send('result', { kind: 'error', code: result.code, message: result.message, sessionId })
         } else if (result.kind === 'clarify') {

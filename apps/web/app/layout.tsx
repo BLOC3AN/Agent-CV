@@ -16,7 +16,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const user = await currentUser().catch(() => null)
   const defaultCvId = user
     ? ((await getPool().query<{ id: string }>(
-        `SELECT id FROM cv_documents WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+        // created_at luôn có từ schema lõi; tránh để lỗi thiếu updated_at làm
+        // thanh điều hướng fallback sai về /cv khi người dùng đã có CV.
+        `SELECT id FROM cv_documents WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
         [user.id],
       ).catch(() => ({ rows: [] }))).rows[0]?.id ?? null)
     : null

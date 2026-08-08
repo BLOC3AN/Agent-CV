@@ -5,10 +5,12 @@ import { GatewayError } from '../types.js'
 import { LlamaCppProvider } from './llamacpp.js'
 import { BgeEmbedProvider, BgeRerankProvider } from './bge.js'
 import { AnthropicProvider } from './anthropic.js'
+import { OpenAICompatibleProvider } from './openai-compatible.js'
 
 export { LlamaCppProvider } from './llamacpp.js'
 export { BgeEmbedProvider, BgeRerankProvider } from './bge.js'
 export { AnthropicProvider } from './anthropic.js'
+export { OpenAICompatibleProvider } from './openai-compatible.js'
 
 /**
  * Registry provider — dựng từ config.yml.
@@ -64,6 +66,32 @@ export class ProviderRegistry {
             : {}),
         }),
       )
+    }
+
+    const openai = this.cfg.providers.openai
+    if (openai.enabled) {
+      for (const [alias, m] of Object.entries(openai.models)) {
+        this.chats.set(`openai.${alias}`, new OpenAICompatibleProvider(`openai.${alias}`, {
+          baseUrl: openai.base_url,
+          apiKeyEnv: openai.api_key_env,
+          modelId: m.model_id,
+          kind: 'openai',
+          structuredOutput: 'json_schema',
+        }))
+      }
+    }
+
+    const deepseek = this.cfg.providers.deepseek
+    if (deepseek.enabled) {
+      for (const [alias, m] of Object.entries(deepseek.models)) {
+        this.chats.set(`deepseek.${alias}`, new OpenAICompatibleProvider(`deepseek.${alias}`, {
+          baseUrl: deepseek.base_url,
+          apiKeyEnv: deepseek.api_key_env,
+          modelId: m.model_id,
+          kind: 'deepseek',
+          structuredOutput: 'json_object',
+        }))
+      }
     }
   }
 
