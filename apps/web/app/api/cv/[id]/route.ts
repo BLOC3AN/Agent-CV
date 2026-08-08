@@ -78,6 +78,11 @@ export async function GET(_req: Request, { params }: Ctx) {
  * đã khai báo ON DELETE CASCADE trong schema.
  */
 export async function DELETE(_req: Request, { params }: Ctx) {
+  const { id } = await params
+  if (!z.string().uuid().safeParse(id).success) {
+    return NextResponse.json({ error: 'Mã CV không hợp lệ' }, { status: 400 })
+  }
+
   let user
   try {
     user = await requireUser()
@@ -94,7 +99,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       `DELETE FROM cv_documents
         WHERE id = $1 AND user_id = $2
         RETURNING profile_id`,
-      [(await params).id, user.id],
+      [id, user.id],
     )
     if (deleted.rows.length === 0) {
       await client.query('ROLLBACK')
