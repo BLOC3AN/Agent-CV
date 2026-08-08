@@ -27,3 +27,12 @@ func TestKeywordScoreDegradedIsExplainable(t *testing.T) {
 		t.Fatalf("matched=%d gaps=%d", len(matched), len(gaps))
 	}
 }
+
+func TestLooksLikeCVRejectsNonCVText(t *testing.T) {
+	if looksLikeCV(map[string]string{"summary": "boarding pass"}) {
+		t.Fatal("non-CV summary must be rejected")
+	}
+	if !looksLikeCV(map[string]string{"education": "Bachelor"}) {
+		t.Fatal("education section must be accepted")
+	}
+}

@@ -40,6 +40,11 @@
 | CUT-34 | Go worker parse PDF text layer | Job done, profile có name/email, language giữ theo CV |
 | CUT-35 | Go worker PDF thiếu file | Job failed có `FILE_MISSING`, không chạy vô hạn |
 | CUT-36 | Go worker match không có embedder | Job done, `degraded=true`, score keyword có thể giải thích |
+| REAL-CV-01 | `var/storage/b8/...` — Le Thanh Hai | `done`, `language=en`, name/email nhận đúng |
+| REAL-CV-02 | `var/storage/c3/...` — Quan Pham | `done`, `language=en`, name/email nhận đúng |
+| REAL-CV-03 | `var/storage/cf/...` — Sơn Trịnh | `done`, `language=en`, name/email nhận đúng |
+| REAL-CV-04 | `var/storage/d9/...` — Y Yen Nhi | `done`, `language=en`, name/email nhận đúng |
+| REAL-CV-05 | Aptis/boarding/database-model trong storage | `failed/NO_CV_SECTIONS`, không tạo profile |
 
 ## Lệnh kiểm tra tối thiểu
 

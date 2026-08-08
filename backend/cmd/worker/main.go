@@ -95,6 +95,9 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	if err != nil {
 		return fmt.Errorf("PDF_EXTRACT_FAILED: %w", err)
 	}
+	if !looksLikeCV(seg.Merged) {
+		return fmt.Errorf("NO_CV_SECTIONS: Không nhận ra mục CV như học vấn, kinh nghiệm hoặc kỹ năng")
+	}
 	lang := detectLanguage(seg.Text)
 	name := firstLine(seg.Text)
 	if name == "" {
@@ -333,5 +336,15 @@ func detectLanguage(s string) string {
 func firstMatch(text, expression string) string {
 	re := regexp.MustCompile(expression)
 	return re.FindString(text)
+}
+
+func looksLikeCV(sections map[string]string) bool {
+	known := 0
+	for _, key := range []string{"education", "work", "projects", "skills", "activities", "certifications", "languages"} {
+		if strings.TrimSpace(sections[key]) != "" {
+			known++
+		}
+	}
+	return known > 0
 }
 func jsonString(v any) string { b, _ := json.Marshal(v); return string(b) }
