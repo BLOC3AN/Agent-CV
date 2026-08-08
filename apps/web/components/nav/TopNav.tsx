@@ -18,9 +18,9 @@ import Link from 'next/link'
 export function TopNavView({ email, cvId }: { email: string | null; cvId: string | null }) {
   return (
     <header className="border-b border-border bg-surface">
-      <nav className="mx-auto flex max-w-5xl items-center gap-5 px-6 py-3 text-[13px]">
-        <Link href="/" className="flex items-center gap-2 font-semibold text-ink">
-          <span aria-hidden="true" className="h-4 w-1 rounded-full bg-brand" />
+      <nav className="mx-auto flex max-w-5xl items-center gap-6 px-6 py-3.5 text-sm">
+        <Link href="/" className="flex items-center gap-2 text-base font-semibold text-ink">
+          <span aria-hidden="true" className="h-5 w-1 rounded-full bg-brand" />
           HR-Agent
         </Link>
 
