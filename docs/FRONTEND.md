@@ -730,8 +730,10 @@ degrade. Shimmer chỉ chạy khi `streaming`, tắt theo `prefers-reduced-motio
 Chữ ký AI hoàn chỉnh gồm ba tầng, nhưng chúng **không nằm cùng một file**:
 
 1. **Bề mặt** — `AiPanel.tsx`, mô tả ở trên.
-2. **Lối vào** — nút `✦ Trợ lý` ở `components/nav/TopNav.tsx`, luôn dẫn tới
-   `/builder/:cvId?assistant=1` (mang theo CV đang mở, không mở chat rỗng).
+2. **Lối vào** — nút `✦ Trợ lý` ở `components/nav/TopNav.tsx` và rail trái,
+   dẫn tới `/builder/:cvId?assistant=1` với CV gần nhất. Trong builder, sidebar
+   phải của `BuilderShell` mở mặc định; ở màn hình hẹp panel xếp dưới bản xem
+   trước.
 3. **Chứng cứ** — diff trước/sau và badge nguồn theo `grounding.type` nằm ở
    `components/chat/PatchReviewModal.tsx`; dấu ⚪ cho nội dung chưa xác nhận
    nằm ở `components/editor/Editable.tsx` (§3.3).
@@ -743,14 +745,8 @@ Chữ ký AI hoàn chỉnh gồm ba tầng, nhưng chúng **không nằm cùng m
   `ClarifyForm` là các vùng AI khác nhưng **chưa** chuyển sang dùng
   `AiPanel`/`Card variant="ai"` — "mọi vùng AI đi qua AiPanel" là hướng đích,
   không phải hiện trạng.
-- `?assistant=1` trên link "Trợ lý" ở TopNav **chưa được `/builder` đọc** —
-  màn builder hiện bỏ qua tham số này. Phần tiêu thụ nó thuộc việc chưa làm.
-- `?focus=<path>` cùng bệnh, và đây là CTA chính trong khối AI trên trang chủ
-  — hành động nổi bật nhất màn hình. `apps/web/lib/home-state.ts`
-  (`nextStepFor`) và `components/diagnose/HealthReport.tsx` cùng dựng
-  `href: /builder/${cvId}?focus=${gap.path}`, nhưng
-  `app/(app)/builder/[cvId]/page.tsx` không nhận `searchParams` và không chỗ
-  nào trong repo đọc param `focus`. Phần tiêu thụ nó cũng thuộc việc chưa làm.
+- `?assistant=1` và `?focus=<path>` hiện đã được `/builder` đọc. CTA chính
+  trong khối AI trên trang chủ mở sidebar trợ lý và focus đúng mục thiếu.
 
 **Trạng thái degrade nằm cùng file với chữ ký**, có chủ ý: chữ ký làm khối AI
 to, nên xử lý lúc-model-chết ở nơi khác sẽ có chỗ quên, và chỗ quên hiện ra

@@ -214,9 +214,9 @@ Nút `✦ Trợ lý` cố định bên phải top nav ở mọi màn. **Luôn ma
 
 | Ở đâu | Mở ra gì |
 |---|---|
-| `/builder/:cvId` | `Sheet` với CV đang sửa |
-| `/analyze/:cvId` | `Sheet` kèm báo cáo đối chiếu |
-| `/` hoặc `/cv` | Hỏi chọn CV trước — **không mở chat rỗng** (BR-56.2) |
+| `/builder/:cvId` | Sidebar phải với CV đang sửa, mặc định mở |
+| `/analyze/:cvId` | Dẫn tới builder của CV và mở sidebar trợ lý |
+| `/` hoặc `/cv` | Dẫn tới builder của CV gần nhất; chưa có CV thì `/cv` |
 
 ### 5.3 Tầng chứng cứ
 

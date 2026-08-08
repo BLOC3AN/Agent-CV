@@ -84,7 +84,7 @@ Mockup dùng sidebar. Đây là một thay đổi presentation có thể áp d�
 | Tổng quan | `/` |
 | CV của tôi | `/cv` |
 | Đối chiếu việc làm | `/analyze/:cvId` khi có CV; nếu chưa có thì `/cv` |
-| Trợ lý AI | `/builder/:cvId?assistant=1` khi có CV; nếu chưa có thì `/cv` |
+| Trợ lý AI | `/builder/:cvId?assistant=1` với CV gần nhất; nếu chưa có thì `/cv` |
 | Mẫu CV | `/builder/:cvId` |
 | Cài đặt | `/settings` |
 
@@ -98,7 +98,7 @@ Thứ tự ưu tiên trên desktop:
 1. Header chào người dùng.
 2. Card CV chính, chiếm khoảng 2/3 chiều rộng.
 3. Card hoàn thiện hồ sơ, chiếm khoảng 1/3 chiều rộng.
-4. Card trợ lý AI chiếm toàn bộ chiều rộng bên dưới card CV.
+4. Card trợ lý AI trên Home dẫn vào builder; trong builder sidebar trợ lý nằm bên phải và mở mặc định.
 5. Danh sách đối chiếu gần đây dạng hàng/card nhỏ.
 6. Quick actions chỉ gồm “Tạo CV mới” và “Tải CV lên”.
 

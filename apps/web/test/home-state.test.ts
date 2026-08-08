@@ -126,6 +126,7 @@ describe('nextStepFor', () => {
     const s = nextStepFor(profileCompleteness(p()), { cvId: 'cv1', hasAnalysis: false })
     // Kinh nghiệm/dự án nặng 30% — đáng làm hơn phần 10%
     expect(s!.href).toContain('projects')
+    expect(s!.href).toContain('assistant=1')
   })
 
   it('hồ sơ đủ nhưng chưa đối chiếu JD → mời dán tin tuyển dụng', () => {

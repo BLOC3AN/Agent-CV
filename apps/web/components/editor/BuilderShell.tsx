@@ -16,12 +16,9 @@ import { Sheet } from '@/components/ui'
 /**
  * Khung màn hình soạn CV — FRONTEND.md §3.1.
  *
- * Bố cục 2 PANE, không phải 3: sinh viên VN phần lớn dùng laptop 1366×768,
- * ba pane cố định làm vùng xem CV còn ~500px, không đọc nổi (TC-CMP-01).
- *
- * Trợ lý và lịch sử phiên bản là SLIDE-OVER đè lên, không phải pane thứ ba —
- * chúng chỉ cần khi người dùng chủ động gọi, và khi đó họ đang đọc panel chứ
- * không đọc CV.
+ * Bố cục workspace gồm mục lục, CV và sidebar trợ lý bên phải. Trợ lý mở sẵn
+ * để người dùng có thể bắt đầu hỏi ngay; ở màn hình hẹp sidebar xếp bên dưới
+ * bản xem trước thay vì che nội dung.
  */
 
 interface Props {
@@ -39,7 +36,7 @@ interface Props {
 type Drawer = 'chat' | 'history' | null
 
 export function BuilderShell(props: Props) {
-  const [drawer, setDrawer] = useState<Drawer>(props.initialDrawer ?? null)
+  const [drawer, setDrawer] = useState<Drawer>(props.initialDrawer ?? 'chat')
   const init = useEditor((s) => s.init)
   const storeProfile = useEditor((s) => s.profile)
   const storeTheme = useEditor((s) => s.theme)
@@ -125,7 +122,7 @@ export function BuilderShell(props: Props) {
         <ExportButton cvId={props.cvId} />
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* ── Mục lục (ẩn dưới 768px — FRONTEND.md §3.2) ─────────────── */}
         <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-border bg-surface p-2 md:block">
           <SectionOutline />
@@ -134,7 +131,7 @@ export function BuilderShell(props: Props) {
         </aside>
 
         {/* ── Xem trước + sửa inline ─────────────────────────────────── */}
-        <main className="min-w-0 flex-1 overflow-y-auto bg-canvas p-6">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-canvas p-6">
           <div className="mx-auto w-fit">
             <FieldProvider renderer={editableRenderer}>
               <Template profile={profile} theme={theme} layout={layout} variant="screen" />
@@ -145,15 +142,32 @@ export function BuilderShell(props: Props) {
           </p>
         </main>
 
-       </div>
-
-      <Sheet open={drawer === 'chat'} onClose={() => setDrawer(null)} title="Trợ lý CV">
-        <ChatPanel
-          profileId={props.profileId}
-          profile={profile}
-          onProfileChange={(p) => useEditor.setState({ profile: p })}
-        />
-      </Sheet>
+        {drawer === 'chat' && (
+          <aside
+            aria-label="Trợ lý CV"
+            className="flex min-h-[360px] w-full shrink-0 flex-col border-t border-border bg-surface lg:min-h-0 lg:w-[380px] lg:border-l lg:border-t-0"
+          >
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h2 className="text-[15px] font-semibold text-ink">Trợ lý CV</h2>
+              <button
+                type="button"
+                onClick={() => setDrawer(null)}
+                aria-label="Đóng bảng Trợ lý CV"
+                className="rounded-sm px-2 py-1 text-ink-muted hover:bg-canvas hover:text-ink"
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              <ChatPanel
+                profileId={props.profileId}
+                profile={profile}
+                onProfileChange={(p) => useEditor.setState({ profile: p })}
+              />
+            </div>
+          </aside>
+        )}
+      </div>
 
       <Sheet open={drawer === 'history'} onClose={() => setDrawer(null)} title="Lịch sử phiên bản">
         <VersionHistory

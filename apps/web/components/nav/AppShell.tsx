@@ -17,14 +17,16 @@ function isDashboardPath(pathname: string): boolean {
 
 export function AppShell({
   authenticated,
+  defaultCvId,
   children,
 }: {
   authenticated: boolean
+  defaultCvId: string | null
   children: React.ReactNode
 }) {
   const pathname = usePathname()
   const showRail = authenticated && isDashboardPath(pathname)
-  const cvId = cvIdFromPath(pathname)
+  const cvId = cvIdFromPath(pathname) ?? defaultCvId
   const assistantHref = cvId ? `/builder/${cvId}?assistant=1` : '/cv'
 
   if (!showRail) return <>{children}</>

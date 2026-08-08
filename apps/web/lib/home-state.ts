@@ -115,7 +115,7 @@ export function nextStepFor(
     return {
       text: gap.todo,
       cta: 'Sửa cùng trợ lý',
-      href: `/builder/${ctx.cvId}?focus=${encodeURIComponent(gap.path)}`,
+      href: `/builder/${ctx.cvId}?assistant=1&focus=${encodeURIComponent(gap.path)}`,
     }
   }
 
