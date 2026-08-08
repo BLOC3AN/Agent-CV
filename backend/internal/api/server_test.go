@@ -83,3 +83,20 @@ func TestUploadCreatesFreshJobForEachUploadID(t *testing.T) {
 		t.Fatalf("jobs = %d, want 2", len(s.jobs))
 	}
 }
+
+func TestReviewContractMatchesVerifiedPaths(t *testing.T) {
+	profile := map[string]any{
+		"basics": map[string]any{"name": "Ada"},
+		"education": []any{map[string]any{"school": "MIT"}},
+		"skills": []any{map[string]any{"name": "Go"}},
+		"languages": []any{map[string]any{"name": "English"}},
+		"_meta": map[string]any{"verified": map[string]any{"/basics": true, "/education/0": true}},
+	}
+	items, progress := reviewContract(profile)
+	if len(items) != 4 || progress["done"] != 2 || progress["complete"] != false {
+		t.Fatalf("items=%d progress=%#v", len(items), progress)
+	}
+	if got := progress["pending"].([]string); len(got) != 2 || got[0] != "/skills" || got[1] != "/languages" {
+		t.Fatalf("pending=%#v", got)
+	}
+}

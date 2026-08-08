@@ -51,6 +51,7 @@
 | CUT-40 | Match job với embedding + reasoner + reranker | `go-semantic+reasoner`, `degraded=false`, advice chỉ dùng gapId hợp lệ |
 | CUT-41 | Restart worker khi job đang running | Reaper đưa job về queued tối đa 3 attempts, không kẹt vô hạn |
 | CUT-42 | Frontend với `GO_API_CUTOVER=true` | `/api/health`, auth, upload/job đi qua Go; UI vẫn render được |
+| CUT-43 | Contract SSE/import review | Job phát `progress/done/failed`; analyze phát `report/done`; import status trả `profile/items/progress/quality`; complete chưa verify trả 409 |
 
 ## Lệnh kiểm tra tối thiểu
 
@@ -68,5 +69,5 @@ GO_API_CUTOVER=true BUILDX_BUILDER=default docker compose -f backend/docker-comp
 curl -fsS http://localhost:3000/api/health
 ```
 
-Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-36
+Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-43
 trên database staging hoặc bản snapshot có thể khôi phục.

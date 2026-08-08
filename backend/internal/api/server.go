@@ -873,7 +873,23 @@ func (s *Server) streamJob(w http.ResponseWriter, r *http.Request, id string) {
 			data["error"] = errText.String
 		}
 		encoded, _ := json.Marshal(data)
-		fmt.Fprintf(w, "event: job\ndata: %s\n\n", encoded)
+		if status == "done" {
+			fmt.Fprintf(w, "event: done\ndata: %s\n\n", encoded)
+		} else if status == "failed" || status == "cancelled" {
+			fmt.Fprintf(w, "event: failed\ndata: %s\n\n", encoded)
+		} else {
+			// UploadBox consumes the same progress contract as the Node route.
+			pct := 0
+			if status == "running" {
+				pct = 50
+			}
+			progress := map[string]any{"pct": pct, "note": "Đang chuẩn bị", "status": status}
+			if status == "running" {
+				progress["note"] = "Đang xử lý CV…"
+			}
+			progressJSON, _ := json.Marshal(progress)
+			fmt.Fprintf(w, "event: progress\ndata: %s\n\n", progressJSON)
+		}
 		flusher.Flush()
 		if status == "done" || status == "failed" || status == "cancelled" {
 			return
@@ -897,11 +913,118 @@ func (s *Server) importRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasSuffix(id, "/complete") {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "Import complete chưa chuyển sang Go"})
+		s.importComplete(w, r)
 		return
 	}
-	r.URL.Path = "/api/jobs/" + id
-	s.job(w, r)
+	s.importStatus(w, r, id)
+}
+
+// importStatus is the review-screen contract, not the generic job contract.
+// Keeping this aggregation here is important: the frontend must not need to
+// know that a completed import is backed by a job plus a profile row.
+func (s *Server) importStatus(w http.ResponseWriter, r *http.Request, id string) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import cần PostgreSQL"})
+		return
+	}
+	var status string
+	var resultRaw, errorRaw []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT status, COALESCE(result,'{}'), COALESCE(error,'') FROM jobs WHERE id=$1`, id).Scan(&status, &resultRaw, &errorRaw); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy job"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được job"})
+		return
+	}
+	if status != "done" {
+		var failure any
+		if len(errorRaw) > 0 {
+			failure = map[string]any{"code": "JOB_FAILED", "message": string(errorRaw)}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": status, "error": failure, "ready": false})
+		return
+	}
+	var result map[string]any
+	_ = json.Unmarshal(resultRaw, &result)
+	profileID, _ := result["profileId"].(string)
+	if profileID == "" {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Job không trả về profileId"})
+		return
+	}
+	var profileRaw []byte
+	if err := s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1`, profileID).Scan(&profileRaw); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được hồ sơ"})
+		return
+	}
+	var profile map[string]any
+	if json.Unmarshal(profileRaw, &profile) != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Hồ sơ không hợp lệ"})
+		return
+	}
+	items, progress := reviewContract(profile)
+	quality := map[string]any{"level": valueOr(result["quality"], "good"), "warning": result["qualityWarning"] == true, "reasons": stringSlice(result["reasons"]), "engine": result["engine"], "pages": intOr(result["pages"], 1)}
+	writeJSON(w, http.StatusOK, map[string]any{"ready": true, "status": status, "profileId": profileID, "profile": profile, "items": items, "progress": progress, "quality": quality, "sections": result["sections"]})
+}
+
+func reviewContract(profile map[string]any) ([]map[string]any, map[string]any) {
+	verified := map[string]any{}
+	if meta, ok := profile["_meta"].(map[string]any); ok {
+		if v, ok := meta["verified"].(map[string]any); ok {
+			verified = v
+		}
+	}
+	items := []map[string]any{{"kind": "basics", "path": "/basics", "title": "Thông tin cá nhân"}}
+	for _, spec := range []struct{ key, kind string }{{"education", "education"}, {"work", "work"}, {"projects", "projects"}, {"certifications", "certifications"}, {"activities", "activities"}} {
+		if rows, ok := profile[spec.key].([]any); ok {
+			for i := range rows {
+				items = append(items, map[string]any{"kind": spec.kind, "path": fmt.Sprintf("/%s/%d", spec.key, i), "title": fmt.Sprintf("%s %d", spec.kind, i+1)})
+			}
+		}
+	}
+	if rows, ok := profile["skills"].([]any); ok && len(rows) > 0 {
+		items = append(items, map[string]any{"kind": "skills", "path": "/skills", "title": fmt.Sprintf("Kỹ năng (%d)", len(rows))})
+	}
+	if rows, ok := profile["languages"].([]any); ok && len(rows) > 0 {
+		items = append(items, map[string]any{"kind": "languages", "path": "/languages", "title": fmt.Sprintf("Ngoại ngữ (%d)", len(rows))})
+	}
+	done := 0
+	pending := []string{}
+	for _, item := range items {
+		path := item["path"].(string)
+		if verified[path] == true {
+			done++
+		} else {
+			pending = append(pending, path)
+		}
+	}
+	return items, map[string]any{"done": done, "total": len(items), "complete": len(pending) == 0, "pending": pending}
+}
+
+func valueOr(v any, fallback any) any {
+	if v == nil {
+		return fallback
+	}
+	return v
+}
+func intOr(v any, fallback int) int {
+	if n, ok := v.(float64); ok {
+		return int(n)
+	}
+	return fallback
+}
+func stringSlice(v any) []string {
+	out := []string{}
+	if xs, ok := v.([]any); ok {
+		for _, x := range xs {
+			if s, ok := x.(string); ok {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 func (s *Server) importPages(w http.ResponseWriter, r *http.Request, jobID string) {
@@ -999,6 +1122,16 @@ func (s *Server) importComplete(w http.ResponseWriter, r *http.Request) {
 	var language, title string
 	if err := s.db.QueryRowContext(r.Context(), `SELECT data, language, COALESCE(data->'basics'->>'name','CV của tôi') FROM profiles WHERE id = $1`, profileID).Scan(&profileRaw, &language, &title); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		return
+	}
+	var profile map[string]any
+	if json.Unmarshal(profileRaw, &profile) != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Hồ sơ không hợp lệ"})
+		return
+	}
+	_, progress := reviewContract(profile)
+	if progress["complete"] != true {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "Còn mục chưa rà soát", "pending": progress["pending"], "progress": progress})
 		return
 	}
 	var cvID string
@@ -1221,16 +1354,33 @@ func (s *Server) streamAnalyze(w http.ResponseWriter, r *http.Request, cvID stri
 		var score, matched, gaps []byte
 		var degraded bool
 		var created time.Time
-		err := s.db.QueryRowContext(r.Context(), `SELECT id,score,matched,gaps,degraded,created_at FROM match_analyses WHERE cv_id=$1 ORDER BY created_at DESC LIMIT 1`, cvID).Scan(&id, &score, &matched, &gaps, &degraded, &created)
+		var jdID string
+		var jdTitle, jdSeniority sql.NullString
+		err := s.db.QueryRowContext(r.Context(), `SELECT m.id,m.score,m.matched,m.gaps,m.degraded,m.created_at,m.jd_id,j.requirements->>'title',j.requirements->>'seniority' FROM match_analyses m JOIN job_descriptions j ON j.id=m.jd_id WHERE m.cv_id=$1 ORDER BY m.created_at DESC LIMIT 1`, cvID).Scan(&id, &score, &matched, &gaps, &degraded, &created, &jdID, &jdTitle, &jdSeniority)
 		if err == nil {
-			var scoreV, matchedV, gapsV any
+			var scoreV map[string]any
+			var matchedV, gapsV any
 			_ = json.Unmarshal(score, &scoreV)
 			_ = json.Unmarshal(matched, &matchedV)
 			_ = json.Unmarshal(gaps, &gapsV)
-			data, _ := json.Marshal(map[string]any{"ready": true, "id": id, "score": scoreV, "matched": matchedV, "gaps": gapsV, "degraded": degraded, "createdAt": created})
-			fmt.Fprintf(w, "event: snapshot\ndata: %s\n\n", data)
+			pending := 0
+			if gs, ok := gapsV.([]any); ok {
+				for _, g := range gs {
+					if gm, ok := g.(map[string]any); ok && gm["advice"] == nil {
+						pending++
+					}
+				}
+			}
+			dataValue := map[string]any{"ready": true, "id": id, "jd": map[string]any{"id": jdID, "title": jdTitle.String, "seniority": jdSeniority.String}, "overall": scoreV["overall"], "breakdown": scoreV["breakdown"], "matched": matchedV, "gaps": gapsV, "missingAtsKeywords": scoreV["missingAtsKeywords"], "degraded": degraded, "degradedReason": scoreV["degradedReason"], "advicePending": pending, "createdAt": created}
+			data, _ := json.Marshal(dataValue)
+			fmt.Fprintf(w, "event: report\ndata: %s\n\n", data)
+			if pending == 0 {
+				fmt.Fprintf(w, "event: done\ndata: %s\n\n", data)
+			}
 			flusher.Flush()
-			return
+			if pending == 0 {
+				return
+			}
 		}
 		fmt.Fprintf(w, "event: progress\ndata: {\"ready\":false}\n\n")
 		flusher.Flush()

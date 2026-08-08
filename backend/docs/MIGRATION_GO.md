@@ -11,9 +11,11 @@ diện cùng lúc.
 `backend/cmd/api` và `backend/cmd/worker` hiện đã có production path cho
 auth, upload/job, profile/CV, KB, analyze, chat reply, export PDF, parse CV và
 keyword/semantic matching. Các CV thật trong `var/storage` đã được chạy qua
-worker Go.
+worker Go. Import review, import complete, job SSE (`progress/done/failed`),
+analyze SSE (`report/done`) và proposal JSON Patch cũng đã khớp contract mà
+frontend đang dùng.
 
-Phần Node cũ được giữ tạm trong `frontend/apps/web` server routes,
+Phần Node cũ vẫn được giữ trong `frontend/apps/web` server routes,
 `frontend/services/worker` và các package dùng
 chung để bảo toàn chức năng trong giai đoạn chuyển tiếp. Không mở rộng phần
 legacy; mỗi luồng mới phải có implementation và test ở Go trước.
@@ -35,10 +37,10 @@ tất cho tới khi frontend đổi sang Go và các route/worker còn lại đ�
 
 ## Còn lại cần chuyển
 
-Phần còn lại để đạt 100% business contract là proposals/JSON Patch trong chat,
-LLM gap advice + reranker, `embed_profile`, đầy đủ job retry/retention và
-frontend cutover khỏi các Node API route. OCR/image branch nằm ngoài phạm vi
-đã thống nhất.
+Các edge case còn phải hoàn tất trước khi xóa Node route là ownership/authorization
+đầy đủ cho mọi read/mutation, retry/retention parity và đối soát staging.
+`embed_profile` và OCR/image branch nằm ngoài phạm vi hiện tại; semantic matching
+đã có fallback degraded và LLM advice/reranker đã chạy trong worker Go.
 
 Image Go được build offline từ binary local:
 
@@ -54,7 +56,8 @@ docker compose -f backend/docker-compose.yml up -d backend
 2. Viết handler Go tương đương.
 3. Chuyển frontend gọi backend Go.
 4. Chạy contract/integration test.
-5. Xóa route Node cũ sau khi production đã chuyển traffic.
+5. Xóa route Node cũ sau khi contract test, staging đối soát và rollback window
+   đều đạt; hiện tại Node route vẫn là rollback safety net.
 
 ## Chạy backend Go
 
@@ -83,4 +86,6 @@ chỉ dựa trên việc image build thành công.
 
 Frontend cutover hiện được bảo vệ bởi `GO_API_CUTOVER` (mặc định `false`). Smoke
 test thực tế với flag `true` đã xác nhận `/api/health`, magic-link request và
-upload/job đi qua Go trong khi trang Next vẫn render bình thường.
+upload/job đi qua Go trong khi trang Next vẫn render bình thường. Khi bật cờ,
+middleware rewrite toàn bộ `/api/*` sang Go; khi tắt cờ, Node route vẫn phục vụ
+rollback.
