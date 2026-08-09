@@ -1237,6 +1237,17 @@ export const appRoutes: RouteObject[] = [
           </div>
         ),
       },
+      // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
+      // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
+      // chỉ là dạng chọn sẵn khi tới từ một CV cụ thể.
+      {
+        path: 'analyze',
+        element: (
+          <div data-testid="view-job-match">
+            <JobMatchView cvs={initialCVs} />
+          </div>
+        ),
+      },
       {
         path: 'analyze/:cvId',
         element: (
@@ -1282,14 +1293,26 @@ Thay khối `navItems`/`secondaryItems` và hai vòng lặp render. Bỏ hai pro
 import React from 'react'
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, FileText, GitCompare, Sparkles, Layout, Settings,
+  LayoutDashboard, FileText, GitCompare, Layout, Settings,
 } from 'lucide-react'
 
+/*
+ * Sidebar còn 5 mục, không phải 6.
+ *
+ * Bản SPA gốc có mục "Trợ lý AI" trỏ tới một màn hình chat đứng riêng. Spec
+ * §5.1 gộp trợ lý thành panel của `/builder/:cvId`, vì trợ lý tách khỏi CV thì
+ * không sinh được đề xuất có ngữ cảnh — nên mục sidebar đó không còn đích đến
+ * và bị bỏ. Quyết định của chủ sản phẩm ngày 2026-08-09.
+ *
+ * `/analyze` KHÔNG kèm id là một màn hình thật: `JobMatchView` vốn đã nhận cả
+ * danh sách CV và tự cho người dùng chọn. `/analyze/:cvId` chỉ là dạng chọn
+ * sẵn. Trỏ một mục sidebar vào route chỉ tồn tại ở dạng có tham số thì nó rơi
+ * thẳng vào màn hình 404.
+ */
 const primary = [
   { to: '/', end: true, id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
   { to: '/cv', end: false, id: 'cv', label: 'CV của tôi', icon: FileText },
   { to: '/analyze', end: false, id: 'analyze', label: 'Đối chiếu việc làm', icon: GitCompare },
-  { to: '/builder', end: false, id: 'builder', label: 'Trợ lý AI', icon: Sparkles },
 ]
 
 const secondary = [
@@ -2255,8 +2278,23 @@ Ngay sau service `web`, thêm:
       - '3002:3002'
     depends_on:
       backend: { condition: service_started }
-    profiles: ['full']
 ```
+
+- [ ] **Step 4b: Gỡ `profiles: ['full']` khỏi mọi service**
+
+Yêu cầu của chủ sản phẩm ngày 2026-08-09: `docker compose up -d --build` phải dựng **toàn bộ** service, không còn cái nào phải gọi riêng.
+
+Hiện `web`, `pdfkit` và `worker` đều mang `profiles: ['full']`, nên lệnh trên bỏ qua chúng **im lặng** — không báo lỗi, không cảnh báo, chỉ đơn giản là không dựng. Xoá dòng `profiles: ['full']` khỏi cả ba. `web-spa` ở Step 4 đã không có sẵn.
+
+Hệ quả phải nói rõ trong report: từ đây `docker compose up -d --build` sẽ **rebuild và khởi động lại cả `hr-web`** — bản Next đang phục vụ production ở `:3000`. Trước đây profile che nó khỏi việc đó. Đây là điều chủ sản phẩm đã chọn khi biết đánh đổi.
+
+Sau khi xoá, xác minh bằng:
+
+```bash
+cd backend && docker compose config --services | sort
+```
+
+Kỳ vọng: liệt kê đủ `backend`, `pdfkit`, `postgres`, `redis`, `web`, `web-spa`, `worker` — bảy service, không thiếu cái nào.
 
 - [ ] **Step 5: Ghi biến môi trường vào `.env.example`**
 

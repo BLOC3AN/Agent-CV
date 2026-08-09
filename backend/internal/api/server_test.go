@@ -179,3 +179,50 @@ func TestReviewContractMatchesVerifiedPaths(t *testing.T) {
 		t.Fatalf("pending=%#v", got)
 	}
 }
+
+func TestCVListItemOmitsEmptyJDTitle(t *testing.T) {
+	at := time.Date(2026, 8, 9, 10, 30, 0, 0, time.UTC)
+
+	withJD := cvListItem("cv-1", "CV Backend", at, "Junior Go Developer")
+	if withJD["jdTitle"] != "Junior Go Developer" {
+		t.Fatalf("jdTitle = %#v, want the job title", withJD["jdTitle"])
+	}
+	if withJD["updatedAt"] != "2026-08-09T10:30:00Z" {
+		t.Fatalf("updatedAt = %#v, want RFC3339 in UTC", withJD["updatedAt"])
+	}
+
+	// CV không gắn tin tuyển dụng nào thì KHÔNG được có khoá jdTitle rỗng:
+	// giao diện phân biệt "không gắn JD" bằng sự vắng mặt của khoá này.
+	plain := cvListItem("cv-2", "CV chung", at, "")
+	if _, exists := plain["jdTitle"]; exists {
+		t.Fatalf("jdTitle must be absent when the CV has no job description: %#v", plain)
+	}
+}
+
+func TestCVListRouteIsRegistered(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/cv", nil)
+	w := httptest.NewRecorder()
+	NewServer().Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /api/cv status = %d, want %d when PostgreSQL is unavailable", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestAuthSessionReportsAnonymousWithoutCookie(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	w := httptest.NewRecorder()
+	NewServer().Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("session status = %d, want 200 — the SPA asks this on every page load", w.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["authenticated"] != false {
+		t.Fatalf("authenticated = %#v, want false", body["authenticated"])
+	}
+	if _, leaked := body["email"]; leaked {
+		t.Fatalf("anonymous session must not carry an email: %#v", body)
+	}
+}

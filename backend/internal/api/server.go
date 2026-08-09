@@ -75,10 +75,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/request", s.authRequest)
 	mux.HandleFunc("GET /api/auth/verify", s.authVerify)
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
+	mux.HandleFunc("GET /api/auth/session", s.authSession)
 	mux.HandleFunc("POST /api/profiles", s.createProfile)
 	mux.HandleFunc("PATCH /api/profiles/", s.patchProfile)
 	mux.HandleFunc("GET /api/profiles/", s.profileSubresource)
 	mux.HandleFunc("POST /api/profiles/", s.profileMutation)
+	mux.HandleFunc("GET /api/cv", s.listCV)
 	mux.HandleFunc("POST /api/cv", s.createCV)
 	mux.HandleFunc("GET /api/cv/", s.cvRoute)
 	mux.HandleFunc("PATCH /api/cv/", s.cvRoute)
@@ -2288,4 +2290,83 @@ func newID() string {
 		return time.Now().UTC().Format("20060102150405.000000000")
 	}
 	return hex.EncodeToString(b)
+}
+
+// cvListItem dựng một dòng cho danh sách CV.
+//
+// Chỉ metadata: danh sách không đọc nội dung hồ sơ, nên nó không phụ thuộc
+// schema v1 hay v2 — SP-2 đổi schema cũng không phải sửa hàm này.
+func cvListItem(id, title string, updated time.Time, jdTitle string) map[string]any {
+	item := map[string]any{
+		"id":        id,
+		"title":     title,
+		"updatedAt": updated.UTC().Format(time.RFC3339),
+	}
+	if jdTitle != "" {
+		item["jdTitle"] = jdTitle
+	}
+	return item
+}
+
+func (s *Server) listCV(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV cần PostgreSQL"})
+		return
+	}
+	userID := s.currentUserID(r)
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		return
+	}
+	// Tên tin tuyển dụng nằm trong `requirements`, không phải cột riêng —
+	// bảng job_descriptions không có cột title.
+	rows, err := s.db.QueryContext(r.Context(), `
+		SELECT c.id, COALESCE(c.title, 'CV'), c.updated_at,
+		       COALESCE(j.requirements->>'title', '')
+		  FROM cv_documents c
+		  LEFT JOIN job_descriptions j ON j.id = c.jd_id
+		 WHERE c.user_id = $1
+		 ORDER BY c.updated_at DESC`, userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được danh sách CV"})
+		return
+	}
+	defer rows.Close()
+
+	// Khởi tạo rỗng chứ không để nil: nil serialize thành `null`, và giao diện
+	// phải phân biệt "chưa có CV nào" với "gọi hỏng".
+	items := make([]map[string]any, 0)
+	for rows.Next() {
+		var id, title, jdTitle string
+		var updated time.Time
+		if err := rows.Scan(&id, &title, &updated, &jdTitle); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được danh sách CV"})
+			return
+		}
+		items = append(items, cvListItem(id, title, updated, jdTitle))
+	}
+	if rows.Err() != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được danh sách CV"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// authSession cho SPA biết nó đang là ai.
+//
+// LUÔN trả 200, kể cả khi chưa đăng nhập. Đây là câu hỏi mỗi lần tải trang;
+// trả 401 cho một câu hỏi bình thường sẽ khiến mọi lớp xử lý lỗi phía trình
+// duyệt phải có một ngoại lệ riêng cho đúng endpoint này.
+func (s *Server) authSession(w http.ResponseWriter, r *http.Request) {
+	userID := s.currentUserID(r)
+	if userID == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		return
+	}
+	var email string
+	if err := s.db.QueryRowContext(r.Context(), `SELECT email FROM users WHERE id = $1`, userID).Scan(&email); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "email": email})
 }

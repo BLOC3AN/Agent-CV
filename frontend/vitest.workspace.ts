@@ -41,7 +41,7 @@ export default defineWorkspace([
     esbuild: { jsx: 'automatic' },
     test: {
       name: 'ui',
-      include: ['apps/web/test/**/*.ui.test.tsx'],
+      include: ['apps/*/test/**/*.ui.test.tsx'],
       environment: 'happy-dom',
       setupFiles: ['apps/web/test/setup.ts'],
       testTimeout: 15_000,
