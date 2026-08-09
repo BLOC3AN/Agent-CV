@@ -19,8 +19,14 @@ const itemId = (section: string, index: number) => `${section}-${index}`
  * Copy nguyên khoá là hỏng ngầm: `/basics/name` không tồn tại trong v2, nên
  * mọi dấu đã-xác-nhận của người dùng biến mất trong im lặng và UC-22 bắt họ rà
  * soát lại từ đầu.
+ *
+ * v1 skills là mảng phẳng, v2 gom theo nhóm, nên `/skills/N` không có ánh xạ
+ * trực tiếp — cần bảng tra cứu từ lúc gom: skillPointerByV1Index[N] = v2 pointer.
  */
-function translateVerifiedPointer(pointer: string): string | null {
+function translateVerifiedPointer(
+  pointer: string,
+  skillPointerByV1Index: string[] = [],
+): string | null {
   const introField: Record<string, string> = {
     name: 'fullName', headline: 'title', introduce: 'summary',
     email: 'email', phone: 'phone', location: 'location', photo: 'avatarUrl',
@@ -30,11 +36,26 @@ function translateVerifiedPointer(pointer: string): string | null {
     activities: 'activities', certifications: 'certifications', languages: 'languages',
   }
   const parts = pointer.split('/').filter(Boolean)
+
+  // v1 `/skills/N` hoặc `/skills/N/<field>` — dùng bảng tra cứu từ grouping
+  if (parts[0] === 'skills' && /^\d+$/.test(parts[1]!)) {
+    const v1SkillIndex = parseInt(parts[1]!, 10)
+    if (v1SkillIndex < skillPointerByV1Index.length) {
+      const basePointer = skillPointerByV1Index[v1SkillIndex]!
+      if (parts.length === 2) return basePointer
+      // `/skills/N/name` hoặc field khác → không dịch, những field này được cất vào
+      // droppedFields, không có chỗ ở v2
+      return null
+    }
+    return null
+  }
+
   if (parts[0] === 'basics') {
     if (parts.length === 1) return '/sections/intro'
     const mapped = introField[parts[1]!]
     return mapped ? `/sections/intro/${mapped}` : null
   }
+
   const mappedSection = section[parts[0]!]
   if (!mappedSection) return null
   return ['/sections', mappedSection, ...parts.slice(1)].join('/')
@@ -51,17 +72,27 @@ export function profileToCV(
 
   // Gom theo `group`, giữ nguyên thứ tự nhóm xuất hiện lần đầu — backfill chạy
   // lại phải ra cùng thứ tự, nếu không thì không idempotent.
+  // Đồng thời xây dựng bảng v1→v2 index cho dịch verified pointers.
   const grouped: { category: string; skills: string[] }[] = []
-  for (const s of profile.skills) {
+  const skillPointerByV1Index: string[] = []
+  for (let v1Index = 0; v1Index < profile.skills.length; v1Index++) {
+    const s = profile.skills[v1Index]!
     const category = s.group ?? 'Khác'
     const bucket = grouped.find((g) => g.category === category)
-    if (bucket) bucket.skills.push(s.name)
-    else grouped.push({ category, skills: [s.name] })
+    if (bucket) {
+      const posInGroup = bucket.skills.length
+      skillPointerByV1Index[v1Index] = `/sections/skills/${grouped.indexOf(bucket)}/skills/${posInGroup}`
+      bucket.skills.push(s.name)
+    } else {
+      const groupIdx = grouped.length
+      skillPointerByV1Index[v1Index] = `/sections/skills/${groupIdx}/skills/0`
+      grouped.push({ category, skills: [s.name] })
+    }
   }
 
   const verified: Record<string, boolean> = {}
   for (const [pointer, value] of Object.entries(profile._meta.verified)) {
-    const translated = translateVerifiedPointer(pointer)
+    const translated = translateVerifiedPointer(pointer, skillPointerByV1Index)
     if (translated) verified[translated] = value
   }
 
@@ -72,8 +103,16 @@ export function profileToCV(
   profile.work.forEach((w, i) => {
     if (w.type) droppedFields[`/work/${i}/type`] = w.type
   })
+  profile.projects.forEach((p, i) => {
+    if (p.tech.length) droppedFields[`/projects/${i}/tech`] = JSON.stringify(p.tech)
+  })
   profile.skills.forEach((s, i) => {
     if (s.level) droppedFields[`/skills/${i}/level`] = s.level
+    // Giữ group nếu nó khác null/undefined: để round-trip phân biệt được
+    // "không có group" từ "group là 'Khác'"
+    if (s.group !== undefined && s.group !== null) {
+      droppedFields[`/skills/${i}/group`] = s.group
+    }
   })
 
   return CVSchema.parse({
@@ -110,12 +149,14 @@ export function profileToCV(
         endDate: p.endDate ?? '',
         link: p.url,
         // `tech[]` không có chỗ riêng ở v2; gộp vào bullet đầu để không mất.
+        // Tech được lưu đầy đủ trong _meta.droppedFields, nên highlight này
+        // chỉ để hiển thị cho con người.
         highlights: p.tech.length ? [`Công nghệ: ${p.tech.join(', ')}`, ...p.highlights] : p.highlights,
       })),
       education: profile.education.map((e, i) => ({
         id: itemId('edu', i),
         school: e.school,
-        degree: e.degree,
+        degree: e.degree ?? '',
         fieldOfStudy: e.major ?? '',
         startDate: e.startDate ?? '',
         endDate: e.endDate ?? '',

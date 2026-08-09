@@ -78,4 +78,101 @@ describe('profileToCV', () => {
     expect(verified['/sections/experience/0/highlights/0']).toBe(true)
     expect(verified['/basics/name']).toBeUndefined()
   })
+
+  it('education: dịch major → fieldOfStudy', () => {
+    const edu = profileToCV(v1, META).sections.education[0]
+    expect(edu?.fieldOfStudy).toBe('Cơ điện tử')
+    expect(edu?.school).toBe('HCMUTE')
+    expect(edu?.degree).toBe('Kỹ sư')
+  })
+
+  it('activities: dịch name → organization, period → startDate', () => {
+    const v1Activity = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      activities: [{ name: 'Hội Điện Tử', role: 'Chủ nhiệm', period: '2022-2023', highlights: ['Tổ chức hội thảo'] }],
+    })
+    const act = profileToCV(v1Activity, META).sections.activities[0]
+    expect(act?.organization).toBe('Hội Điện Tử')
+    expect(act?.role).toBe('Chủ nhiệm')
+    expect(act?.startDate).toBe('2022-2023')
+  })
+
+  it('certifications: không thay đổi name, dịch issuer', () => {
+    const v1Cert = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      certifications: [{ name: 'AWS Solutions Architect', issuer: 'Amazon', date: '2023-06' }],
+    })
+    const cert = profileToCV(v1Cert, META).sections.certifications[0]
+    expect(cert?.name).toBe('AWS Solutions Architect')
+    expect(cert?.issuer).toBe('Amazon')
+    expect(cert?.date).toBe('2023-06')
+  })
+
+  it('languages: dịch name → language, level → proficiency', () => {
+    const v1Lang = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      languages: [{ name: 'English', level: 'TOEIC 900' }],
+    })
+    const lang = profileToCV(v1Lang, META).sections.languages[0]
+    expect(lang?.language).toBe('English')
+    expect(lang?.proficiency).toBe('TOEIC 900')
+  })
+
+  it('cất tech của dự án trong _meta.droppedFields dưới dạng JSON, không chỉ trong prose', () => {
+    const dropped = profileToCV(v1, META)._meta.droppedFields
+    expect(dropped['/projects/0/tech']).toBe(JSON.stringify(['Go', 'ONNX']))
+  })
+
+  it('/skills/N verified pointer được dịch qua bảng grouping', () => {
+    const v1Skills = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      skills: [
+        { name: 'Python', group: 'Programming' },
+        { name: 'JavaScript', group: 'Programming' },
+        { name: 'Docker', group: 'MLOps' },
+      ],
+      _meta: { verified: { '/skills/2': true } },
+    })
+    const verified = profileToCV(v1Skills, META)._meta.verified
+    // skills[2] là Docker (thứ 0 trong MLOps), nên v2 pointer là /sections/skills/1/skills/0
+    expect(verified['/sections/skills/1/skills/0']).toBe(true)
+  })
+
+  it('kỹ năng không có group và kỹ năng với group="Khác" phải phân biệt được', () => {
+    const v1NoGroup = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      skills: [
+        { name: 'NoGroup' }, // group is undefined
+        { name: 'Khac', group: 'Khác' }, // group is literally "Khác"
+      ],
+    })
+    const dropped = profileToCV(v1NoGroup, META)._meta.droppedFields
+    // skills[1] có group="Khác" → được ghi lại
+    expect(dropped['/skills/1/group']).toBe('Khác')
+    // skills[0] không có group → không được ghi lại
+    expect(dropped['/skills/0/group']).toBeUndefined()
+  })
+
+  it('education verified pointer được dịch', () => {
+    const v1Edu = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      education: [{ school: 'ĐH Bách Khoa', degree: 'Kỹ sư' }],
+      _meta: { verified: { '/education/0/school': true } },
+    })
+    const verified = profileToCV(v1Edu, META)._meta.verified
+    expect(verified['/sections/education/0/school']).toBe(true)
+    expect(verified['/education/0/school']).toBeUndefined()
+  })
 })
