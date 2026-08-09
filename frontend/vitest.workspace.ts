@@ -14,10 +14,21 @@ const alias = {
   '@': path.resolve(root, 'apps/web'),
 }
 
+// Vite mặc định chỉ phục vụ file bên trong root của chính nó (ở đây là
+// `frontend/`) — file `../backend/**` (test lẫn module nó import) bị chặn
+// với lỗi "Does the file exist?" dù file có thật, vì nằm ngoài fs.allow mặc
+// định. `../backend/legacy-eval/**/*.test.ts` đã được include ở project
+// 'integration' từ trước nhưng chưa từng chạy qua lỗi này (integration test
+// không nằm trong `npm test`/CI thường ngày); giờ 'unit' cũng include
+// `../backend/db/**/*.test.ts` nên phải mở fs.allow lên tới root của cả
+// monorepo (thư mục cha của `frontend/`), không chỉ riêng `frontend/`.
+const fsAllow = [root, path.resolve(root, '..')]
+
 export default defineWorkspace([
   {
     resolve: { alias },
     esbuild: { jsx: 'automatic' },
+    server: { fs: { allow: fsAllow } },
     test: {
       name: 'unit',
       // Unit test KHÔNG chạm mạng — mock ở tầng provider (TESTCASES §1.4)
@@ -26,6 +37,11 @@ export default defineWorkspace([
         'packages/**/test/**/*.test.tsx',
         'apps/**/test/**/*.test.ts',
         'apps/**/test/**/*.test.tsx',
+        // backend/db/ không có bộ test riêng — collectUnknownKeys/setAtPointer
+        // là pure function, không chạm DB/mạng, nên hợp lệ ở project 'unit'
+        // này. Theo đúng tiền lệ đã có: project 'integration' bên dưới cũng
+        // include thẳng '../backend/legacy-eval/**/*.test.ts'.
+        '../backend/db/**/*.test.ts',
       ],
       // Loại test GIAO DIỆN: chúng khớp `*.test.tsx` nên sẽ chạy CẢ ở đây,
       // trong môi trường `node` không có DOM, và đỏ vì `document is not defined`.
@@ -50,6 +66,7 @@ export default defineWorkspace([
   {
     resolve: { alias },
     esbuild: { jsx: 'automatic' },
+    server: { fs: { allow: fsAllow } },
     test: {
       name: 'integration',
       // Integration test chạm model server thật (TC-INT-01..05)

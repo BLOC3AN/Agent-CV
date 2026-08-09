@@ -13,6 +13,7 @@
  */
 import { Client } from 'pg'
 import { ProfileSchema, CVSchema, profileToCV, cvToProfile } from '@hr/schema'
+import { collectUnknownKeys, reattachUnknownKeys } from './unknown-keys.js'
 
 const args = new Set(process.argv.slice(2))
 const dryRun = args.has('--dry-run')
@@ -41,82 +42,10 @@ await client.connect()
 // role đủ quyền, hoặc tìm cách khác để vô hiệu hoá trigger cho phiên này.
 await client.query('SET session_replication_role = replica')
 
-// Tiền tố đánh dấu field mà ProfileSchema hoàn toàn không biết tới (không
-// phải field v1 hợp lệ nhưng-không-có-chỗ-ở-v2 như `/basics/dob` — đó là loại
-// khác, do chính profileToCV() cất). Field ở đây bị Zod strip trong im lặng
-// ngay tại `ProfileSchema.parse()`, TRƯỚC KHI profileToCV() kịp thấy — nên
-// phải bắt ở đây, so raw với parsed, chứ không có cách nào bắt được bên trong
-// converter.
-//
-// AN TOÀN KHÔNG ĐỤNG HÀNG: mọi pointer droppedFields khác trong hệ thống này
-// (`/basics/dob`, `/work/N/type`, `/skills/N/level`, `/skills/N/group`,
-// `/projects/N/tech`, `/skills/_order`, `/_meta/verified...`) đều bắt đầu
-// bằng tên một field TOP-LEVEL thật của ProfileSchema (`basics`, `work`,
-// `skills`, `projects`, `_meta`). ProfileSchema chỉ có đúng các field
-// top-level: schemaVersion, language, basics, education, work, projects,
-// skills, activities, certifications, languages, _meta — không field nào
-// tên `_unrecognized`, nên tiền tố này không thể trùng với bất kỳ pointer
-// nào ở trên, bất kể field lạ thật sự tên gì.
-const UNKNOWN_KEY_PREFIX = '/_unrecognized'
-
-/**
- * Dò các khoá có trong `raw` (JSON thô đọc thẳng từ cột `data`) nhưng biến
- * mất sau khi `ProfileSchema.parse()` chạy qua — tức là Zod strip trong im
- * lặng vì field đó không nằm trong schema (chế độ mặc định của `z.object()`).
- * Quét đệ quy ở MỌI cấp, không chỉ top-level: field lạ có thể nằm sâu trong
- * một phần tử mảng (vd. `work[2].oldField`).
- *
- * KHÔNG qua chiều ngược lại (khoá có ở `parsed` nhưng không có ở `raw`): đó
- * là default Zod tự điền cho field optional vắng mặt (`links: []`, …) — thêm
- * vào, không phải mất đi, không phải việc của hàm này.
- */
-function collectUnknownKeys(
-  raw: unknown,
-  parsed: unknown,
-  pointer: string,
-  out: Record<string, string>,
-): void {
-  if (Array.isArray(raw)) {
-    if (!Array.isArray(parsed)) return
-    raw.forEach((item, i) => collectUnknownKeys(item, parsed[i], `${pointer}/${i}`, out))
-    return
-  }
-  if (raw !== null && typeof raw === 'object') {
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return
-    const parsedObj = parsed as Record<string, unknown>
-    for (const key of Object.keys(raw as Record<string, unknown>)) {
-      const rawVal = (raw as Record<string, unknown>)[key]
-      const childPointer = `${pointer}/${key}`
-      if (!Object.prototype.hasOwnProperty.call(parsedObj, key)) {
-        // Không biết trước kiểu (string/number/boolean/null/object/array):
-        // luôn JSON.stringify để tự mô tả kiểu của chính nó — khác với các
-        // field đã biết chắc là string ở profileToCV (dob, headline, …) nên
-        // lưu trực tiếp. JSON.parse ở chiều khôi phục trả đúng nguyên kiểu.
-        out[`${UNKNOWN_KEY_PREFIX}${childPointer}`] = JSON.stringify(rawVal)
-        continue
-      }
-      collectUnknownKeys(rawVal, parsedObj[key], childPointer, out)
-    }
-  }
-}
-
-/** Đặt giá trị vào object theo JSON Pointer, tạo object/mảng cha nếu thiếu. */
-function setAtPointer(root: Record<string, unknown>, pointer: string, value: unknown): void {
-  const parts = pointer.split('/').filter(Boolean)
-  let node: Record<string, unknown> = root
-  for (let i = 0; i < parts.length - 1; i++) {
-    const key = parts[i]!
-    const next = node[key]
-    if (next === undefined || next === null || typeof next !== 'object') {
-      // Đoán object hay mảng dựa trên segment kế tiếp (số → mảng) — chỉ cần
-      // cho ca hiếm cha cũng đã bị strip; bình thường cha luôn có sẵn (field
-      // lạ nằm bên trong một object/mảng ProfileSchema đã biết).
-      node[key] = /^\d+$/.test(parts[i + 1]!) ? [] : {}
-    }
-    node = node[key] as Record<string, unknown>
-  }
-  node[parts[parts.length - 1]!] = value
-}
+// `collectUnknownKeys`, `setAtPointer` (dùng trong `reattachUnknownKeys`) và
+// tiền tố `/_unrecognized` sống ở backend/db/unknown-keys.ts — dùng CHUNG với
+// roundtrip-check.ts, xem comment ở đó về lý do và về an toàn không đụng hàng
+// của tiền tố.
 
 let ok = 0
 const failures: { id: string; reason: string }[] = []
@@ -168,7 +97,7 @@ if (!rollback) {
       // (profile ở trên đã bị Zod strip trước khi tới đó) — gắn thẳng vào
       // droppedFields của CV vừa tạo, cùng namespace với mọi thứ droppedFields
       // khác nhưng khác tiền tố nên không đụng hàng (xem comment
-      // UNKNOWN_KEY_PREFIX ở trên).
+      // UNKNOWN_KEY_PREFIX trong backend/db/unknown-keys.ts).
       if (Object.keys(unknownKeys).length) {
         Object.assign(cv._meta.droppedFields, unknownKeys)
       }
@@ -197,11 +126,7 @@ if (!rollback) {
       // nhét vào input của nó — sẽ bị strip lại y hệt lần đầu. Phải gắn lại
       // ở NGOÀI, sau khi cvToProfile() đã trả về object, và KHÔNG được chạy
       // qua ProfileSchema.parse() thêm lần nào nữa sau bước này.
-      const restored: Record<string, unknown> = profile
-      for (const [key, value] of Object.entries(cv._meta.droppedFields)) {
-        if (!key.startsWith(UNKNOWN_KEY_PREFIX)) continue
-        setAtPointer(restored, key.slice(UNKNOWN_KEY_PREFIX.length), JSON.parse(value))
-      }
+      const restored = reattachUnknownKeys(profile, cv._meta.droppedFields)
 
       if (dryRun) { ok++; continue }
       await client.query('UPDATE profiles SET data = $2::jsonb WHERE id = $1', [
