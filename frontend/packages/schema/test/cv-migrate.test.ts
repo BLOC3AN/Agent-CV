@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ProfileSchema } from '../src/profile.js'
+import { CVSchema, type CV } from '../src/cv.js'
 import { profileToCV, cvToProfile } from '../src/cv-migrate.js'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
@@ -226,7 +227,10 @@ describe('khứ hồi v1 → v2 → v1', () => {
       JSON.parse(readFileSync(join(FIXTURES, file), 'utf8')),
     )
     const restored = cvToProfile(profileToCV(original, META))
-    expect(restored).toEqual(original)
+    // toStrictEqual, không toEqual: đây là chốt cho phép chạy backfill trên dữ
+    // liệu thật, và toEqual coi { a: undefined } bằng {} — lỏng hơn mức chốt
+    // này cần.
+    expect(restored).toStrictEqual(original)
   })
 
   // profile-v1-full.json chỉ lộ ca này qua đúng một field (work[1].endDate).
@@ -234,7 +238,10 @@ describe('khứ hồi v1 → v2 → v1', () => {
   // dùng `.default('')` nên "field rỗng tường minh" và "field vắng mặt" đổ về
   // cùng một '' — nếu bất kỳ dòng restoreEmpty() nào trong cvToProfile() bị
   // xoá (quay lại `x.field ? {...} : {}` đơn thuần), field tương ứng ở đây sẽ
-  // rụng khỏi kết quả và test lệch.
+  // rụng khỏi kết quả và test lệch. Gồm cả `dob`/`photo`/`education.major`/
+  // `education.gpa`/`skills.canonical`/`skills.group`: những field này KHÔNG
+  // dùng v2 default(''), nhưng cùng bị mất vì chiều lùi dùng kiểm tra truthy
+  // trên một giá trị đã lưu đúng là '' (round 1 review, finding 1).
   it('field optional-string rỗng tường minh khứ hồi đúng, không lẫn với field vắng mặt', () => {
     const original = ProfileSchema.parse({
       schemaVersion: 1,
@@ -245,17 +252,120 @@ describe('khứ hồi v1 → v2 → v1', () => {
         introduce: '',
         phone: '',
         location: '',
+        dob: '',
+        photo: '',
         links: [],
       },
-      education: [{ school: 'X', degree: 'Y', startDate: '', endDate: '' }],
+      education: [{ school: 'X', degree: 'Y', major: '', gpa: '', startDate: '', endDate: '' }],
       work: [{ org: 'O', role: 'R', startDate: '', endDate: '' }],
       projects: [{ name: 'P', role: '', startDate: '', endDate: '' }],
+      skills: [{ name: 'S1', canonical: '', group: '' }],
       activities: [{ name: 'A', role: '', period: '' }],
       certifications: [{ name: 'C', issuer: '', date: '' }],
       languages: [{ name: 'L', level: '' }],
       _meta: { verified: {}, source: 'manual' },
     })
     const restored = cvToProfile(profileToCV(original, META))
-    expect(restored).toEqual(original)
+    expect(restored).toStrictEqual(original)
+  })
+})
+
+describe('cvToProfile ném lỗi rõ ràng thay vì khôi phục một phần trong im lặng', () => {
+  // Đây là đường lùi cho backfill trên dữ liệu thật: một tài liệu v2 không do
+  // profileToCV() sinh ra (hoặc bị chỉnh sửa mất _meta) mà cứ âm thầm trả về
+  // hồ sơ rỗng kỹ năng là failure mode tệ nhất — người vận hành tưởng dữ liệu
+  // nguyên vẹn.
+  const baseCV = {
+    schemaVersion: 2 as const,
+    id: 'cv-thieu-bang-tra',
+    title: 'T',
+    lastModified: '2026-08-09T10:00:00Z',
+    language: 'vi' as const,
+    sections: {
+      intro: { fullName: 'Ai đó' },
+      skills: [{ id: 'skill-0', category: 'Ngôn ngữ', skills: ['Python'] }],
+    },
+    _meta: { verified: {}, source: 'manual' as const, originalLinks: [], droppedFields: {}, canonical: {} },
+  }
+
+  it('ném lỗi kèm id CV khi sections.skills không rỗng nhưng /skills/_order thiếu', () => {
+    const cv = CVSchema.parse(baseCV)
+    expect(() => cvToProfile(cv)).toThrow(/cv-thieu-bang-tra/)
+  })
+
+  // Task 4 đọc JSON thẳng từ storage, không phải một CV đã được TypeScript
+  // đảm bảo hình dạng — validate lại ở entry để tài liệu hỏng báo lỗi schema
+  // rõ ràng, không phải TypeError mù mờ khi code bên dưới đọc field của
+  // undefined.
+  it('ném lỗi schema rõ ràng khi input không phải CV hợp lệ, không phải TypeError mù mờ', () => {
+    const malformed = { khong_phai: 'mot CV hop le' } as unknown as CV
+    expect(() => cvToProfile(malformed)).not.toThrow(TypeError)
+    expect(() => cvToProfile(malformed)).toThrow()
+  })
+
+  it('ném lỗi kèm id CV khi một con trỏ trong /skills/_order không khớp sections.skills', () => {
+    const cv = CVSchema.parse({
+      ...baseCV,
+      id: 'cv-bang-tra-loi-thoi',
+      _meta: {
+        ...baseCV._meta,
+        // Trỏ tới nhóm kỹ năng thứ 9 — không tồn tại, chỉ có nhóm 0.
+        droppedFields: { '/skills/_order': JSON.stringify(['/sections/skills/9/skills/0']) },
+      },
+    })
+    expect(() => cvToProfile(cv)).toThrow(/cv-bang-tra-loi-thoi/)
+  })
+})
+
+describe('_meta.verified trên bullet dự án không được đáp nhầm vào dòng "Công nghệ: …" máy sinh', () => {
+  // Round-trip không thấy được lỗi này: cả hai chiều đều lệch giống nhau nên
+  // v1→v2→v1 vẫn khớp trong khi v2 (tài liệu THẬT SỰ được lưu và hiển thị)
+  // đã sai. Phải assert trực tiếp trên tài liệu v2 trung gian.
+  it('bullet gốc đầu tiên của project có tech dịch sang highlights[1], không phải highlights[0]', () => {
+    const v1WithTech = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      projects: [
+        { name: 'X', tech: ['Go', 'Rust'], highlights: ['Bullet gốc đầu tiên', 'Bullet gốc thứ hai'] },
+      ],
+      _meta: { verified: { '/projects/0/highlights/0': true } },
+    })
+    const cv = profileToCV(v1WithTech, META)
+
+    // highlights[0] là dòng máy sinh "Công nghệ: …"; bullet gốc đầu tiên bị đẩy sang [1].
+    expect(cv.sections.projects[0]!.highlights).toEqual([
+      'Công nghệ: Go, Rust',
+      'Bullet gốc đầu tiên',
+      'Bullet gốc thứ hai',
+    ])
+    // Dấu xác nhận của người dùng phải đáp đúng bullet gốc, không phải dòng máy sinh.
+    expect(cv._meta.verified['/sections/projects/0/highlights/1']).toBe(true)
+    expect(cv._meta.verified['/sections/projects/0/highlights/0']).toBeUndefined()
+  })
+
+  it('khứ hồi lại đúng v1 pointer gốc từ v2 pointer đã lệch', () => {
+    const v1WithTech = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      projects: [{ name: 'X', tech: ['Go'], highlights: ['Bullet gốc'] }],
+      _meta: { verified: { '/projects/0/highlights/0': true } },
+    })
+    const restored = cvToProfile(profileToCV(v1WithTech, META))
+    expect(restored._meta.verified['/projects/0/highlights/0']).toBe(true)
+  })
+
+  it('project KHÔNG có tech thì không lệch chỉ số (không có dòng máy sinh để chèn)', () => {
+    const v1NoTech = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      projects: [{ name: 'X', highlights: ['Bullet gốc'] }],
+      _meta: { verified: { '/projects/0/highlights/0': true } },
+    })
+    const cv = profileToCV(v1NoTech, META)
+    expect(cv.sections.projects[0]!.highlights).toEqual(['Bullet gốc'])
+    expect(cv._meta.verified['/sections/projects/0/highlights/0']).toBe(true)
   })
 })

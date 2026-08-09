@@ -22,10 +22,18 @@ const itemId = (section: string, index: number) => `${section}-${index}`
  *
  * v1 skills là mảng phẳng, v2 gom theo nhóm, nên `/skills/N` không có ánh xạ
  * trực tiếp — cần bảng tra cứu từ lúc gom: skillPointerByV1Index[N] = v2 pointer.
+ *
+ * `/projects/N/highlights/M` cũng không copy chỉ số thẳng được khi project N
+ * có `tech`: profileToCV() chèn dòng "Công nghệ: …" vào đầu `highlights`, nên
+ * bullet gốc thứ M của v1 giờ nằm ở v2 index M+1. Bỏ qua lệch này thì một dấu
+ * đã-xác-nhận của người dùng (`/projects/0/highlights/0`) sẽ đáp xuống đúng
+ * dòng máy sinh — biến nội dung máy viết thành nội dung đã-được-người-xác-nhận,
+ * ngược hẳn với hợp đồng `_meta.verified` (cv.ts).
  */
 function translateVerifiedPointer(
   pointer: string,
   skillPointerByV1Index: string[] = [],
+  projectHasTech: boolean[] = [],
 ): string | null {
   const introField: Record<string, string> = {
     name: 'fullName', headline: 'title', introduce: 'summary',
@@ -54,6 +62,17 @@ function translateVerifiedPointer(
     if (parts.length === 1) return '/sections/intro'
     const mapped = introField[parts[1]!]
     return mapped ? `/sections/intro/${mapped}` : null
+  }
+
+  // `/projects/N/highlights/M` với project N có tech → lệch +1, xem ghi chú ở
+  // JSDoc trên hàm này.
+  if (
+    parts[0] === 'projects' &&
+    parts.length === 4 &&
+    parts[2] === 'highlights' &&
+    projectHasTech[Number(parts[1])]
+  ) {
+    return `/sections/projects/${parts[1]}/highlights/${Number(parts[3]) + 1}`
   }
 
   const mappedSection = section[parts[0]!]
@@ -90,16 +109,19 @@ export function profileToCV(
     }
   }
 
+  // project N có tech → highlights[0] của v2 là dòng "Công nghệ: …" máy sinh,
+  // dùng để dịch đúng /projects/N/highlights/M ở translateVerifiedPointer().
+  const projectHasTech = profile.projects.map((p) => p.tech.length > 0)
+
   const verified: Record<string, boolean> = {}
   for (const [pointer, value] of Object.entries(profile._meta.verified)) {
-    const translated = translateVerifiedPointer(pointer, skillPointerByV1Index)
+    const translated = translateVerifiedPointer(pointer, skillPointerByV1Index, projectHasTech)
     if (translated) verified[translated] = value
   }
 
   // Khoá là JSON Pointer của v1, nên cvToProfile() đặt lại đúng chỗ mà không
   // phải nhớ một bảng tên riêng.
   const droppedFields: Record<string, string> = {}
-  if (b.dob) droppedFields['/basics/dob'] = b.dob
   profile.work.forEach((w, i) => {
     if (w.type) droppedFields[`/work/${i}/type`] = w.type
   })
@@ -113,7 +135,14 @@ export function profileToCV(
     if (s.group !== undefined && s.group !== null) {
       droppedFields[`/skills/${i}/group`] = s.group
     }
+    // `canonical` rỗng tường minh cùng bệnh với group: `_meta.canonical` (map
+    // theo tên, phục vụ đối chiếu JD) chỉ giữ giá trị truthy, nên khứ hồi
+    // riêng field này cần một kênh theo CHỈ SỐ v1 — xem archiveEmpty() dưới.
   })
+  // `dob` không có chỗ nào ở v2 cả — không chỉ trường hợp rỗng mà MỌI giá trị
+  // đều phải cất, nên dùng kiểm tra "có định nghĩa" chứ không phải "truthy":
+  // dob === '' vẫn là một giá trị v1 hợp lệ (khác với "không có dob").
+  if (b.dob !== undefined) droppedFields['/basics/dob'] = b.dob
 
   // v2 dùng '' làm mặc định cho field optional-string (title, startDate, ...).
   // Nếu v1 field vốn RỖNG TƯỜNG MINH (ví dụ endDate: "" cho công việc đang làm
@@ -132,7 +161,12 @@ export function profileToCV(
   archiveEmpty('/basics/introduce', b.introduce)
   archiveEmpty('/basics/phone', b.phone)
   archiveEmpty('/basics/location', b.location)
+  // `photo` cũng có chỗ ở v2 (avatarUrl) và cũng chỉ bị lẫn khi rỗng tường
+  // minh — cùng bệnh với headline/phone/location, dùng chung cơ chế.
+  archiveEmpty('/basics/photo', b.photo)
   profile.education.forEach((e, i) => {
+    archiveEmpty(`/education/${i}/major`, e.major)
+    archiveEmpty(`/education/${i}/gpa`, e.gpa)
     archiveEmpty(`/education/${i}/startDate`, e.startDate)
     archiveEmpty(`/education/${i}/endDate`, e.endDate)
   })
@@ -155,6 +189,13 @@ export function profileToCV(
   })
   profile.languages.forEach((l, i) => {
     archiveEmpty(`/languages/${i}/level`, l.level)
+  })
+  // `canonical` rỗng tường minh: `_meta.canonical` (map theo tên, dùng cho đối
+  // chiếu JD) chỉ giữ giá trị truthy nên bỏ sót trường hợp ''. Đánh dấu thêm
+  // theo CHỈ SỐ v1 để khứ hồi phục hồi đúng, độc lập với việc tên có bị đụng
+  // hàng hay không (xem hạn chế đã ghi ở cvToProfile về _meta.canonical).
+  profile.skills.forEach((s, i) => {
+    archiveEmpty(`/skills/${i}/canonical`, s.canonical)
   })
 
   // Lưu thứ tự v1 qua v2 mapping để cvToProfile() khôi phục đúng vị trí.
@@ -256,10 +297,16 @@ export function profileToCV(
  * `['/skills/_order']`, và đây là chỗ đọc nó.
  *
  * `order[n]` = con trỏ v2 của kỹ năng ở chỉ số phẳng n của v1.
+ *
+ * `projectHasTech[N]` là nghịch đảo của cùng tên bên translateVerifiedPointer:
+ * project N có tech → v2 `highlights[0]` là dòng "Công nghệ: …" máy sinh, nên
+ * v2 index M lùi về v1 index M-1. `highlights[0]` chính nó (dòng máy sinh)
+ * không map về đâu ở v1 — trả `null`, không đoán.
  */
 function untranslateVerifiedPointer(
   pointer: string,
   order: string[],
+  projectHasTech: boolean[] = [],
 ): string | null {
   if (/^\/sections\/skills\/\d+\/skills\/\d+$/.test(pointer)) {
     const flat = order.indexOf(pointer)
@@ -280,6 +327,16 @@ function untranslateVerifiedPointer(
     const mapped = introField[parts[2]!]
     return mapped ? `/basics/${mapped}` : null
   }
+  if (
+    parts[1] === 'projects' &&
+    parts.length === 5 &&
+    parts[3] === 'highlights' &&
+    projectHasTech[Number(parts[2])]
+  ) {
+    const v2Index = Number(parts[4])
+    if (v2Index === 0) return null
+    return `/projects/${parts[2]}/highlights/${v2Index - 1}`
+  }
   const mapped = section[parts[1]!]
   return mapped ? ['', mapped, ...parts.slice(2)].join('/') : null
 }
@@ -291,51 +348,21 @@ function untranslateVerifiedPointer(
  * Test khứ hồi trong cv-migrate.test.ts là chốt chặn: v1 → v2 → v1 phải khớp
  * tuyệt đối. Chốt đó hỏng nghĩa là backfill không có đường lùi, và không có
  * đường lùi thì không được phép chạy trên dữ liệu thật.
+ *
+ * Task 4 gọi hàm này với JSON đọc thẳng từ storage, không phải một `CV` đã
+ * được dựng trong tiến trình — nên input được validate lại ở đây bằng
+ * `CVSchema.parse()` thay vì tin theo kiểu TypeScript. Tài liệu hỏng phải ném
+ * lỗi schema rõ ràng ngay từ đầu, không phải một `TypeError` mù mờ khi code
+ * bên dưới đọc `_meta.droppedFields` của `undefined`.
  */
-export function cvToProfile(cv: CV): Profile {
+export function cvToProfile(input: CV): Profile {
+  const cv = CVSchema.parse(input)
   const intro = cv.sections.intro
   const dropped = cv._meta.droppedFields
 
   // Lấy thẳng từ _meta chứ không dựng lại từ `website`: nhãn của link đầu tiên
   // không tồn tại ở v2, dựng lại là đoán.
   const links = cv._meta.originalLinks
-
-  // Dựng lại mảng kỹ năng THEO BẢNG TRA, không trải phẳng theo thứ tự nhóm.
-  // Trải phẳng là sai thứ tự ngay khi hồ sơ gốc xen kẽ nhóm, và mọi khoá
-  // /skills/N/... gán chéo sang kỹ năng khác — xem ghi chú ở
-  // untranslateVerifiedPointer().
-  //
-  // `category` của v2 chỉ là nhãn hiển thị. Nhóm thật đọc từ droppedFields: kỹ
-  // năng không gắn nhóm và kỹ năng gắn nhóm tên đúng là "Khác" ra cùng một
-  // category, nên suy ngược từ category là nhập hai trạng thái làm một.
-  const order: string[] = dropped['/skills/_order']
-    ? (JSON.parse(dropped['/skills/_order']) as string[])
-    : []
-
-  const skillNameAt = (pointer: string): string | null => {
-    const m = pointer.match(/^\/sections\/skills\/(\d+)\/skills\/(\d+)$/)
-    if (!m) return null
-    return cv.sections.skills[Number(m[1])]?.skills[Number(m[2])] ?? null
-  }
-
-  const skills = order.flatMap((pointer, i) => {
-    const name = skillNameAt(pointer)
-    if (name === null) return []
-    const level = dropped[`/skills/${i}/level`]
-    const originalGroup = dropped[`/skills/${i}/group`]
-    return [{
-      name,
-      ...(level ? { level } : {}),
-      ...(cv._meta.canonical[name] ? { canonical: cv._meta.canonical[name] } : {}),
-      ...(originalGroup ? { group: originalGroup } : {}),
-    }]
-  })
-
-  const verified: Record<string, boolean> = {}
-  for (const [pointer, value] of Object.entries(cv._meta.verified)) {
-    const back = untranslateVerifiedPointer(pointer, order)
-    if (back) verified[back] = value
-  }
 
   // Nghịch đảo của archiveEmpty() ở profileToCV. v2 default('') làm "field vốn
   // rỗng" và "field không tồn tại" trông giống hệt nhau; droppedFields[pointer]
@@ -351,6 +378,85 @@ export function cvToProfile(cv: CV): Profile {
     return {}
   }
 
+  // Dựng lại mảng kỹ năng THEO BẢNG TRA, không trải phẳng theo thứ tự nhóm.
+  // Trải phẳng là sai thứ tự ngay khi hồ sơ gốc xen kẽ nhóm, và mọi khoá
+  // /skills/N/... gán chéo sang kỹ năng khác — xem ghi chú ở
+  // untranslateVerifiedPointer().
+  //
+  // `category` của v2 chỉ là nhãn hiển thị. Nhóm thật đọc từ droppedFields: kỹ
+  // năng không gắn nhóm và kỹ năng gắn nhóm tên đúng là "Khác" ra cùng một
+  // category, nên suy ngược từ category là nhập hai trạng thái làm một.
+  const order: string[] = dropped['/skills/_order']
+    ? (JSON.parse(dropped['/skills/_order']) as string[])
+    : []
+
+  // Đây là ĐƯỜNG LÙI: khôi phục một phần trong im lặng còn tệ hơn không khôi
+  // phục — người vận hành backfill sẽ tưởng dữ liệu nguyên vẹn trong khi kỹ
+  // năng đã rụng hết. Ném lỗi thay vì flatMap-bỏ-qua, và gọi thẳng cv.id để
+  // Task 4 báo lỗi được đúng tài liệu.
+  if (cv.sections.skills.length > 0 && order.length === 0) {
+    throw new Error(
+      `cvToProfile: CV "${cv.id}" có ${cv.sections.skills.length} nhóm kỹ năng nhưng ` +
+        `_meta.droppedFields['/skills/_order'] rỗng hoặc thiếu — không có bảng tra để ` +
+        `khôi phục mảng kỹ năng phẳng của v1. Tài liệu này có thể không do profileToCV() ` +
+        `sinh ra, hoặc đã bị chỉnh sửa mà không giữ _meta. Từ chối khôi phục một phần trong im lặng.`,
+    )
+  }
+
+  const skillNameAt = (pointer: string): string | null => {
+    const m = pointer.match(/^\/sections\/skills\/(\d+)\/skills\/(\d+)$/)
+    if (!m) return null
+    return cv.sections.skills[Number(m[1])]?.skills[Number(m[2])] ?? null
+  }
+
+  const skills = order.map((pointer, i) => {
+    const name = skillNameAt(pointer)
+    if (name === null) {
+      throw new Error(
+        `cvToProfile: CV "${cv.id}" — con trỏ kỹ năng "${pointer}" tại vị trí v1 ${i} trong ` +
+          `_meta.droppedFields['/skills/_order'] không khớp với cv.sections.skills hiện có. ` +
+          `Bảng tra đã lỗi thời so với tài liệu, không đoán tiếp.`,
+      )
+    }
+    const level = dropped[`/skills/${i}/level`]
+    // `canonical`: ưu tiên map theo tên (`_meta.canonical`, dùng cho đối chiếu
+    // JD); nếu tên đó không có trong map (kể cả vì rỗng tường minh), tra tiếp
+    // theo CHỈ SỐ v1 — đây là kênh dành riêng cho ca "canonical === ''".
+    //
+    // HẠN CHẾ ĐÃ BIẾT (ngoài phạm vi task này, cv.ts đang đóng băng): `_meta.canonical`
+    // khoá theo TÊN kỹ năng, nên hai skill v1 trùng tên nhưng canonical khác nhau
+    // (ví dụ hai dòng "React" — một canonical "react", một "react-native" do gõ nhầm)
+    // sẽ khứ hồi sai — cả hai đọc lại cùng một giá trị trong map. Script backfill ở
+    // Task 4 cần tự phát hiện ca này (tên trùng, canonical khác nhau trong cùng một
+    // v1 profile) và từ chối chạy, không phải sửa ở đây.
+    const canonicalRestored = restoreEmpty(
+      `/skills/${i}/canonical`,
+      cv._meta.canonical[name] ?? '',
+      'canonical',
+    )
+    return {
+      name,
+      ...(level ? { level } : {}),
+      ...canonicalRestored,
+      // profileToCV() đã archive group vô điều kiện khi có (kể cả group ===
+      // '', không chỉ khi truthy) để phân biệt "không group" khỏi "group =
+      // 'Khác'". Tra lại phải dùng `in`, không dùng truthy — tra truthy làm
+      // group === '' rụng mất dù nó đã được cất đúng chỗ trong droppedFields.
+      ...(`/skills/${i}/group` in dropped ? { group: dropped[`/skills/${i}/group`]! } : {}),
+    }
+  })
+
+  // Cùng bảng với projectHasTech ở translateVerifiedPointer, nhưng đọc từ phía
+  // v2: project i có tech khi và chỉ khi profileToCV() đã archive
+  // '/projects/i/tech' — đúng tín hiệu mà logic khôi phục tech ở dưới cũng dùng.
+  const projectHasTech = cv.sections.projects.map((_, i) => Boolean(dropped[`/projects/${i}/tech`]))
+
+  const verified: Record<string, boolean> = {}
+  for (const [pointer, value] of Object.entries(cv._meta.verified)) {
+    const back = untranslateVerifiedPointer(pointer, order, projectHasTech)
+    if (back) verified[back] = value
+  }
+
   return ProfileSchema.parse({
     schemaVersion: 1,
     language: cv.language,
@@ -363,17 +469,21 @@ export function cvToProfile(cv: CV): Profile {
       ...(intro.email ? { email: intro.email } : {}),
       ...restoreEmpty('/basics/phone', intro.phone, 'phone'),
       ...restoreEmpty('/basics/location', intro.location, 'location'),
-      ...(dropped['/basics/dob'] ? { dob: dropped['/basics/dob'] } : {}),
-      ...(intro.avatarUrl ? { photo: intro.avatarUrl } : {}),
+      // `dob` không có v2Value đối chiếu (không có chỗ ở v2 cả) nên không dùng
+      // restoreEmpty(); tra thẳng bằng `in` — dob === '' đã được archive vô
+      // điều kiện ở profileToCV nên có mặt trong droppedFields đúng khi v1 có
+      // dob, kể cả rỗng.
+      ...('/basics/dob' in dropped ? { dob: dropped['/basics/dob']! } : {}),
+      ...restoreEmpty('/basics/photo', intro.avatarUrl ?? '', 'photo'),
       links,
     },
     education: cv.sections.education.map((e, i) => ({
       school: e.school,
       degree: e.degree,
-      ...(e.fieldOfStudy ? { major: e.fieldOfStudy } : {}),
+      ...restoreEmpty(`/education/${i}/major`, e.fieldOfStudy, 'major'),
       ...restoreEmpty(`/education/${i}/startDate`, e.startDate, 'startDate'),
       ...restoreEmpty(`/education/${i}/endDate`, e.endDate, 'endDate'),
-      ...(e.gpa ? { gpa: e.gpa } : {}),
+      ...restoreEmpty(`/education/${i}/gpa`, e.gpa ?? '', 'gpa'),
       highlights: e.highlights,
     })),
     work: cv.sections.experience.map((x, i) => ({
