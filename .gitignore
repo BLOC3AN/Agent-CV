@@ -55,3 +55,6 @@ __pycache__/
 
 # Thư mục làm việc của subagent-driven-development — scratch, không phải mã nguồn
 .superpowers/
+
+# Worktree cô lập do Claude Code tạo — không bao giờ commit
+.claude/worktrees/
