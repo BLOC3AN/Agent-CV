@@ -1,0 +1,199 @@
+import { z } from 'zod'
+
+/**
+ * CV v2 — spec 2026-08-09 §2.1.
+ *
+ * Sống CẠNH ProfileSchema v1 trong profile.ts, không thay thế. `apps/web` có
+ * hơn 70 file bám vào v1 và phải chạy tới SP-5; xoá v1 bây giờ là làm chết bản
+ * đang phục vụ production.
+ */
+
+export const CVLanguageSchema = z.enum(['vi', 'en'])
+
+/**
+ * PII v2 — năm đường dẫn này KHÔNG BAO GIỜ được gửi tới model.
+ *
+ * `redact_pii.required_local: true` trong config.yml bám vào đúng danh sách
+ * này. Thiếu một dòng thì PII đi thẳng tới provider cloud và không có lỗi nào
+ * được ném ra — hỏng im lặng, loại tệ nhất. Bản Go tương ứng nằm ở
+ * backend/internal/pii/pii.go và phải khớp từng dòng.
+ *
+ * `website` và `summary` KHÔNG phải PII: chúng là nội dung nghề nghiệp, model
+ * cần đọc để đề xuất có nghĩa.
+ */
+export const PII_PATHS_V2 = [
+  '/sections/intro/fullName',
+  '/sections/intro/email',
+  '/sections/intro/phone',
+  '/sections/intro/location',
+  '/sections/intro/avatarUrl',
+] as const
+
+export const IntroSectionSchema = z.object({
+  fullName: z.string(),
+  title: z.string().default(''),
+  email: z.string().default(''),
+  phone: z.string().default(''),
+  location: z.string().default(''),
+  website: z.string().optional(),
+  summary: z.string().default(''),
+  avatarUrl: z.string().optional(),
+})
+
+/**
+ * `.strict()` ở mọi mục có bullet, và bullet là `highlights: string[]`.
+ *
+ * Spec §2.2(3): chat sinh JSON Patch nhắm vào một gạch đầu dòng cụ thể
+ * (`/sections/experience/0/highlights/2`). Nếu đây là một chuỗi `description`,
+ * mọi đề xuất của AI biến thành ghi đè nguyên khối và màn duyệt diff không còn
+ * gì đáng duyệt. `.strict()` để `description` bị từ chối thẳng thay vì lặng lẽ
+ * bị bỏ qua rồi mất dữ liệu.
+ */
+export const ExperienceItemSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    company: z.string(),
+    startDate: z.string().default(''),
+    endDate: z.string().default(''),
+    current: z.boolean().default(false),
+    highlights: z.array(z.string()).default([]),
+  })
+  .strict()
+
+export const ProjectItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    role: z.string().default(''),
+    startDate: z.string().default(''),
+    endDate: z.string().default(''),
+    link: z.string().optional(),
+    highlights: z.array(z.string()).default([]),
+  })
+  .strict()
+
+export const EducationItemSchema = z
+  .object({
+    id: z.string(),
+    school: z.string(),
+    degree: z.string().default(''),
+    fieldOfStudy: z.string().default(''),
+    startDate: z.string().default(''),
+    endDate: z.string().default(''),
+    gpa: z.string().optional(),
+    highlights: z.array(z.string()).default([]),
+  })
+  .strict()
+
+/** `skills` v2 gom theo nhóm: một dòng là một mảng kỹ năng cùng category (UC-57). */
+export const SkillItemSchema = z
+  .object({
+    id: z.string(),
+    category: z.string(),
+    skills: z.array(z.string()).default([]),
+  })
+  .strict()
+
+export const ActivityItemSchema = z
+  .object({
+    id: z.string(),
+    organization: z.string(),
+    role: z.string().default(''),
+    startDate: z.string().default(''),
+    endDate: z.string().default(''),
+    highlights: z.array(z.string()).default([]),
+  })
+  .strict()
+
+export const CertificationItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    issuer: z.string().default(''),
+    date: z.string().default(''),
+    link: z.string().optional(),
+  })
+  .strict()
+
+export const LanguageItemSchema = z
+  .object({
+    id: z.string(),
+    language: z.string(),
+    proficiency: z.string().default(''),
+  })
+  .strict()
+
+export const CVSectionsSchema = z.object({
+  intro: IntroSectionSchema,
+  experience: z.array(ExperienceItemSchema).default([]),
+  projects: z.array(ProjectItemSchema).default([]),
+  education: z.array(EducationItemSchema).default([]),
+  skills: z.array(SkillItemSchema).default([]),
+  activities: z.array(ActivityItemSchema).default([]),
+  certifications: z.array(CertificationItemSchema).default([]),
+  languages: z.array(LanguageItemSchema).default([]),
+})
+
+export const CVDesignSchema = z.object({
+  template: z.enum(['modern', 'classic', 'professional']).default('modern'),
+  accentColor: z.string().default('#4F46E5'),
+  font: z.enum(['Roboto', 'Open Sans', 'Lato']).default('Roboto'),
+  fontSize: z.number().default(14),
+  spacing: z.enum(['condensed', 'normal', 'wide']).default('normal'),
+})
+
+export const ActiveSectionsSchema = z.object({
+  intro: z.boolean().default(true),
+  experience: z.boolean().default(true),
+  projects: z.boolean().default(true),
+  education: z.boolean().default(true),
+  skills: z.boolean().default(true),
+  activities: z.boolean().default(true),
+  certifications: z.boolean().default(true),
+  languages: z.boolean().default(true),
+})
+
+/**
+ * `verified` — xương sống chống bịa, giữ nguyên ngữ nghĩa từ v1: mọi nội dung
+ * do AI sinh ra là false cho tới khi người dùng xác nhận (UC-22, UC-53).
+ *
+ * `originalLinks` / `droppedFields` / `canonical` là kho chứa những gì v2 không
+ * hiển thị nhưng không được phép mất: thiếu chúng thì đường lùi v2→v1 không
+ * khôi phục được nguyên trạng, và `canonical` mất là điểm khớp JD đổi âm thầm
+ * (BR-57.1).
+ */
+export const CVMetaSchema = z.object({
+  verified: z.record(z.boolean()).default({}),
+  source: z.enum(['manual', 'pdf_import', 'ai_generated']).default('manual'),
+  /**
+   * TOÀN BỘ `basics.links` của v1, không phải phần dư.
+   *
+   * v2 chỉ có một `website: string`, nên nhãn của link đầu tiên cũng không có
+   * chỗ đứng — giữ lại `links[1..]` thôi thì khứ hồi dựng lại nhãn bằng cách
+   * đoán, và đoán sai. Giữ cả mảy thì `website` chỉ là bản rút gọn để hiển
+   * thị, còn nguồn sự thật vẫn đầy đủ.
+   */
+  originalLinks: z.array(z.object({ label: z.string(), url: z.string() })).default([]),
+  /** Field v1 không có chỗ ở v2, khoá là JSON Pointer của v1. */
+  droppedFields: z.record(z.string()).default({}),
+  canonical: z.record(z.string()).default({}),
+})
+
+export const CVSchema = z.object({
+  schemaVersion: z.literal(2),
+  id: z.string(),
+  title: z.string(),
+  lastModified: z.string(),
+  language: CVLanguageSchema,
+  sections: CVSectionsSchema,
+  design: CVDesignSchema.default({}),
+  activeSections: ActiveSectionsSchema.default({}),
+  _meta: CVMetaSchema.default({}),
+})
+
+export type CV = z.infer<typeof CVSchema>
+export type CVSections = z.infer<typeof CVSectionsSchema>
+export type IntroSection = z.infer<typeof IntroSectionSchema>
+export type ExperienceItem = z.infer<typeof ExperienceItemSchema>
+export type SkillItem = z.infer<typeof SkillItemSchema>

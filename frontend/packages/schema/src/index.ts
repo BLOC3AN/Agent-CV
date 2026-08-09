@@ -1,4 +1,5 @@
 export * from './profile.js'
+export * from './cv.js'
 export * from './jd.js'
 export * from './patch.js'
 export * from './kb.js'
