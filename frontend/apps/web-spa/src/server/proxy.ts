@@ -5,16 +5,22 @@ import { Readable } from 'node:stream'
  * Header từng-chặng — thuộc về một kết nối TCP cụ thể, không được chuyển tiếp.
  * `content-length` cũng nằm đây: `fetch` tự tính lại, giữ giá trị cũ thì
  * trình duyệt cắt cụt response.
+ *
+ * `content-encoding` cũng vậy: `fetch` (undici) tự giải nén thân response
+ * trước khi trả về — `upstream.body` đã là dữ liệu thô, không còn nén. Giữ
+ * lại header `content-encoding: gzip` của backend mà chuyển tiếp thân đã giải
+ * nén thì trình duyệt sẽ cố giải nén một lần nữa và hỏng response.
  */
 const HOP_BY_HOP = new Set([
   'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
   'te', 'trailer', 'transfer-encoding', 'upgrade', 'host', 'content-length',
+  'content-encoding',
 ])
 
 /**
  * Chuyển tiếp mọi request `/api/*` sang backend Go.
  *
- * Ba chi tiết dễ sai, mỗi cái đều làm hỏng một tính năng thật:
+ * Bốn chi tiết dễ sai, mỗi cái đều làm hỏng một tính năng thật:
  *
  *  1. `redirect: 'manual'` — `GET /api/auth/verify` trả 302 về trang chủ. Để
  *     `fetch` tự đi theo thì proxy trả về HTML trang chủ với mã 200, và trình
@@ -24,6 +30,8 @@ const HOP_BY_HOP = new Set([
  *     tách lại là hỏng.
  *  3. Ống dẫn luồng, không `await res.text()` — SSE của `/api/chat` (SP-4)
  *     không bao giờ kết thúc, đọc hết thân response nghĩa là treo vĩnh viễn.
+ *  4. `content-encoding` bị lọc khỏi response — `fetch` đã tự giải nén thân
+ *     response, giữ lại header nói "còn nén" thì trình duyệt giải nén hai lần.
  */
 export function createApiProxy(backendURL: string) {
   const base = backendURL.replace(/\/$/, '')

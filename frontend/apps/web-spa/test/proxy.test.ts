@@ -1,5 +1,6 @@
 import { describe, expect, it, afterEach } from 'vitest'
 import http from 'node:http'
+import zlib from 'node:zlib'
 import type { AddressInfo } from 'node:net'
 import { createApp } from '../src/server/app.js'
 
@@ -116,6 +117,31 @@ describe('proxy /api', () => {
 
     expect(res.status).toBe(201)
     expect(JSON.parse(body)).toEqual({ title: 'CV thử' })
+  })
+
+  it('không chuyển tiếp content-encoding — fetch đã tự giải nén thân response', async () => {
+    // `fetch` (undici) tự giải nén thân response nhưng KHÔNG xoá header
+    // `content-encoding` khỏi `upstream.headers`. Backend giả nén gzip thật
+    // sự để tái hiện đúng tình huống: nếu proxy chuyển tiếp header này
+    // nguyên vẹn, trình duyệt nhận thân đã giải nén nhưng header nói "còn
+    // nén gzip" — cố giải nén lần hai và hỏng response.
+    const plain = '{"items":["a","b"]}'
+    const gzipped = zlib.gzipSync(plain)
+    const backend = await fakeBackend((_req, res) => {
+      res.writeHead(200, {
+        'content-encoding': 'gzip',
+        'content-type': 'application/json',
+      })
+      res.end(gzipped)
+    })
+    openServers.push(backend.close)
+    const app = await startApp(backend.url)
+    openServers.push(app.close)
+
+    const res = await fetch(`${app.url}/api/cv`)
+
+    expect(res.headers.get('content-encoding')).toBeNull()
+    expect(await res.text()).toBe(plain)
   })
 
   it('backend chết thì trả 502 kèm thông điệp tiếng Việt', async () => {
