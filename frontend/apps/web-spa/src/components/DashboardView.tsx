@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { CV, ViewTab } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { CV } from '../types';
 import {
   ArrowRight,
   Sparkles,
@@ -14,19 +15,16 @@ import {
 
 interface DashboardViewProps {
   cvs: CV[];
-  onNavigate: (view: ViewTab) => void;
-  onSelectCVToEdit: (cvId: string) => void;
   onOpenUploadModal: () => void;
   userEmail?: string;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   cvs,
-  onNavigate,
-  onSelectCVToEdit,
   onOpenUploadModal,
   userEmail = 'tester',
 }) => {
+  const navigate = useNavigate();
   const [showCompletionDetails, setShowCompletionDetails] = useState(false);
   const userName = userEmail.split('@')[0];
   const activeCV = cvs[0] || null;
@@ -62,7 +60,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* CV Thumbnail */}
           <div
             className="w-28 h-36 bg-slate-50 border border-slate-200 rounded-xl p-3 shrink-0 flex flex-col justify-between overflow-hidden relative group cursor-pointer hover:border-indigo-400 transition"
-            onClick={() => activeCV && onSelectCVToEdit(activeCV.id)}
+            onClick={() => activeCV && navigate(`/builder/${activeCV.id}`)}
             id="dashboard-cv-thumbnail"
           >
             <div className="space-y-1.5">
@@ -101,7 +99,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 pt-1">
               <button
-                onClick={() => activeCV && onSelectCVToEdit(activeCV.id)}
+                onClick={() => activeCV && navigate(`/builder/${activeCV.id}`)}
                 id="btn-tiep-tuc-chinh-cv"
                 className="inline-flex items-center space-x-2 px-4 py-2 bg-violet-700 hover:bg-violet-800 text-white font-semibold text-xs rounded-xl shadow-xs transition"
               >
@@ -110,7 +108,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
 
               <button
-                onClick={() => onNavigate('my_cvs')}
+                onClick={() => navigate('/cv')}
                 id="btn-tat-ca-cv"
                 className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 transition"
               >
@@ -241,7 +239,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <button
-            onClick={() => onNavigate('job_match')}
+            onClick={() => activeCV && navigate(`/analyze/${activeCV.id}`)}
             id="btn-xem-phan-tich-chi-tiet"
             className="inline-flex items-center space-x-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition"
           >
@@ -258,7 +256,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
-              onClick={() => onNavigate('my_cvs')}
+              onClick={() => navigate('/cv')}
               id="btn-dash-create-cv"
               className="flex items-center space-x-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:bg-slate-100 hover:border-slate-300 transition text-left group"
             >

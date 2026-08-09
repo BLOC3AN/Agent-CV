@@ -1,11 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout, Sparkles } from 'lucide-react';
+import { initialCVs } from '../mockData';
 
-interface TemplatesViewProps {
-  onSelectTemplate: (templateName: 'modern' | 'classic' | 'professional') => void;
-}
-
-export const TemplatesView: React.FC<TemplatesViewProps> = ({ onSelectTemplate }) => {
+export const TemplatesView: React.FC = () => {
+  const navigate = useNavigate();
   const templates = [
     {
       id: 'modern' as const,
@@ -67,7 +66,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ onSelectTemplate }
 
             <div className="p-6 pt-0">
               <button
-                onClick={() => onSelectTemplate(tpl.id)}
+                onClick={() => navigate(`/builder/${initialCVs[0]?.id ?? ''}`)}
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition shadow-xs flex items-center justify-center space-x-2"
               >
                 <Sparkles className="w-4 h-4" />

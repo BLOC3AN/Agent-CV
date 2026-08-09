@@ -1,5 +1,5 @@
 import React from 'react';
-import { ViewTab } from '../types';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   FileText,
@@ -9,105 +9,68 @@ import {
   Settings,
 } from 'lucide-react';
 
-interface SidebarProps {
-  currentView: ViewTab;
-  onNavigate: (view: ViewTab) => void;
+interface NavItem {
+  to: string;
+  end: boolean;
+  id: string;
+  label: string;
+  icon: typeof LayoutDashboard;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
-  const navItems = [
-    {
-      id: 'dashboard' as ViewTab,
-      label: 'Tổng quan',
-      icon: LayoutDashboard,
-      color: 'bg-pink-400',
-    },
-    {
-      id: 'my_cvs' as ViewTab,
-      label: 'CV của tôi',
-      icon: FileText,
-      color: 'bg-green-400',
-    },
-    {
-      id: 'job_match' as ViewTab,
-      label: 'Đối chiếu việc làm',
-      icon: GitCompare,
-      color: 'bg-blue-400',
-    },
-    {
-      id: 'ai_assistant' as ViewTab,
-      label: 'Trợ lý AI',
-      icon: Sparkles,
-      color: 'bg-purple-400',
-    },
-  ];
+const primary: NavItem[] = [
+  { to: '/', end: true, id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
+  { to: '/cv', end: false, id: 'cv', label: 'CV của tôi', icon: FileText },
+  { to: '/analyze', end: false, id: 'analyze', label: 'Đối chiếu việc làm', icon: GitCompare },
+  { to: '/builder', end: false, id: 'builder', label: 'Trợ lý AI', icon: Sparkles },
+];
 
-  const secondaryItems = [
-    {
-      id: 'templates' as ViewTab,
-      label: 'Mẫu CV',
-      icon: Layout,
-      color: 'bg-orange-400',
-    },
-    {
-      id: 'settings' as ViewTab,
-      label: 'Cài đặt',
-      icon: Settings,
-      color: 'bg-yellow-400',
-    },
-  ];
+const secondary: NavItem[] = [
+  { to: '/templates', end: false, id: 'templates', label: 'Mẫu CV', icon: Layout },
+  { to: '/settings', end: false, id: 'settings', label: 'Cài đặt', icon: Settings },
+];
 
+function itemClass({ isActive }: { isActive: boolean }): string {
+  return `w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs transition ${
+    isActive
+      ? 'bg-violet-700 text-white font-semibold shadow-xs'
+      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+  }`;
+}
+
+function NavGroup({ items, id }: { items: NavItem[]; id: string }) {
+  return (
+    <nav className="space-y-1" id={id}>
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <NavLink
+            key={item.id}
+            to={item.to}
+            end={item.end}
+            data-testid={`sidebar-item-${item.id}`}
+            className={itemClass}
+          >
+            {({ isActive }) => (
+              <>
+                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                <span>{item.label}</span>
+              </>
+            )}
+          </NavLink>
+        );
+      })}
+    </nav>
+  );
+}
+
+export const Sidebar: React.FC = () => {
   return (
     <aside className="w-60 bg-slate-50/80 border-r border-slate-200/80 flex flex-col justify-between p-4 shrink-0 hidden md:flex">
       <div className="space-y-6">
-        <nav className="space-y-1" id="sidebar-primary-nav">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              currentView === item.id ||
-              (item.id === 'my_cvs' && currentView === 'editor');
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                id={`sidebar-item-${item.id}`}
-                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs transition ${
-                  isActive
-                    ? 'bg-violet-700 text-white font-semibold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+        <NavGroup items={primary} id="sidebar-primary-nav" />
 
         <div className="border-t border-slate-200/80 pt-4">
-          <nav className="space-y-1" id="sidebar-secondary-nav">
-            {secondaryItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentView === item.id;
-
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onNavigate(item.id)}
-                  id={`sidebar-item-${item.id}`}
-                  className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs transition ${
-                    isActive
-                      ? 'bg-violet-700 text-white font-semibold shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+          <NavGroup items={secondary} id="sidebar-secondary-nav" />
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ViewTab } from '../types';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   Sparkles,
   Eye,
@@ -8,12 +8,9 @@ import {
   User,
   HelpCircle,
   ChevronDown,
-  Bot,
 } from 'lucide-react';
 
 interface HeaderProps {
-  currentView: ViewTab;
-  onNavigate: (view: ViewTab) => void;
   userEmail?: string;
   onOpenPreview?: () => void;
   onOpenShare?: () => void;
@@ -22,23 +19,22 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  currentView,
-  onNavigate,
   userEmail = 'tester@example.com',
   onOpenPreview,
   onOpenShare,
   onDownloadPDF,
   onOpenUpload,
 }) => {
-  const isEditor = currentView === 'editor';
+  const location = useLocation();
+  const isEditor = location.pathname.startsWith('/builder');
 
   return (
     <header className="h-[88px] bg-white border-b border-slate-200/80 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xs">
       {/* Left: Brand Logo + Primary Nav */}
       <div className="flex items-center space-x-8">
         {/* Brand Logo */}
-        <button
-          onClick={() => onNavigate('dashboard')}
+        <Link
+          to="/"
           className="flex items-center space-x-3 focus:outline-none group text-left"
           id="btn-brand-logo"
         >
@@ -52,33 +48,38 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
           </div>
-        </button>
+        </Link>
 
         {/* Navigation Tabs */}
         <nav className="hidden md:flex items-center space-x-1">
-          <button
-            onClick={() => onNavigate('dashboard')}
+          <NavLink
+            to="/"
+            end
             id="nav-trang-chu"
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              currentView === 'dashboard'
-                ? 'bg-violet-50 text-violet-700 border border-violet-100/80'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-            }`}
+            className={({ isActive }) =>
+              `px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                isActive
+                  ? 'bg-violet-50 text-violet-700 border border-violet-100/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+              }`
+            }
           >
             Trang chủ
-          </button>
+          </NavLink>
 
-          <button
-            onClick={() => onNavigate('my_cvs')}
+          <NavLink
+            to="/cv"
             id="nav-cv-cua-toi"
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-              currentView === 'my_cvs' || currentView === 'editor'
-                ? 'bg-violet-50 text-violet-700 border border-violet-100/80'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-            }`}
+            className={({ isActive }) =>
+              `px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                isActive || isEditor
+                  ? 'bg-violet-50 text-violet-700 border border-violet-100/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+              }`
+            }
           >
             CV của tôi
-          </button>
+          </NavLink>
         </nav>
       </div>
 
@@ -127,14 +128,14 @@ export const Header: React.FC<HeaderProps> = ({
         ) : (
           /* Dashboard / My CVs Actions */
           <>
-            <button
-              onClick={() => onNavigate('ai_assistant')}
+            <Link
+              to="/builder"
               id="btn-header-tro-ly"
               className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-violet-700 hover:bg-violet-800 rounded-xl transition shadow-xs"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Trợ lý AI</span>
-            </button>
+            </Link>
 
             <div
               id="user-dropdown"
@@ -149,14 +150,14 @@ export const Header: React.FC<HeaderProps> = ({
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </div>
 
-            <button
-              onClick={() => onNavigate('settings')}
+            <Link
+              to="/settings"
               id="btn-header-help"
               className="p-1.5 text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition"
               title="Trợ giúp & Cài đặt"
             >
               <HelpCircle className="w-4 h-4" />
-            </button>
+            </Link>
           </>
         )}
       </div>

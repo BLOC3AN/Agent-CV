@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CV, JobMatchResult } from '../types';
 import { GitCompare, Sparkles, CheckCircle, AlertTriangle, ArrowRight, Upload, FileText } from 'lucide-react';
 
 interface JobMatchViewProps {
   cvs: CV[];
-  onSelectCVToEdit: (cvId: string) => void;
 }
 
-export const JobMatchView: React.FC<JobMatchViewProps> = ({ cvs, onSelectCVToEdit }) => {
+export const JobMatchView: React.FC<JobMatchViewProps> = ({ cvs }) => {
+  const navigate = useNavigate();
   const [selectedCVId, setSelectedCVId] = useState<string>(cvs[0]?.id || '');
   const [jobDescription, setJobDescription] = useState<string>(
     `Tuyển dụng AI Engineer / MLOps Specialist
@@ -180,7 +181,7 @@ export const JobMatchView: React.FC<JobMatchViewProps> = ({ cvs, onSelectCVToEdi
                   {matchResult.recommendations}
                 </p>
                 <button
-                  onClick={() => onSelectCVToEdit(selectedCVId)}
+                  onClick={() => navigate(`/builder/${selectedCVId}`)}
                   className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center space-x-1 transition"
                 >
                   <span>Chỉnh sửa CV ngay</span>
