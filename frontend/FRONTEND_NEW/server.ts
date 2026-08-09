@@ -11,6 +11,24 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
+// API compatibility bridge: the approved UI remains unchanged while its
+// legacy-shaped AI calls are served by the Go backend.
+const backendURL = (process.env.BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
+app.use("/api/ai", async (req, res, next) => {
+  if (req.method !== "POST") return next();
+  try {
+    const upstream = await fetch(`${backendURL}${req.originalUrl}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body ?? {}),
+    });
+    const payload = await upstream.text();
+    res.status(upstream.status).type("application/json").send(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Initialize Gemini Client
 const getGeminiAI = () => {
   const apiKey = process.env.GEMINI_API_KEY;
