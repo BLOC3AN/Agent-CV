@@ -70,12 +70,49 @@ func TestChatModelRefsResolveFromConfig(t *testing.T) {
 }
 
 func TestChatPromptUsesIntroduceForCVField(t *testing.T) {
-	prompt := chatSystemPrompt()
+	prompt := chatSystemPrompt(false)
 	if !strings.Contains(prompt, "/basics/introduce") {
 		t.Fatal("chat prompt must identify the CV introduction field")
 	}
 	if strings.Contains(prompt, "/basics/summary") {
 		t.Fatal("chat prompt must not instruct the model to write the legacy CV summary field")
+	}
+}
+
+// profileIsV2 nhận diện hình dạng hồ sơ bằng dữ liệu, không bằng cờ
+// schemaVersion. Dữ liệu hỏng phải rơi về v1: rơi nhầm nhánh v2 thì prompt
+// dạy model sinh con trỏ không tồn tại và chốt chặn loại sạch mọi đề xuất.
+func TestProfileIsV2DetectsShape(t *testing.T) {
+	if profileIsV2([]byte(`{"basics":{"name":"Ada"}}`)) {
+		t.Fatal("hồ sơ v1 bị nhận nhầm là v2")
+	}
+	if !profileIsV2([]byte(`{"sections":{"intro":{"fullName":"Ada"}}}`)) {
+		t.Fatal("CV v2 không được nhận ra")
+	}
+	// Rác không được rơi vào nhánh v2: nhánh sai thì prompt dạy model sinh con
+	// trỏ không tồn tại, và mọi đề xuất bị chốt chặn loại sạch.
+	if profileIsV2([]byte(`không phải JSON`)) {
+		t.Fatal("dữ liệu hỏng phải rơi về v1")
+	}
+}
+
+// Prompt v2 phải dạy đúng đường dẫn của CV v2 và giữ được tính năng nhắm vào
+// từng gạch đầu dòng — đó là điều kiện để màn duyệt diff còn gì đáng duyệt.
+func TestChatSystemPromptV2UsesSectionPointers(t *testing.T) {
+	v2 := chatSystemPrompt(true)
+	if !strings.Contains(v2, "/sections/intro/summary") {
+		t.Fatal("prompt v2 phải dạy đường dẫn giới thiệu của v2")
+	}
+	if strings.Contains(v2, "/basics/introduce") {
+		t.Fatal("prompt v2 không được nhắc đường dẫn v1")
+	}
+	if !strings.Contains(v2, "/sections/experience/0/highlights/") {
+		t.Fatal("prompt v2 phải chỉ rõ cách nhắm vào một gạch đầu dòng")
+	}
+
+	v1 := chatSystemPrompt(false)
+	if !strings.Contains(v1, "/basics/introduce") {
+		t.Fatal("prompt v1 phải giữ nguyên: apps/web dùng nó tới SP-5")
 	}
 }
 
@@ -223,6 +260,32 @@ func TestValidateChatProposalUsesProfileSkillShape(t *testing.T) {
 	invalid := []json.RawMessage{json.RawMessage(`{"op":"replace","path":"/skills/0","value":{"category":"Data","items":["Python"]},"rationale":"Đổi nhóm","grounding":{"type":"existing_field","ref":"/skills/0"},"kbRefs":[]}`)}
 	if err := validateChatProposal(profile, invalid); err == nil {
 		t.Fatal("expected category/items shape to be rejected")
+	}
+}
+
+// v2 gom skills theo category: sections.skills[i] = {category, skills:[string]}.
+// Quy tắc v1 (name/level/canonical/group phẳng) không được áp lên v2 — path
+// v2 không bao giờ khớp tiền tố "/skills/" — nhưng v2 cũng cần chốt chặn
+// riêng, nếu không model có thể ghi field sai tên (vd "items" thay vì
+// "skills") mà không ai bắt được.
+func TestValidateChatProposalUsesV2SkillShape(t *testing.T) {
+	profile := []byte(`{"sections":{"skills":[{"category":"Ngôn ngữ","skills":["Go"]}]}}`)
+
+	valid := []json.RawMessage{json.RawMessage(`{"op":"add","path":"/sections/skills/0/skills/-","value":"Python","rationale":"Thêm kỹ năng mới nhắc trong tin nhắn","grounding":{"type":"user_message","ref":"tin nhắn người dùng"},"kbRefs":[]}`)}
+	if err := validateChatProposal(profile, valid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sai tên field: "items" thay vì "skills" — chốt chặn cấu trúc sau patch phải bắt được.
+	wrongShape := []json.RawMessage{json.RawMessage(`{"op":"replace","path":"/sections/skills/0","value":{"category":"Data","items":["Python"]},"rationale":"Đổi nhóm kỹ năng","grounding":{"type":"existing_field","ref":"/sections/skills/0"},"kbRefs":[]}`)}
+	if err := validateChatProposal(profile, wrongShape); err == nil {
+		t.Fatal("expected category/items shape to be rejected for v2")
+	}
+
+	// Field lạ ở độ sâu con trỏ — không phải category cũng không phải skills.
+	unknownField := []json.RawMessage{json.RawMessage(`{"op":"add","path":"/sections/skills/0/label","value":"Ưu tiên","rationale":"Đánh dấu nhóm ưu tiên","grounding":{"type":"user_message","ref":"tin nhắn người dùng"},"kbRefs":[]}`)}
+	if err := validateChatProposal(profile, unknownField); err == nil {
+		t.Fatal("expected unknown sections/skills field to be rejected")
 	}
 }
 

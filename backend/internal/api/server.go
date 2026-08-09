@@ -1626,7 +1626,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	// profileRaw giữ nguyên PII cho validateChatProposal và applyJSONPatch bên
 	// dưới — hai bước đó chạy trên máy chủ. Chỉ bản gửi model mới bị che.
-	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Hint, body.Message)}}
+	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt(profileIsV2(profileRaw))}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Hint, body.Message)}}
 	sendStep("Đang hiểu yêu cầu của bạn")
 	sendStep("Đang xem lại hồ sơ để trả lời")
 	sendStep("Đang suy nghĩ")
@@ -1712,7 +1712,44 @@ func chatUserPrompt(profileRaw []byte, history []map[string]string, hint, messag
 		"\n\nUSER:\n" + message
 }
 
-func chatSystemPrompt() string {
+// Nhận diện hình dạng hồ sơ bằng dữ liệu, không bằng cờ schemaVersion — trong
+// giai đoạn chuyển tiếp, cả hồ sơ v1 lẫn CV v2 cùng đi qua handler này. Dữ
+// liệu hỏng rơi về v1: nhánh sai thì prompt dạy model sinh con trỏ không tồn
+// tại, chốt chặn validateChatProposal loại sạch mọi đề xuất, và người dùng
+// chỉ thấy trợ lý "không làm được gì" mà không rõ vì sao.
+func profileIsV2(raw []byte) bool {
+	var probe struct {
+		Sections map[string]any `json:"sections"`
+	}
+	if json.Unmarshal(raw, &probe) != nil {
+		return false
+	}
+	return probe.Sections != nil
+}
+
+// chatSystemPrompt chọn prompt theo hình dạng hồ sơ thật của request, không
+// theo một hằng số toàn cục — hai hình dạng cùng sống trong giai đoạn
+// chuyển tiếp SP-2→SP-5.
+func chatSystemPrompt(v2 bool) string {
+	if v2 {
+		return `Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ và chỉ trả về DUY NHẤT một object JSON hợp lệ.
+
+Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
+{"kind":"reply","text":"..."}
+
+Nếu người dùng yêu cầu sửa, viết lại, nhóm, sắp xếp hoặc cập nhật hồ sơ, KHÔNG được nói đã cập nhật. Hãy trả đề xuất để người dùng duyệt:
+{"kind":"patch","summary":"...","ops":[{"op":"add|replace|remove","path":"/sections/experience/0/highlights/2","value":"...","rationale":"...","grounding":{"type":"existing_field|user_message|kb|inference","ref":"..."},"kbRefs":[]}]}
+
+Quy tắc bắt buộc: không tự ghi hồ sơ; không bịa dữ kiện; tối đa 20 ops; value bắt buộc với add/replace; mỗi op/path chỉ xuất hiện một lần.
+
+Đường dẫn: phần giới thiệu cá nhân luôn là /sections/intro/summary. Mỗi gạch đầu dòng của kinh nghiệm, dự án, học vấn và hoạt động là một phần tử riêng — sửa một ý thì nhắm đúng vào nó, ví dụ /sections/experience/0/highlights/2, KHÔNG ghi đè cả mảng highlights. Kỹ năng gom theo nhóm: một phần tử của /sections/skills có category và skills là mảng chuỗi; thêm một kỹ năng thì dùng /sections/skills/0/skills/-.`
+	}
+	return chatSystemPromptV1()
+}
+
+// chatSystemPromptV1 giữ NGUYÊN VĂN chuỗi cũ — apps/web chạy trên đúng prompt
+// này cho tới SP-5, và TestChatPromptUsesIntroduceForCVField canh chừng nó.
+func chatSystemPromptV1() string {
 	return `Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ và chỉ trả về DUY NHẤT một object JSON hợp lệ.
 
 Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
@@ -1784,13 +1821,32 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 				return fmt.Errorf("skills chỉ được sửa name, level, canonical hoặc group")
 			}
 		}
+		// v2 gom skills theo nhóm: sections.skills[i] = {category, skills:[string]}.
+		// Quy tắc /skills/ ở trên không bao giờ khớp path v2 (tiền tố khác hẳn),
+		// nên v2 cần chốt chặn riêng — thiếu nó thì model có thể ghi field sai
+		// tên (vd "items" thay vì "skills") vào một path hợp lệ về mặt cú pháp
+		// mà không ai bắt được ở đây; nhánh kiểm tra hình dạng bên dưới, sau khi
+		// áp patch, mới bắt được lỗi đó.
+		if strings.HasPrefix(op.Path, "/sections/skills/") {
+			tail := strings.TrimPrefix(op.Path, "/sections/skills/")
+			parts := strings.Split(tail, "/")
+			okTail := len(parts) == 1 ||
+				(len(parts) == 2 && (parts[1] == "category" || parts[1] == "skills")) ||
+				(len(parts) == 3 && parts[1] == "skills")
+			if !okTail {
+				return fmt.Errorf("sections/skills chỉ được sửa category hoặc skills: %s", op.Path)
+			}
+		}
 	}
 	updated, err := applyJSONPatch(profileRaw, jsonRawArray(ops))
 	if err != nil {
 		return fmt.Errorf("patch không áp dụng được: %v", err)
 	}
 	var profile struct {
-		Skills []map[string]any `json:"skills"`
+		Skills   []map[string]any `json:"skills"`
+		Sections struct {
+			Skills []map[string]any `json:"skills"`
+		} `json:"sections"`
 	}
 	if json.Unmarshal(updated, &profile) != nil {
 		return fmt.Errorf("hồ sơ sau patch không hợp lệ")
@@ -1802,6 +1858,31 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 		for key := range skill {
 			if key != "name" && key != "level" && key != "canonical" && key != "group" {
 				return fmt.Errorf("field skill không được hỗ trợ: %s", key)
+			}
+		}
+	}
+	// sections.skills chỉ tồn tại ở CV v2 nên vòng lặp này rỗng lặng lẽ với hồ
+	// sơ v1 — nhận diện bằng dữ liệu, không cần cờ v2 riêng ở đây.
+	for _, group := range profile.Sections.Skills {
+		if category, ok := group["category"]; ok {
+			if _, ok := category.(string); !ok {
+				return fmt.Errorf("category của sections.skills phải là chuỗi")
+			}
+		}
+		if rawSkills, ok := group["skills"]; ok {
+			list, ok := rawSkills.([]any)
+			if !ok {
+				return fmt.Errorf("skills của sections.skills phải là mảng chuỗi")
+			}
+			for _, item := range list {
+				if _, ok := item.(string); !ok {
+					return fmt.Errorf("mỗi kỹ năng trong sections.skills phải là chuỗi")
+				}
+			}
+		}
+		for key := range group {
+			if key != "id" && key != "category" && key != "skills" {
+				return fmt.Errorf("field nhóm kỹ năng không được hỗ trợ: %s", key)
 			}
 		}
 	}
