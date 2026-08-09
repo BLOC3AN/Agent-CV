@@ -449,3 +449,131 @@ describe('_meta.verified: pointer không dịch được không được vứt t
     expect(restored._meta.verified['/nonexistent/1']).toBe(false)
   })
 })
+
+describe('kỹ năng thêm vào tài liệu v2 mà không có trong /skills/_order — Finding 3', () => {
+  // Task 3 viết với giả định "tài liệu v2 chỉ có thể do profileToCV() sinh ra",
+  // nên `_meta.droppedFields['/skills/_order']` luôn phủ hết mọi kỹ năng. Task 7
+  // phá vỡ giả định đó: prompt v2 (server.go) DẠY model thêm kỹ năng bằng
+  // `/sections/skills/0/skills/-`. Một patch được người dùng duyệt là bảng tra
+  // ngắn hơn tài liệu — và cvToProfile() lặp theo bảng tra, nên kỹ năng vừa thêm
+  // biến mất trong im lặng ở chiều lùi.
+  const v1Skills = ProfileSchema.parse({
+    schemaVersion: 1,
+    language: 'vi',
+    basics: { name: 'A' },
+    skills: [{ name: 'Python', group: 'Ngôn ngữ' }, { name: 'Go', group: 'Ngôn ngữ' }],
+    _meta: { verified: {}, source: 'manual' },
+  })
+
+  it('ném lỗi thay vì nuốt kỹ năng do chat thêm vào', () => {
+    const cv = profileToCV(v1Skills, META)
+    // Đúng thứ prompt v2 dạy model sinh ra: `/sections/skills/0/skills/-`.
+    const patched: CV = {
+      ...cv,
+      sections: {
+        ...cv.sections,
+        skills: cv.sections.skills.map((g, i) =>
+          i === 0 ? { ...g, skills: [...g.skills, 'Rust'] } : g,
+        ),
+      },
+    }
+    expect(() => cvToProfile(patched)).toThrow(/cv-1/)
+    expect(() => cvToProfile(patched)).toThrow(/3.*2|2.*3/)
+  })
+
+  it('ném lỗi khi tài liệu v2 bị xoá bớt kỹ năng so với bảng tra', () => {
+    const cv = profileToCV(v1Skills, META)
+    const patched: CV = {
+      ...cv,
+      sections: {
+        ...cv.sections,
+        skills: cv.sections.skills.map((g, i) => (i === 0 ? { ...g, skills: [g.skills[0]!] } : g)),
+      },
+    }
+    expect(() => cvToProfile(patched)).toThrow(/cv-1/)
+  })
+
+  it('tài liệu v2 nguyên vẹn vẫn khôi phục bình thường', () => {
+    expect(cvToProfile(profileToCV(v1Skills, META)).skills.map((s) => s.name)).toEqual([
+      'Python',
+      'Go',
+    ])
+  })
+})
+
+describe('con trỏ verified phải dịch CẢ TÊN FIELD, không chỉ tên mục — Finding 5', () => {
+  // Khẳng định trên TÀI LIỆU V2 TRUNG GIAN, không phải trên khứ hồi: lỗi này
+  // ĐỐI XỨNG (chiều đi và chiều về cùng bỏ qua tên field), nên khứ hồi xanh
+  // trong khi mọi tài liệu v2 đã backfill mang dấu verified trỏ vào field không
+  // tồn tại. Đúng bài học đã ghi ở Task 3: khứ hồi không thay được assertion
+  // trên tài liệu v2.
+  const withVerified = (verified: Record<string, boolean>, extra: object = {}) =>
+    ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      education: [{ school: 'HCMUTE', degree: 'Kỹ sư', major: 'Cơ điện tử' }],
+      work: [{ org: 'FPT', role: 'Engineer', type: 'fulltime' }],
+      projects: [{ name: 'Cân AI', url: 'https://x.dev' }],
+      activities: [{ name: 'GDG', role: 'Diễn giả', period: '2022' }],
+      certifications: [{ name: 'GCP', issuer: 'Google', date: '2022-11' }],
+      languages: [{ name: 'Tiếng Anh', level: 'IELTS 7.0' }],
+      _meta: { verified, source: 'manual' },
+      ...extra,
+    })
+
+  const CASES: [string, string][] = [
+    ['/education/0/major', '/sections/education/0/fieldOfStudy'],
+    ['/work/0/org', '/sections/experience/0/company'],
+    ['/work/0/role', '/sections/experience/0/title'],
+    ['/projects/0/url', '/sections/projects/0/link'],
+    ['/activities/0/name', '/sections/activities/0/organization'],
+    ['/activities/0/period', '/sections/activities/0/startDate'],
+    ['/languages/0/level', '/sections/languages/0/proficiency'],
+  ]
+
+  it.each(CASES)('%s → %s trong tài liệu v2', (v1Pointer, v2Pointer) => {
+    const cv = profileToCV(withVerified({ [v1Pointer]: true }), META)
+    expect(cv._meta.verified[v2Pointer]).toBe(true)
+    // Và KHÔNG được để lại con trỏ mang tên field của v1 — field đó không tồn
+    // tại ở v2, dấu xác nhận nằm ở đó là nằm trên hư không.
+    const v1FieldName = v1Pointer.split('/').pop()!
+    expect(cv._meta.verified[`/sections/${v2Pointer.split('/')[2]}/0/${v1FieldName}`]).toBeUndefined()
+  })
+
+  it.each(CASES)('%s khứ hồi về đúng con trỏ v1', (v1Pointer) => {
+    const restored = cvToProfile(profileToCV(withVerified({ [v1Pointer]: true }), META))
+    expect(restored._meta.verified[v1Pointer]).toBe(true)
+  })
+
+  it('field v1 không có chỗ ở v2 (/work/0/type) không sinh con trỏ ma, vẫn khứ hồi được', () => {
+    const cv = profileToCV(withVerified({ '/work/0/type': true }), META)
+    expect(cv._meta.verified['/sections/experience/0/type']).toBeUndefined()
+    expect(cv._meta.droppedFields['/_meta/verified/work/0/type']).toBe('true')
+    expect(cvToProfile(cv)._meta.verified['/work/0/type']).toBe(true)
+  })
+
+  it('con trỏ tới nguyên một mục (/education/0) vẫn dịch được như trước', () => {
+    const cv = profileToCV(withVerified({ '/education/0': true }), META)
+    expect(cv._meta.verified['/sections/education/0']).toBe(true)
+  })
+})
+
+describe('khoá lưu trữ verified không được đòi dấu / thừa — minor', () => {
+  // profileToCV() ghi khoá là `/_meta/verified` + pointer NGUYÊN VĂN. Con trỏ
+  // không bắt đầu bằng '/' (hợp lệ với z.record, và dữ liệu thật ngoài tầm
+  // kiểm soát của ta có thể có) tạo ra khoá `/_meta/verifiedX`; chiều về dò
+  // '/_meta/verified/' có dấu gạch thừa nên bỏ qua nó — cất được mà không lấy
+  // lại được, đúng kiểu mất im lặng.
+  it('con trỏ verified không bắt đầu bằng / vẫn khứ hồi được', () => {
+    const v1Odd = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      _meta: { verified: { 'khong-bat-dau-bang-gach': true }, source: 'manual' },
+    })
+    const cv = profileToCV(v1Odd, META)
+    expect(cv._meta.droppedFields['/_meta/verifiedkhong-bat-dau-bang-gach']).toBe('true')
+    expect(cvToProfile(cv)._meta.verified['khong-bat-dau-bang-gach']).toBe(true)
+  })
+})

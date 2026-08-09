@@ -171,7 +171,7 @@ export const CVMetaSchema = z.object({
    *
    * v2 chỉ có một `website: string`, nên nhãn của link đầu tiên cũng không có
    * chỗ đứng — giữ lại `links[1..]` thôi thì khứ hồi dựng lại nhãn bằng cách
-   * đoán, và đoán sai. Giữ cả mảy thì `website` chỉ là bản rút gọn để hiển
+   * đoán, và đoán sai. Giữ cả mảng thì `website` chỉ là bản rút gọn để hiển
    * thị, còn nguồn sự thật vẫn đầy đủ.
    */
   originalLinks: z.array(z.object({ label: z.string(), url: z.string() })).default([]),

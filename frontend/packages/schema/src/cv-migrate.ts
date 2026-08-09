@@ -14,6 +14,48 @@ import { CVSchema, type CV } from './cv.js'
 const itemId = (section: string, index: number) => `${section}-${index}`
 
 /**
+ * Tên field bên trong từng mục, v1 → v2.
+ *
+ * Đổi tên MỤC thôi là chưa đủ: `/education/0/major` mà chỉ đổi mục sẽ thành
+ * `/sections/education/0/major`, trong khi field v2 tên là `fieldOfStudy` — dấu
+ * đã-xác-nhận nằm trên một đường dẫn không tồn tại. Lỗi này ĐỐI XỨNG (chiều về
+ * cũng bỏ qua tên field) nên test khứ hồi không bao giờ đỏ; chỉ assertion trên
+ * tài liệu v2 trung gian mới bắt được.
+ *
+ * Field v1 KHÔNG có mặt trong bảng là field không có chỗ ở v2 (`/work/N/type`,
+ * `/projects/N/tech`, ...) — trả `null` để lưới cuối ở profileToCV() cất nguyên
+ * con trỏ vào `_meta.droppedFields['/_meta/verified…']`, thay vì bịa ra một con
+ * trỏ v2 trỏ vào hư không.
+ */
+const FIELD_V1_TO_V2: Record<string, Record<string, string>> = {
+  work: {
+    org: 'company', role: 'title',
+    startDate: 'startDate', endDate: 'endDate', highlights: 'highlights',
+  },
+  projects: {
+    name: 'name', role: 'role', url: 'link',
+    startDate: 'startDate', endDate: 'endDate', highlights: 'highlights',
+  },
+  education: {
+    school: 'school', degree: 'degree', major: 'fieldOfStudy', gpa: 'gpa',
+    startDate: 'startDate', endDate: 'endDate', highlights: 'highlights',
+  },
+  activities: {
+    name: 'organization', role: 'role', period: 'startDate', highlights: 'highlights',
+  },
+  certifications: { name: 'name', issuer: 'issuer', date: 'date' },
+  languages: { name: 'language', level: 'proficiency' },
+}
+
+/** Nghịch đảo của FIELD_V1_TO_V2, dựng bằng code để hai bảng không thể trôi khỏi nhau. */
+const FIELD_V2_TO_V1: Record<string, Record<string, string>> = Object.fromEntries(
+  Object.entries(FIELD_V1_TO_V2).map(([v1Section, fields]) => [
+    v1Section,
+    Object.fromEntries(Object.entries(fields).map(([v1Field, v2Field]) => [v2Field, v1Field])),
+  ]),
+)
+
+/**
  * Dịch khoá JSON Pointer của `_meta.verified`.
  *
  * Copy nguyên khoá là hỏng ngầm: `/basics/name` không tồn tại trong v2, nên
@@ -89,7 +131,12 @@ function translateVerifiedPointer(
 
   const mappedSection = section[parts[0]!]
   if (!mappedSection) return null
-  return ['/sections', mappedSection, ...parts.slice(1)].join('/')
+  // `/work` (nguyên mục) và `/work/0` (nguyên phần tử) không có tên field nào
+  // để dịch — đổi tên mục là đủ.
+  if (parts.length <= 2) return ['/sections', mappedSection, ...parts.slice(1)].join('/')
+  const mappedField = FIELD_V1_TO_V2[parts[0]!]?.[parts[2]!]
+  if (!mappedField) return null
+  return ['/sections', mappedSection, parts[1]!, mappedField, ...parts.slice(3)].join('/')
 }
 
 export function profileToCV(
@@ -367,7 +414,13 @@ function untranslateVerifiedPointer(
     return `/projects/${parts[2]}/highlights/${v2Index - 1}`
   }
   const mapped = section[parts[1]!]
-  return mapped ? ['', mapped, ...parts.slice(2)].join('/') : null
+  if (!mapped) return null
+  if (parts.length <= 3) return ['', mapped, ...parts.slice(2)].join('/')
+  // Nghịch đảo của bảng đổi tên field ở translateVerifiedPointer(). Field chỉ
+  // có ở v2 (`current`, `id`) không có đích ở v1 — trả null, không đoán.
+  const mappedField = FIELD_V2_TO_V1[mapped]?.[parts[3]!]
+  if (!mappedField) return null
+  return ['', mapped, parts[2]!, mappedField, ...parts.slice(4)].join('/')
 }
 
 /**
@@ -432,6 +485,24 @@ export function cvToProfile(input: CV): Profile {
     )
   }
 
+  // Bảng tra `/skills/_order` phải phủ ĐÚNG mọi kỹ năng đang có trong tài liệu.
+  // Guard ở trên chỉ bắt ca bảng tra RỖNG; ca nguy hiểm hơn là bảng tra NGẮN
+  // hơn tài liệu, và nó có thật: prompt v2 (backend/internal/api/server.go) dạy
+  // model thêm kỹ năng bằng `/sections/skills/0/skills/-`, nên một patch được
+  // người dùng duyệt là đủ để tài liệu có kỹ năng mà `_order` chưa biết. Vòng
+  // lặp khôi phục bên dưới đi theo `_order`, nên kỹ năng vừa thêm sẽ biến mất
+  // ở chiều lùi mà không có lỗi nào — đúng loại hỏng im lặng mà cả migration
+  // này được viết ra để chống. Đối chiếu tổng số và ném lỗi thay vì đoán.
+  const totalSkills = cv.sections.skills.reduce((n, g) => n + g.skills.length, 0)
+  if (totalSkills !== order.length) {
+    throw new Error(
+      `cvToProfile: CV "${cv.id}" có ${totalSkills} kỹ năng trong cv.sections.skills nhưng ` +
+        `_meta.droppedFields['/skills/_order'] chỉ có ${order.length} mục — bảng tra không phủ hết ` +
+        `tài liệu. Tài liệu có thể đã được sửa (ví dụ chat thêm kỹ năng bằng ` +
+        `/sections/skills/N/skills/-) mà không cập nhật _meta. Từ chối khôi phục thiếu trong im lặng.`,
+    )
+  }
+
   const skillNameAt = (pointer: string): string | null => {
     const m = pointer.match(/^\/sections\/skills\/(\d+)\/skills\/(\d+)$/)
     if (!m) return null
@@ -491,7 +562,11 @@ export function cvToProfile(input: CV): Profile {
   // namespace đó và đặt lại nguyên pointer gốc, tách biệt khỏi các khoá
   // droppedFields khác (dob, tech, skills/_order, ...).
   for (const [key, value] of Object.entries(dropped)) {
-    if (key.startsWith('/_meta/verified/')) {
+    // Dò ĐÚNG tiền tố đã ghi ở profileToCV (`'/_meta/verified' + pointer`),
+    // không thêm dấu '/' — con trỏ không bắt đầu bằng '/' (z.record cho phép)
+    // sẽ tạo khoá `/_meta/verifiedX`, cất được mà không lấy lại được nếu đòi
+    // dấu gạch thừa.
+    if (key.startsWith('/_meta/verified')) {
       verified[key.slice('/_meta/verified'.length)] = value === 'true'
     }
   }
