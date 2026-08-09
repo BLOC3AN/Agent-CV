@@ -14,10 +14,20 @@
 import { Client } from 'pg'
 import { ProfileSchema, CVSchema, profileToCV, cvToProfile } from '@hr/schema'
 import { collectUnknownKeys, reattachUnknownKeys } from './unknown-keys.js'
+import { parseBackfillArgs } from './backfill-args.js'
+import { assertReversible } from './roundtrip-compare.js'
 
-const args = new Set(process.argv.slice(2))
-const dryRun = args.has('--dry-run')
-const rollback = args.has('--rollback')
+// Đọc cờ TRƯỚC KHI mở kết nối: cờ sai phải chết ngay, đừng để tới lúc đã cầm
+// con trỏ ghi trong tay. Cờ lạ là lỗi (không im lặng bỏ qua) và rollback ghi
+// thật đòi CONFIRM_ROLLBACK=1 — xem backfill-args.ts.
+let dryRun: boolean
+let rollback: boolean
+try {
+  ;({ dryRun, rollback } = parseBackfillArgs(process.argv.slice(2), process.env))
+} catch (err) {
+  console.error(`✗ ${(err as Error).message}`)
+  process.exit(1)
+}
 
 const url =
   process.env.DATABASE_URL ?? 'postgres://postgres:hragent_dev@localhost:5433/hragent'
@@ -101,6 +111,18 @@ if (!rollback) {
       if (Object.keys(unknownKeys).length) {
         Object.assign(cv._meta.droppedFields, unknownKeys)
       }
+
+      // Chứng minh đường lùi TRƯỚC KHI ghi, cho từng hàng, bằng ĐÚNG phép so
+      // mà roundtrip-check.ts dùng. Trước đây tính chất "không có hàng data_v2
+      // nào không lùi lại được" chỉ đúng nếu người vận hành nhớ chạy
+      // roundtrip-check sau đó — một quy trình, tức là một thứ sẽ bị quên. Ném
+      // lỗi ở đây biến nó thành tính chất của cấu trúc: hàng không chứng minh
+      // được rơi vào `failures` kèm id và KHÔNG được ghi.
+      //
+      // Đi qua JSON.parse(JSON.stringify(cv)) để so trên đúng hình dạng sẽ nằm
+      // trong jsonb (field `undefined` biến mất), không phải object trong bộ nhớ.
+      const cvAsStored = JSON.parse(JSON.stringify(cv)) as unknown
+      assertReversible(row.data, cvAsStored)
 
       if (dryRun) { ok++; continue }
       await client.query('UPDATE profiles SET data_v2 = $2::jsonb WHERE id = $1', [
