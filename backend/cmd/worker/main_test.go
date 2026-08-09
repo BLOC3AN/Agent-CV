@@ -199,6 +199,19 @@ func TestProfileChunksReadsV2Sections(t *testing.T) {
 				"title": "Engineer", "company": "FPT",
 				"highlights": []any{"Giảm 40% độ trễ"},
 			}},
+			"education": []any{map[string]any{
+				"school": "Đại học Bách Khoa", "degree": "Cử nhân", "fieldOfStudy": "Khoa học máy tính",
+				"highlights": []any{"Tốt nghiệp loại giỏi"},
+			}},
+			"certifications": []any{map[string]any{
+				"name": "AWS Certified Solutions Architect", "issuer": "Amazon Web Services",
+			}},
+			"languages": []any{map[string]any{
+				"language": "Tiếng Anh", "proficiency": "Thành thạo",
+			}},
+			"activities": []any{map[string]any{
+				"organization": "Neura Agent", "role": "Trưởng nhóm",
+			}},
 			"skills": []any{map[string]any{
 				"category": "Ngôn ngữ", "skills": []any{"Go", "Python"},
 			}},
@@ -213,10 +226,24 @@ func TestProfileChunksReadsV2Sections(t *testing.T) {
 	// đây là chữ ký thật của hàm trong matching.go, khác snippet gợi ý ban đầu.
 	chunks, _ := profileChunks(string(raw))
 
+	// Mỗi pointer dưới đây được hiển thị cho người dùng và dùng để nhảy tới đúng
+	// dòng trong CV, nên phải khớp field cụ thể (vd. .../education/0/school),
+	// không phải một khối gộp xấp xỉ.
 	want := map[string]string{
 		"/sections/intro/title":               "Kỹ sư AI",
 		"/sections/intro/summary":             "Ba năm edge AI",
 		"/sections/experience/0/highlights/0": "Giảm 40% độ trễ",
+		"/sections/experience/0/company":      "FPT",
+		"/sections/education/0/school":        "Đại học Bách Khoa",
+		"/sections/education/0/degree":        "Cử nhân",
+		"/sections/education/0/fieldOfStudy":  "Khoa học máy tính",
+		"/sections/education/0/highlights/0":  "Tốt nghiệp loại giỏi",
+		"/sections/certifications/0/name":     "AWS Certified Solutions Architect",
+		"/sections/certifications/0/issuer":   "Amazon Web Services",
+		"/sections/languages/0/language":      "Tiếng Anh",
+		"/sections/languages/0/proficiency":   "Thành thạo",
+		"/sections/activities/0/organization": "Neura Agent",
+		"/sections/activities/0/role":         "Trưởng nhóm",
 		"/sections/skills/0/skills/0":         "Go",
 	}
 	got := map[string]string{}

@@ -234,9 +234,11 @@ func profileChunks(raw string) ([]profileChunk, map[string]any) {
 }
 
 // profileChunksV2 đọc hình dạng CV v2 (`sections.intro`, `sections.experience[]`,
-// `sections.projects[]`, `sections.activities[]`, `sections.skills[]`) và trả về
-// cùng kiểu profileChunk như nhánh v1, để richMatchScore/matchRequirement dùng
-// chung mà không cần biết hồ sơ đến từ hình dạng nào.
+// `sections.projects[]`, `sections.activities[]`, `sections.education[]`,
+// `sections.certifications[]`, `sections.languages[]`, `sections.skills[]` —
+// đủ tám nhóm của CVSectionsSchema trong frontend/packages/schema/src/cv.ts)
+// và trả về cùng kiểu profileChunk như nhánh v1, để richMatchScore/
+// matchRequirement dùng chung mà không cần biết hồ sơ đến từ hình dạng nào.
 func profileChunksV2(sections map[string]any) []profileChunk {
 	var out []profileChunk
 	if intro, ok := sections["intro"].(map[string]any); ok {
@@ -254,8 +256,50 @@ func profileChunksV2(sections map[string]any) []profileChunk {
 			}
 			base := fmt.Sprintf("/sections/%s/%d", section.key, i)
 			appendChunk(&out, base+"/"+section.name, stringValue(m[section.name]))
+			// company/role là trường tra cứu thêm ngoài trường chính (title/organization),
+			// cùng vai trò với org (work) và tech (projects) ở nhánh v1 — thiếu thì JD hỏi
+			// tên công ty hoặc chức vụ hoạt động không khớp được dù CV có ghi rõ.
+			if section.key == "experience" {
+				appendChunk(&out, base+"/company", stringValue(m["company"]))
+			}
+			if section.key == "activities" {
+				appendChunk(&out, base+"/role", stringValue(m["role"]))
+			}
 			for j, h := range stringArray(m["highlights"]) {
 				appendChunk(&out, fmt.Sprintf("%s/highlights/%d", base, j), h)
+			}
+		}
+	}
+	// education/certifications/languages: mỗi mục có nhiều field mang nghĩa riêng
+	// (bằng cấp, chuyên ngành, nơi cấp chứng chỉ, tên ngôn ngữ...), nên chunk theo
+	// từng field thay vì gộp thành một chuỗi như nhánh v1 (matching.go xung quanh
+	// dòng 221) — con trỏ hiển thị cho người dùng phải trỏ đúng field cụ thể
+	// (vd. /sections/education/0/school), không phải một khối gộp xấp xỉ. Thiếu
+	// ba nhóm này thì JD nhắc tới bằng cấp/chứng chỉ/ngôn ngữ sẽ lặng lẽ không
+	// khớp được trên CV v2 dù CV có ghi đầy đủ.
+	for _, section := range []struct {
+		key           string
+		fields        []string
+		hasHighlights bool
+	}{
+		{"education", []string{"school", "degree", "fieldOfStudy"}, true},
+		{"certifications", []string{"name", "issuer"}, false},
+		{"languages", []string{"language", "proficiency"}, false},
+	} {
+		items, _ := sections[section.key].([]any)
+		for i, item := range items {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			base := fmt.Sprintf("/sections/%s/%d", section.key, i)
+			for _, field := range section.fields {
+				appendChunk(&out, base+"/"+field, stringValue(m[field]))
+			}
+			if section.hasHighlights {
+				for j, h := range stringArray(m["highlights"]) {
+					appendChunk(&out, fmt.Sprintf("%s/highlights/%d", base, j), h)
+				}
 			}
 		}
 	}
