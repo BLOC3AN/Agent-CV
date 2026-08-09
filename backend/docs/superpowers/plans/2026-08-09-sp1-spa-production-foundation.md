@@ -2278,8 +2278,23 @@ Ngay sau service `web`, thêm:
       - '3002:3002'
     depends_on:
       backend: { condition: service_started }
-    profiles: ['full']
 ```
+
+- [ ] **Step 4b: Gỡ `profiles: ['full']` khỏi mọi service**
+
+Yêu cầu của chủ sản phẩm ngày 2026-08-09: `docker compose up -d --build` phải dựng **toàn bộ** service, không còn cái nào phải gọi riêng.
+
+Hiện `web`, `pdfkit` và `worker` đều mang `profiles: ['full']`, nên lệnh trên bỏ qua chúng **im lặng** — không báo lỗi, không cảnh báo, chỉ đơn giản là không dựng. Xoá dòng `profiles: ['full']` khỏi cả ba. `web-spa` ở Step 4 đã không có sẵn.
+
+Hệ quả phải nói rõ trong report: từ đây `docker compose up -d --build` sẽ **rebuild và khởi động lại cả `hr-web`** — bản Next đang phục vụ production ở `:3000`. Trước đây profile che nó khỏi việc đó. Đây là điều chủ sản phẩm đã chọn khi biết đánh đổi.
+
+Sau khi xoá, xác minh bằng:
+
+```bash
+cd backend && docker compose config --services | sort
+```
+
+Kỳ vọng: liệt kê đủ `backend`, `pdfkit`, `postgres`, `redis`, `web`, `web-spa`, `worker` — bảy service, không thiếu cái nào.
 
 - [ ] **Step 5: Ghi biến môi trường vào `.env.example`**
 
