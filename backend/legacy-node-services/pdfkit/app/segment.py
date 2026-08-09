@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 SectionKind = Literal[
-    "summary",
+    "introduce",
     "education",
     "work",
     "projects",
@@ -30,7 +30,7 @@ SectionKind = Literal[
 # Thứ tự quan trọng: khớp cụ thể trước. Song ngữ Việt/Anh trong cùng một bảng
 # vì CV thị trường VN hay trộn hai ngôn ngữ ngay trong một file.
 HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
-    ("summary", re.compile(
+    ("introduce", re.compile(
         r"^(summary|profile|objective|about( me)?|introduction"
         r"|giới thiệu|mục tiêu( nghề nghiệp)?|tóm tắt|sơ lược|bản thân)\b", re.I)),
     ("education", re.compile(
@@ -173,10 +173,10 @@ def segment_cv(text: str) -> list[CvSection]:
     if current:
         sections.append(current)
 
-    # Phần đầu trước tiêu đề đầu tiên (tên, chức danh, liên hệ) → summary
+    # Phần đầu trước tiêu đề đầu tiên (tên, chức danh, liên hệ) → introduce
     head = "\n".join(preamble).strip()
     if head:
-        sections.insert(0, CvSection(kind="summary", heading="(đầu trang)", body=head))
+        sections.insert(0, CvSection(kind="introduce", heading="(đầu trang)", body=head))
 
     out = []
     for s in sections:

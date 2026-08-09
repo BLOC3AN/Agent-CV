@@ -2034,7 +2034,11 @@ func postCloudChat(ctx context.Context, messages []map[string]string, provider s
 		request["temperature"] = 0.2
 		request["max_tokens"] = 1800
 	}
-	if mc.StructuredOutput == "json_object" {
+	if provider == "openai" && strings.HasPrefix(mc.ModelID, "gpt-5") {
+		// OpenAI's strict subset rejects the polymorphic patch schema; the
+		// response is still validated by parseChatModelOutput and proposal guards.
+		request["response_format"] = map[string]any{"type": "json_object"}
+	} else if mc.StructuredOutput == "json_object" {
 		request["response_format"] = map[string]any{"type": "json_object"}
 	} else if mc.StructuredOutput == true {
 		request["response_format"] = map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "cv_chat_result", "strict": true, "schema": chatResponseSchema()}}

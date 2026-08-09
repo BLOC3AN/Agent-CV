@@ -124,9 +124,9 @@ class TestSegment:
     def test_khong_nham_noi_dung_thanh_tieu_de(self, line):
         assert heading_kind(line) is None
 
-    def test_phan_dau_trang_vao_summary(self):
+    def test_phan_dau_trang_vao_introduce(self):
         sections = segment_cv("Nguyễn Văn A\nBackend Developer\n\nEDUCATION\nĐH Bách Khoa")
-        assert sections[0].kind == "summary"
+        assert sections[0].kind == "introduce"
         assert "Nguyễn Văn A" in sections[0].body
 
     def test_gop_muc_cung_loai(self):
