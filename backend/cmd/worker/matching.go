@@ -191,6 +191,12 @@ func profileChunks(raw string) ([]profileChunk, map[string]any) {
 	if json.Unmarshal([]byte(raw), &p) != nil {
 		return nil, map[string]any{}
 	}
+	// Giai đoạn chuyển tiếp SP-2→SP-5: hai hình dạng cùng đi qua worker này.
+	// Nhận diện bằng sự có mặt của `sections`, không bằng cờ schemaVersion —
+	// hồ sơ thiếu cờ không được phép rơi vào nhánh sai và trả về rỗng lặng lẽ.
+	if sections, ok := p["sections"].(map[string]any); ok {
+		return profileChunksV2(sections), p
+	}
 	var out []profileChunk
 	basics, _ := p["basics"].(map[string]any)
 	appendChunk(&out, "/basics/headline", stringValue(basics["headline"]))
@@ -225,6 +231,48 @@ func profileChunks(raw string) ([]profileChunk, map[string]any) {
 		}
 	}
 	return out, p
+}
+
+// profileChunksV2 đọc hình dạng CV v2 (`sections.intro`, `sections.experience[]`,
+// `sections.projects[]`, `sections.activities[]`, `sections.skills[]`) và trả về
+// cùng kiểu profileChunk như nhánh v1, để richMatchScore/matchRequirement dùng
+// chung mà không cần biết hồ sơ đến từ hình dạng nào.
+func profileChunksV2(sections map[string]any) []profileChunk {
+	var out []profileChunk
+	if intro, ok := sections["intro"].(map[string]any); ok {
+		appendChunk(&out, "/sections/intro/title", stringValue(intro["title"]))
+		appendChunk(&out, "/sections/intro/summary", stringValue(intro["summary"]))
+	}
+	for _, section := range []struct{ key, name string }{
+		{"experience", "title"}, {"projects", "name"}, {"activities", "organization"},
+	} {
+		items, _ := sections[section.key].([]any)
+		for i, item := range items {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			base := fmt.Sprintf("/sections/%s/%d", section.key, i)
+			appendChunk(&out, base+"/"+section.name, stringValue(m[section.name]))
+			for j, h := range stringArray(m["highlights"]) {
+				appendChunk(&out, fmt.Sprintf("%s/highlights/%d", base, j), h)
+			}
+		}
+	}
+	// skills v2 là nhóm: một mục sections.skills[i] chứa nhiều kỹ năng, nhưng
+	// mỗi kỹ năng vẫn phải thành một chunk riêng để lớp keyword đối chiếu giữ
+	// nguyên độ hạt hiện có (BR-57.1).
+	groups, _ := sections["skills"].([]any)
+	for i, group := range groups {
+		m, ok := group.(map[string]any)
+		if !ok {
+			continue
+		}
+		for j, name := range stringArray(m["skills"]) {
+			appendChunk(&out, fmt.Sprintf("/sections/skills/%d/skills/%d", i, j), name)
+		}
+	}
+	return out
 }
 
 func parseJDRequirements(ctx context.Context, raw string) jdRequirements {
