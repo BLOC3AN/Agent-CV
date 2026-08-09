@@ -1,0 +1,222 @@
+import { CV } from './types';
+
+export const initialCVs: CV[] = [
+  {
+    id: 'cv-1',
+    title: 'LE THANH HAI',
+    lastModified: 'Sửa 2 giờ trước',
+    design: {
+      template: 'modern',
+      accentColor: '#00897B',
+      font: 'Open Sans',
+      fontSize: 14,
+      spacing: 'condensed',
+    },
+    activeSections: {
+      intro: true,
+      experience: true,
+      projects: true,
+      education: true,
+      skills: true,
+      activities: true,
+      certifications: true,
+      languages: true,
+    },
+    sections: {
+      intro: {
+        fullName: 'LE THANH HAI',
+        title: 'AI Engineer',
+        email: 'lethaah3300@gmail.com',
+        phone: '096552151',
+        location: 'TP. Hồ Chí Minh, Việt Nam',
+        website: 'github.com/lethhai',
+        summary:
+          'AI Engineer with experience building and deploying production grade AI systems across Edge AIoT, computer vision, predictive modeling, and large language models. Skilled in model optimization, knowledge distillation, RAG and multi-agent architectures, as well as scalable MLOps, microservices, and real-time inference infrastructure. Proven ability to deliver practical AI solutions for industrial automation, quality control, monitoring, and high performance model serving.',
+      },
+      experience: [
+        {
+          id: 'exp-1',
+          title: 'AI Engineer',
+          company: 'IMESPRO',
+          startDate: 'December, 2025',
+          endDate: 'Present',
+          current: true,
+          description:
+            'Microservices & Infrastructure Architecture: Designed the end-to-end architecture of Vision MLOps platform, featuring an 11-microservice orchestration layer, established a resilient distributed storage layer (MinIO S3-compatible) and a secure, session-based RBAC architecture for multi-tenant isolation.\nEdge AIoT Optimization & Knowledge Distillation: Led production Edge AI and TinyML initiatives across resource-constrained hardware (Jetson Orin Nano, Rockchip RV1106, SC2002). Implemented Knowledge Distillation (KD) frameworks using specialized object detection loss functions to transfer knowledge from large YOLO teachers into ultra lightweight student architectures (e.g., LeNet variant backbones and custom tiny detectors). Continued this with PyTorch, TensorFlow Lite, and TensorFlow Lite Micro for INT8 quantization, achieving 5-19 FPS inference speed on ultra-low-power devices.\nIndustrial AIoT and High-Performance Deployment: Deployed automated Quality Control (QC) solutions at the Tecomen factory for mass production lines. Developed high-speed conveyor belt defect detection and sorting systems utilizing multi-object tracking and detection frameworks (YOLOv8, ByteTrack), successfully automated product cataloging and real-time OK/NG classification with end-to-end latency of under 300ms via an automated ONNX to TensorRT on Triton Server pipeline.\nReal-Time Monitoring and Production Observability: Built a high concurrency training monitoring system utilizing Redis Pub/Sub and WebSockets to stream live progress to end users. Integrated a comprehensive left-stack accessibility suite (Grafana, Loki, Journal monitoring, Dozzle) for centralized log aggregation and health tracking of production workloads.',
+        },
+        {
+          id: 'exp-2',
+          title: 'AI Engineer',
+          company: 'bTaskee',
+          startDate: 'Jun, 2025',
+          endDate: 'December, 2025',
+          current: false,
+          description:
+            'Built and deployed large language models (LLMs) using Qwen3, DeepSeek, OpenAI, and BAML from HuggingFace on top of vLLM for efficient inference, including GPU-accelerated deployments via vLLM to HuggingFace on top of vLLM for efficient inference, including GPU-accelerated deployments via vLLM to vLLMs and BAML classifier mode machine format structured response output for centralized log aggregation and health tracking of production workloads.',
+        },
+      ],
+      projects: [
+        {
+          id: 'proj-1',
+          name: 'Vision MLOps Platform',
+          role: 'Lead AI Developer',
+          startDate: '2025',
+          endDate: 'Present',
+          description:
+            'Orchestrated 11 microservices for real-time model training, validation, and edge deployment across IoT nodes.',
+        },
+        {
+          id: 'proj-2',
+          name: 'RAG Multi-Agent Assistant',
+          role: 'AI Engineer',
+          startDate: '2025',
+          endDate: '2025',
+          description:
+            'Engineered retrieval-augmented generation pipeline with hybrid vector search and reranking for HR candidate matching.',
+        },
+      ],
+      education: [
+        {
+          id: 'edu-1',
+          school: 'Trường Đại học Công nghệ Thông tin - ĐHQG TP.HCM',
+          degree: 'Kỹ sư',
+          fieldOfStudy: 'Khoa học Dữ liệu & Trí tuệ Nhân tạo',
+          startDate: '2021',
+          endDate: '2025',
+          gpa: '3.6/4.0',
+        },
+      ],
+      skills: [
+        {
+          id: 'sk-1',
+          category: 'AI & Machine Learning',
+          skills: 'LLM, RAG, PyTorch, TensorFlow, YOLOv8, TensorRT, ONNX, OpenCV, Knowledge Distillation, vLLM',
+        },
+        {
+          id: 'sk-2',
+          category: 'MLOps & Systems',
+          skills: 'Docker, Microservices, MinIO, Redis, WebSockets, Triton Inference Server, Grafana, Loki',
+        },
+        {
+          id: 'sk-3',
+          category: 'Programming Languages',
+          skills: 'Python, C/C++, TypeScript, SQL, Bash',
+        },
+      ],
+      activities: [
+        {
+          id: 'act-1',
+          organization: 'AI Research Club',
+          role: 'Technical Mentor',
+          startDate: '2024',
+          endDate: '2025',
+          description: 'Giảng dạy các workshop về Computer Vision và LLMs cho sinh viên khoa Công nghệ Thông tin.',
+        },
+      ],
+      certifications: [
+        {
+          id: 'cert-1',
+          name: 'Deep Learning Specialization',
+          issuer: 'DeepLearning.AI / Coursera',
+          date: '2024',
+        },
+        {
+          id: 'cert-2',
+          name: 'NVIDIA Certified Associate - Generative AI',
+          issuer: 'NVIDIA',
+          date: '2025',
+        },
+      ],
+      languages: [
+        {
+          id: 'lang-1',
+          language: 'Tiếng Việt',
+          proficiency: 'Tiếng mẹ đẻ (Native)',
+        },
+        {
+          id: 'lang-2',
+          language: 'Tiếng Anh',
+          proficiency: 'Thành thạo (Professional Working - IELTS 7.0)',
+        },
+      ],
+    },
+  },
+  {
+    id: 'cv-2',
+    title: 'CV_Software_Engineer_2026',
+    lastModified: 'Sửa 2 giờ trước',
+    design: {
+      template: 'classic',
+      accentColor: '#1E40AF',
+      font: 'Roboto',
+      fontSize: 14,
+      spacing: 'normal',
+    },
+    activeSections: {
+      intro: true,
+      experience: true,
+      projects: true,
+      education: true,
+      skills: true,
+      activities: false,
+      certifications: true,
+      languages: true,
+    },
+    sections: {
+      intro: {
+        fullName: 'LE THANH HAI',
+        title: 'Fullstack AI Engineer',
+        email: 'lethaah3300@gmail.com',
+        phone: '096552151',
+        location: 'Hồ Chí Minh',
+        summary: 'Kỹ sư Fullstack với định hướng phát triển sản phẩm tích hợp Trí tuệ nhân tạo.',
+      },
+      experience: [],
+      projects: [],
+      education: [],
+      skills: [],
+      activities: [],
+      certifications: [],
+      languages: [],
+    },
+  },
+  {
+    id: 'cv-3',
+    title: 'CV_Draft_Tech_Lead',
+    lastModified: 'Sửa 2 giờ trước',
+    design: {
+      template: 'professional',
+      accentColor: '#0F766E',
+      font: 'Lato',
+      fontSize: 13,
+      spacing: 'wide',
+    },
+    activeSections: {
+      intro: true,
+      experience: true,
+      projects: true,
+      education: true,
+      skills: true,
+      activities: false,
+      certifications: false,
+      languages: true,
+    },
+    sections: {
+      intro: {
+        fullName: 'LE THANH HAI',
+        title: 'Senior MLOps Engineer',
+        email: 'lethaah3300@gmail.com',
+        phone: '096552151',
+        location: 'Hồ Chí Minh',
+        summary: 'Chuyên gia thiết kế hạ tầng phục vụ mô hình AI quy mô lớn.',
+      },
+      experience: [],
+      projects: [],
+      education: [],
+      skills: [],
+      activities: [],
+      certifications: [],
+      languages: [],
+    },
+  },
+];
