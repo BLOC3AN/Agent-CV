@@ -475,13 +475,22 @@ func matchAnalysis(ctx context.Context, db *sql.DB, j *job) error {
 	if err := db.QueryRowContext(ctx, `SELECT raw_text FROM job_descriptions WHERE id=$1`, p.JDID).Scan(&jd); err != nil {
 		return fmt.Errorf("JD_NOT_FOUND")
 	}
-	score, matched, gaps := keywordScore(profile, jd)
+	score, matched, gaps := richMatchScore(ctx, profile, jd)
 	degraded := true
 	if semantic, ok := semanticScore(ctx, profile, jd); ok {
 		degraded = false
-		keyword := toFloat(score["overall"])
-		score["breakdown"].(map[string]any)["semantic"] = int(semantic * 100)
-		score["overall"] = int(keyword*0.6 + semantic*40)
+		breakdown := score["breakdown"].(map[string]any)
+		// Semantic evidence can rescue an exact-skill miss, but never lowers
+		// deterministic keyword/taxonomy coverage.
+		if semantic*100 > toFloat(breakdown["skills"]) {
+			breakdown["skills"] = int(semantic * 100)
+		}
+		skills := toFloat(breakdown["skills"])
+		keywords := toFloat(breakdown["keywords"])
+		experience := toFloat(breakdown["experience"])
+		education := toFloat(breakdown["education"])
+		rubric := toFloat(breakdown["rubric"])
+		score["overall"] = int(combineMatchBreakdown(map[string]any{"skills": skills, "keywords": keywords, "experience": experience, "education": education, "rubric": rubric}, len(score["missingAtsKeywords"].([]string)) > 0 || toFloat(breakdown["keywords"]) > 0))
 		delete(score, "degradedReason")
 	}
 	modelUsed := "go-semantic"

@@ -11,5 +11,7 @@ RUN apk add --no-cache ca-certificates
 FROM scratch
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/hr-backend /hr-backend
+COPY kb /app/kb
+ENV KB_ROOT=/app/kb
 EXPOSE 8080
 ENTRYPOINT ["/hr-backend"]

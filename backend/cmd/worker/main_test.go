@@ -2,9 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func testKBRoot(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	t.Setenv("KB_ROOT", filepath.Join(filepath.Dir(file), "..", "..", "kb"))
+}
 
 func TestDetectLanguagePreservesEnglishCV(t *testing.T) {
 	got := detectLanguage("Sơn Trịnh\nSUMMARY\nSoftware Engineer with experience in React and Docker\n(đầu trang)")
@@ -102,5 +109,54 @@ func TestProfileFromSegmentsKeepsCVSections(t *testing.T) {
 	}
 	if _, legacy := basics["summary"]; legacy {
 		t.Fatal("profile must not emit the legacy basics.summary field")
+	}
+}
+
+func TestMatchingUsesTaxonomyDescendantsAndIntroduce(t *testing.T) {
+	testKBRoot(t)
+	tax := loadSkillTaxonomy()
+	profile := `{"basics":{"introduce":"Backend engineer","headline":"Go"},"skills":[{"name":"Next.js"}]}`
+	chunks, _ := profileChunks(profile)
+	index := map[string][]profileChunk{}
+	for _, chunk := range chunks {
+		for _, canonical := range tax.extract(chunk.Text) {
+			index[canonical] = append(index[canonical], chunk)
+		}
+	}
+	match := matchRequirement("React", tax, index, chunks)
+	if match["matched"] != true || match["viaDescendant"] != "nextjs" {
+		t.Fatalf("taxonomy match=%#v", match)
+	}
+	if len(chunks) < 2 || chunks[0].Path != "/basics/headline" {
+		t.Fatalf("profile chunks=%#v", chunks)
+	}
+}
+
+func TestRubricParityScoresAutomaticCriteriaAndGaps(t *testing.T) {
+	testKBRoot(t)
+	profile := map[string]any{
+		"basics":   map[string]any{"introduce": "Backend engineer", "email": "a@example.com", "phone": "0900000000", "links": []any{map[string]any{"label": "GitHub", "url": "https://github.com/a"}}},
+		"projects": []any{map[string]any{"highlights": []any{"Built API for 2k users"}}, map[string]any{"highlights": []any{"Worked on service"}}},
+		"work":     []any{}, "skills": []any{"Go", "Postgres"}, "education": []any{}, "activities": []any{},
+	}
+	jd := jdRequirements{RoleFamily: "backend_developer", Seniority: "fresher"}
+	score, gaps := scoreProfileRubric(profile, jd)
+	if score <= 0 || score >= 100 {
+		t.Fatalf("rubric score=%v, want partial score", score)
+	}
+	found := false
+	for _, gap := range gaps {
+		if gap["id"] == "rubric:action_verb_start" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected action verb gap, got %#v", gaps)
+	}
+}
+
+func TestHasProfileFieldDoesNotPanicWithoutLinks(t *testing.T) {
+	if hasProfileField(map[string]any{"basics": map[string]any{}}, "basics.links[?(@.label=='GitHub')]") {
+		t.Fatal("missing links must not match")
 	}
 }
