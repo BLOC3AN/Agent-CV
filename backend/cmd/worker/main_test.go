@@ -186,3 +186,97 @@ func TestHasProfileFieldDoesNotPanicWithoutLinks(t *testing.T) {
 		t.Fatal("missing links must not match")
 	}
 }
+
+// Con trỏ trong kết quả đối chiếu được hiển thị cho người dùng và dùng để nhảy
+// tới đúng dòng trong CV. Trỏ sai đường dẫn thì tính năng "nhảy tới chỗ thiếu"
+// đưa người dùng đi đâu đó không xác định.
+func TestProfileChunksReadsV2Sections(t *testing.T) {
+	v2 := map[string]any{
+		"schemaVersion": float64(2),
+		"sections": map[string]any{
+			"intro": map[string]any{"title": "Kỹ sư AI", "summary": "Ba năm edge AI"},
+			"experience": []any{map[string]any{
+				"title": "Engineer", "company": "FPT",
+				"highlights": []any{"Giảm 40% độ trễ"},
+			}},
+			"education": []any{map[string]any{
+				"school": "Đại học Bách Khoa", "degree": "Cử nhân", "fieldOfStudy": "Khoa học máy tính",
+				"highlights": []any{"Tốt nghiệp loại giỏi"},
+			}},
+			"certifications": []any{map[string]any{
+				"name": "AWS Certified Solutions Architect", "issuer": "Amazon Web Services",
+			}},
+			"languages": []any{map[string]any{
+				"language": "Tiếng Anh", "proficiency": "Thành thạo",
+			}},
+			"activities": []any{map[string]any{
+				"organization": "Neura Agent", "role": "Trưởng nhóm",
+			}},
+			"skills": []any{map[string]any{
+				"category": "Ngôn ngữ", "skills": []any{"Go", "Python"},
+			}},
+		},
+	}
+	raw, err := json.Marshal(v2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// profileChunks nhận chuỗi JSON (không phải map) và trả về cả map đã parse;
+	// đây là chữ ký thật của hàm trong matching.go, khác snippet gợi ý ban đầu.
+	chunks, _ := profileChunks(string(raw))
+
+	// Mỗi pointer dưới đây được hiển thị cho người dùng và dùng để nhảy tới đúng
+	// dòng trong CV, nên phải khớp field cụ thể (vd. .../education/0/school),
+	// không phải một khối gộp xấp xỉ.
+	want := map[string]string{
+		"/sections/intro/title":               "Kỹ sư AI",
+		"/sections/intro/summary":             "Ba năm edge AI",
+		"/sections/experience/0/highlights/0": "Giảm 40% độ trễ",
+		"/sections/experience/0/company":      "FPT",
+		"/sections/education/0/school":        "Đại học Bách Khoa",
+		"/sections/education/0/degree":        "Cử nhân",
+		"/sections/education/0/fieldOfStudy":  "Khoa học máy tính",
+		"/sections/education/0/highlights/0":  "Tốt nghiệp loại giỏi",
+		"/sections/certifications/0/name":     "AWS Certified Solutions Architect",
+		"/sections/certifications/0/issuer":   "Amazon Web Services",
+		"/sections/languages/0/language":      "Tiếng Anh",
+		"/sections/languages/0/proficiency":   "Thành thạo",
+		"/sections/activities/0/organization": "Neura Agent",
+		"/sections/activities/0/role":         "Trưởng nhóm",
+		"/sections/skills/0/skills/0":         "Go",
+	}
+	got := map[string]string{}
+	for _, c := range chunks {
+		got[c.Path] = c.Text
+	}
+	for path, text := range want {
+		if got[path] != text {
+			t.Fatalf("chunk %q = %q, want %q\ntoàn bộ: %#v", path, got[path], text, got)
+		}
+	}
+}
+
+// Hồ sơ v1 vẫn phải chạy: apps/web dùng nó tới SP-5.
+func TestProfileChunksStillReadsV1(t *testing.T) {
+	v1 := map[string]any{
+		"basics": map[string]any{"headline": "Kỹ sư AI", "introduce": "Ba năm edge AI"},
+		"work": []any{map[string]any{
+			"role": "Engineer", "org": "FPT",
+			"highlights": []any{"Giảm 40% độ trễ"},
+		}},
+	}
+	raw, err := json.Marshal(v1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chunks, _ := profileChunks(string(raw))
+	got := map[string]string{}
+	for _, c := range chunks {
+		got[c.Path] = c.Text
+	}
+	if got["/basics/headline"] != "Kỹ sư AI" || got["/work/0/highlights/0"] != "Giảm 40% độ trễ" {
+		t.Fatalf("nhánh v1 hỏng: %#v", got)
+	}
+}

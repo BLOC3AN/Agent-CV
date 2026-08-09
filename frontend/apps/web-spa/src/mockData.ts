@@ -41,8 +41,12 @@ export const initialCVs: CV[] = [
           startDate: 'December, 2025',
           endDate: 'Present',
           current: true,
-          description:
-            'Microservices & Infrastructure Architecture: Designed the end-to-end architecture of Vision MLOps platform, featuring an 11-microservice orchestration layer, established a resilient distributed storage layer (MinIO S3-compatible) and a secure, session-based RBAC architecture for multi-tenant isolation.\nEdge AIoT Optimization & Knowledge Distillation: Led production Edge AI and TinyML initiatives across resource-constrained hardware (Jetson Orin Nano, Rockchip RV1106, SC2002). Implemented Knowledge Distillation (KD) frameworks using specialized object detection loss functions to transfer knowledge from large YOLO teachers into ultra lightweight student architectures (e.g., LeNet variant backbones and custom tiny detectors). Continued this with PyTorch, TensorFlow Lite, and TensorFlow Lite Micro for INT8 quantization, achieving 5-19 FPS inference speed on ultra-low-power devices.\nIndustrial AIoT and High-Performance Deployment: Deployed automated Quality Control (QC) solutions at the Tecomen factory for mass production lines. Developed high-speed conveyor belt defect detection and sorting systems utilizing multi-object tracking and detection frameworks (YOLOv8, ByteTrack), successfully automated product cataloging and real-time OK/NG classification with end-to-end latency of under 300ms via an automated ONNX to TensorRT on Triton Server pipeline.\nReal-Time Monitoring and Production Observability: Built a high concurrency training monitoring system utilizing Redis Pub/Sub and WebSockets to stream live progress to end users. Integrated a comprehensive left-stack accessibility suite (Grafana, Loki, Journal monitoring, Dozzle) for centralized log aggregation and health tracking of production workloads.',
+          highlights: [
+            'Microservices & Infrastructure Architecture: Designed the end-to-end architecture of Vision MLOps platform, featuring an 11-microservice orchestration layer, established a resilient distributed storage layer (MinIO S3-compatible) and a secure, session-based RBAC architecture for multi-tenant isolation.',
+            'Edge AIoT Optimization & Knowledge Distillation: Led production Edge AI and TinyML initiatives across resource-constrained hardware (Jetson Orin Nano, Rockchip RV1106, SC2002). Implemented Knowledge Distillation (KD) frameworks using specialized object detection loss functions to transfer knowledge from large YOLO teachers into ultra lightweight student architectures (e.g., LeNet variant backbones and custom tiny detectors). Continued this with PyTorch, TensorFlow Lite, and TensorFlow Lite Micro for INT8 quantization, achieving 5-19 FPS inference speed on ultra-low-power devices.',
+            'Industrial AIoT and High-Performance Deployment: Deployed automated Quality Control (QC) solutions at the Tecomen factory for mass production lines. Developed high-speed conveyor belt defect detection and sorting systems utilizing multi-object tracking and detection frameworks (YOLOv8, ByteTrack), successfully automated product cataloging and real-time OK/NG classification with end-to-end latency of under 300ms via an automated ONNX to TensorRT on Triton Server pipeline.',
+            'Real-Time Monitoring and Production Observability: Built a high concurrency training monitoring system utilizing Redis Pub/Sub and WebSockets to stream live progress to end users. Integrated a comprehensive left-stack accessibility suite (Grafana, Loki, Journal monitoring, Dozzle) for centralized log aggregation and health tracking of production workloads.',
+          ],
         },
         {
           id: 'exp-2',
@@ -51,8 +55,10 @@ export const initialCVs: CV[] = [
           startDate: 'Jun, 2025',
           endDate: 'December, 2025',
           current: false,
-          description:
-            'Built and deployed large language models (LLMs) using Qwen3, DeepSeek, OpenAI, and BAML from HuggingFace on top of vLLM for efficient inference, including GPU-accelerated deployments via vLLM to HuggingFace on top of vLLM for efficient inference, including GPU-accelerated deployments via vLLM to vLLMs and BAML classifier mode machine format structured response output for centralized log aggregation and health tracking of production workloads.',
+          highlights: [
+            'Built and deployed large language models (LLMs) using Qwen3, DeepSeek, OpenAI, and BAML from HuggingFace on top of vLLM for efficient inference, including GPU-accelerated deployments via vLLM to HuggingFace on top of vLLM for efficient inference.',
+            'Delivered GPU-accelerated deployments via vLLM to vLLMs and BAML classifier mode machine format structured response output for centralized log aggregation and health tracking of production workloads.',
+          ],
         },
       ],
       projects: [
@@ -62,8 +68,10 @@ export const initialCVs: CV[] = [
           role: 'Lead AI Developer',
           startDate: '2025',
           endDate: 'Present',
-          description:
-            'Orchestrated 11 microservices for real-time model training, validation, and edge deployment across IoT nodes.',
+          highlights: [
+            'Orchestrated 11 microservices for real-time model training and validation.',
+            'Delivered edge deployment across IoT nodes.',
+          ],
         },
         {
           id: 'proj-2',
@@ -71,8 +79,10 @@ export const initialCVs: CV[] = [
           role: 'AI Engineer',
           startDate: '2025',
           endDate: '2025',
-          description:
-            'Engineered retrieval-augmented generation pipeline with hybrid vector search and reranking for HR candidate matching.',
+          highlights: [
+            'Engineered retrieval-augmented generation pipeline with hybrid vector search.',
+            'Applied reranking to improve HR candidate matching precision.',
+          ],
         },
       ],
       education: [
@@ -90,17 +100,37 @@ export const initialCVs: CV[] = [
         {
           id: 'sk-1',
           category: 'AI & Machine Learning',
-          skills: 'LLM, RAG, PyTorch, TensorFlow, YOLOv8, TensorRT, ONNX, OpenCV, Knowledge Distillation, vLLM',
+          skills: [
+            'LLM',
+            'RAG',
+            'PyTorch',
+            'TensorFlow',
+            'YOLOv8',
+            'TensorRT',
+            'ONNX',
+            'OpenCV',
+            'Knowledge Distillation',
+            'vLLM',
+          ],
         },
         {
           id: 'sk-2',
           category: 'MLOps & Systems',
-          skills: 'Docker, Microservices, MinIO, Redis, WebSockets, Triton Inference Server, Grafana, Loki',
+          skills: [
+            'Docker',
+            'Microservices',
+            'MinIO',
+            'Redis',
+            'WebSockets',
+            'Triton Inference Server',
+            'Grafana',
+            'Loki',
+          ],
         },
         {
           id: 'sk-3',
           category: 'Programming Languages',
-          skills: 'Python, C/C++, TypeScript, SQL, Bash',
+          skills: ['Python', 'C/C++', 'TypeScript', 'SQL', 'Bash'],
         },
       ],
       activities: [
@@ -110,7 +140,10 @@ export const initialCVs: CV[] = [
           role: 'Technical Mentor',
           startDate: '2024',
           endDate: '2025',
-          description: 'Giảng dạy các workshop về Computer Vision và LLMs cho sinh viên khoa Công nghệ Thông tin.',
+          highlights: [
+            'Giảng dạy các workshop về Computer Vision cho sinh viên khoa Công nghệ Thông tin.',
+            'Giảng dạy các workshop về LLMs cho sinh viên khoa Công nghệ Thông tin.',
+          ],
         },
       ],
       certifications: [

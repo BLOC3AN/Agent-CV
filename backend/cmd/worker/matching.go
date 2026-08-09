@@ -191,6 +191,12 @@ func profileChunks(raw string) ([]profileChunk, map[string]any) {
 	if json.Unmarshal([]byte(raw), &p) != nil {
 		return nil, map[string]any{}
 	}
+	// Giai đoạn chuyển tiếp SP-2→SP-5: hai hình dạng cùng đi qua worker này.
+	// Nhận diện bằng sự có mặt của `sections`, không bằng cờ schemaVersion —
+	// hồ sơ thiếu cờ không được phép rơi vào nhánh sai và trả về rỗng lặng lẽ.
+	if sections, ok := p["sections"].(map[string]any); ok {
+		return profileChunksV2(sections), p
+	}
 	var out []profileChunk
 	basics, _ := p["basics"].(map[string]any)
 	appendChunk(&out, "/basics/headline", stringValue(basics["headline"]))
@@ -225,6 +231,92 @@ func profileChunks(raw string) ([]profileChunk, map[string]any) {
 		}
 	}
 	return out, p
+}
+
+// profileChunksV2 đọc hình dạng CV v2 (`sections.intro`, `sections.experience[]`,
+// `sections.projects[]`, `sections.activities[]`, `sections.education[]`,
+// `sections.certifications[]`, `sections.languages[]`, `sections.skills[]` —
+// đủ tám nhóm của CVSectionsSchema trong frontend/packages/schema/src/cv.ts)
+// và trả về cùng kiểu profileChunk như nhánh v1, để richMatchScore/
+// matchRequirement dùng chung mà không cần biết hồ sơ đến từ hình dạng nào.
+func profileChunksV2(sections map[string]any) []profileChunk {
+	var out []profileChunk
+	if intro, ok := sections["intro"].(map[string]any); ok {
+		appendChunk(&out, "/sections/intro/title", stringValue(intro["title"]))
+		appendChunk(&out, "/sections/intro/summary", stringValue(intro["summary"]))
+	}
+	for _, section := range []struct{ key, name string }{
+		{"experience", "title"}, {"projects", "name"}, {"activities", "organization"},
+	} {
+		items, _ := sections[section.key].([]any)
+		for i, item := range items {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			base := fmt.Sprintf("/sections/%s/%d", section.key, i)
+			appendChunk(&out, base+"/"+section.name, stringValue(m[section.name]))
+			// company/role là trường tra cứu thêm ngoài trường chính (title/organization),
+			// cùng vai trò với org (work) và tech (projects) ở nhánh v1 — thiếu thì JD hỏi
+			// tên công ty hoặc chức vụ hoạt động không khớp được dù CV có ghi rõ.
+			if section.key == "experience" {
+				appendChunk(&out, base+"/company", stringValue(m["company"]))
+			}
+			if section.key == "activities" {
+				appendChunk(&out, base+"/role", stringValue(m["role"]))
+			}
+			for j, h := range stringArray(m["highlights"]) {
+				appendChunk(&out, fmt.Sprintf("%s/highlights/%d", base, j), h)
+			}
+		}
+	}
+	// education/certifications/languages: mỗi mục có nhiều field mang nghĩa riêng
+	// (bằng cấp, chuyên ngành, nơi cấp chứng chỉ, tên ngôn ngữ...), nên chunk theo
+	// từng field thay vì gộp thành một chuỗi như nhánh v1 (matching.go xung quanh
+	// dòng 221) — con trỏ hiển thị cho người dùng phải trỏ đúng field cụ thể
+	// (vd. /sections/education/0/school), không phải một khối gộp xấp xỉ. Thiếu
+	// ba nhóm này thì JD nhắc tới bằng cấp/chứng chỉ/ngôn ngữ sẽ lặng lẽ không
+	// khớp được trên CV v2 dù CV có ghi đầy đủ.
+	for _, section := range []struct {
+		key           string
+		fields        []string
+		hasHighlights bool
+	}{
+		{"education", []string{"school", "degree", "fieldOfStudy"}, true},
+		{"certifications", []string{"name", "issuer"}, false},
+		{"languages", []string{"language", "proficiency"}, false},
+	} {
+		items, _ := sections[section.key].([]any)
+		for i, item := range items {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			base := fmt.Sprintf("/sections/%s/%d", section.key, i)
+			for _, field := range section.fields {
+				appendChunk(&out, base+"/"+field, stringValue(m[field]))
+			}
+			if section.hasHighlights {
+				for j, h := range stringArray(m["highlights"]) {
+					appendChunk(&out, fmt.Sprintf("%s/highlights/%d", base, j), h)
+				}
+			}
+		}
+	}
+	// skills v2 là nhóm: một mục sections.skills[i] chứa nhiều kỹ năng, nhưng
+	// mỗi kỹ năng vẫn phải thành một chunk riêng để lớp keyword đối chiếu giữ
+	// nguyên độ hạt hiện có (BR-57.1).
+	groups, _ := sections["skills"].([]any)
+	for i, group := range groups {
+		m, ok := group.(map[string]any)
+		if !ok {
+			continue
+		}
+		for j, name := range stringArray(m["skills"]) {
+			appendChunk(&out, fmt.Sprintf("/sections/skills/%d/skills/%d", i, j), name)
+		}
+	}
+	return out
 }
 
 func parseJDRequirements(ctx context.Context, raw string) jdRequirements {

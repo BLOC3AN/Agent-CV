@@ -16,7 +16,15 @@ export interface ExperienceItem {
   startDate: string;
   endDate: string;
   current: boolean;
-  description: string;
+  /**
+   * Từng gạch đầu dòng là một phần tử riêng, không phải một khối văn bản.
+   *
+   * Chat sinh JSON Patch nhắm vào /sections/experience/0/highlights/2. Nếu đây
+   * là một chuỗi, mọi đề xuất của AI biến thành ghi đè nguyên khối và màn duyệt
+   * diff chỉ còn "toàn bộ đoạn cũ" đổi thành "toàn bộ đoạn mới" — không còn gì
+   * đáng để người dùng duyệt.
+   */
+  highlights: string[];
 }
 
 export interface ProjectItem {
@@ -26,7 +34,15 @@ export interface ProjectItem {
   startDate: string;
   endDate: string;
   link?: string;
-  description: string;
+  /**
+   * Từng gạch đầu dòng là một phần tử riêng, không phải một khối văn bản.
+   *
+   * Chat sinh JSON Patch nhắm vào /sections/projects/0/highlights/2. Nếu đây
+   * là một chuỗi, mọi đề xuất của AI biến thành ghi đè nguyên khối và màn duyệt
+   * diff chỉ còn "toàn bộ đoạn cũ" đổi thành "toàn bộ đoạn mới" — không còn gì
+   * đáng để người dùng duyệt.
+   */
+  highlights: string[];
 }
 
 export interface EducationItem {
@@ -42,7 +58,18 @@ export interface EducationItem {
 export interface SkillItem {
   id: string;
   category: string; // e.g. "Core AI", "MLOps", "Programming"
-  skills: string; // Comma separated or list
+  /**
+   * Từng kỹ năng là một phần tử riêng, không phải một chuỗi nối bằng dấu phẩy.
+   *
+   * Đây là hợp đồng với CV v2, không phải sở thích: `SkillItemSchema` khai
+   * `skills: z.array(z.string())`, prompt v2 dạy model thêm kỹ năng bằng
+   * `/sections/skills/0/skills/-`, và `validateChatProposal` phía Go từ chối
+   * thẳng nếu giá trị không phải mảng. Để là chuỗi thì mọi patch kỹ năng mà
+   * model được dạy sinh ra hoặc báo lỗi, hoặc làm hỏng state của SPA.
+   *
+   * Hiển thị vẫn là một dòng ngăn bằng ", " — nối lúc render, không lưu.
+   */
+  skills: string[];
 }
 
 export interface ActivityItem {
@@ -51,7 +78,15 @@ export interface ActivityItem {
   role: string;
   startDate: string;
   endDate: string;
-  description: string;
+  /**
+   * Từng gạch đầu dòng là một phần tử riêng, không phải một khối văn bản.
+   *
+   * Chat sinh JSON Patch nhắm vào /sections/activities/0/highlights/2. Nếu đây
+   * là một chuỗi, mọi đề xuất của AI biến thành ghi đè nguyên khối và màn duyệt
+   * diff chỉ còn "toàn bộ đoạn cũ" đổi thành "toàn bộ đoạn mới" — không còn gì
+   * đáng để người dùng duyệt.
+   */
+  highlights: string[];
 }
 
 export interface CertificationItem {

@@ -70,12 +70,49 @@ func TestChatModelRefsResolveFromConfig(t *testing.T) {
 }
 
 func TestChatPromptUsesIntroduceForCVField(t *testing.T) {
-	prompt := chatSystemPrompt()
+	prompt := chatSystemPrompt(false)
 	if !strings.Contains(prompt, "/basics/introduce") {
 		t.Fatal("chat prompt must identify the CV introduction field")
 	}
 	if strings.Contains(prompt, "/basics/summary") {
 		t.Fatal("chat prompt must not instruct the model to write the legacy CV summary field")
+	}
+}
+
+// profileIsV2 nhận diện hình dạng hồ sơ bằng dữ liệu, không bằng cờ
+// schemaVersion. Dữ liệu hỏng phải rơi về v1: rơi nhầm nhánh v2 thì prompt
+// dạy model sinh con trỏ không tồn tại và chốt chặn loại sạch mọi đề xuất.
+func TestProfileIsV2DetectsShape(t *testing.T) {
+	if profileIsV2([]byte(`{"basics":{"name":"Ada"}}`)) {
+		t.Fatal("hồ sơ v1 bị nhận nhầm là v2")
+	}
+	if !profileIsV2([]byte(`{"sections":{"intro":{"fullName":"Ada"}}}`)) {
+		t.Fatal("CV v2 không được nhận ra")
+	}
+	// Rác không được rơi vào nhánh v2: nhánh sai thì prompt dạy model sinh con
+	// trỏ không tồn tại, và mọi đề xuất bị chốt chặn loại sạch.
+	if profileIsV2([]byte(`không phải JSON`)) {
+		t.Fatal("dữ liệu hỏng phải rơi về v1")
+	}
+}
+
+// Prompt v2 phải dạy đúng đường dẫn của CV v2 và giữ được tính năng nhắm vào
+// từng gạch đầu dòng — đó là điều kiện để màn duyệt diff còn gì đáng duyệt.
+func TestChatSystemPromptV2UsesSectionPointers(t *testing.T) {
+	v2 := chatSystemPrompt(true)
+	if !strings.Contains(v2, "/sections/intro/summary") {
+		t.Fatal("prompt v2 phải dạy đường dẫn giới thiệu của v2")
+	}
+	if strings.Contains(v2, "/basics/introduce") {
+		t.Fatal("prompt v2 không được nhắc đường dẫn v1")
+	}
+	if !strings.Contains(v2, "/sections/experience/0/highlights/") {
+		t.Fatal("prompt v2 phải chỉ rõ cách nhắm vào một gạch đầu dòng")
+	}
+
+	v1 := chatSystemPrompt(false)
+	if !strings.Contains(v1, "/basics/introduce") {
+		t.Fatal("prompt v1 phải giữ nguyên: apps/web dùng nó tới SP-5")
 	}
 }
 
@@ -103,6 +140,62 @@ func TestChatPromptNeverCarriesPIIToModel(t *testing.T) {
 
 	// Che quá tay cũng là hỏng: model mất ngữ cảnh thì đề xuất vô dụng.
 	for _, kept := range []string{"Kỹ sư AI", "Ba năm làm edge AI", "Giảm 40% độ trễ"} {
+		if !strings.Contains(prompt, kept) {
+			t.Fatalf("prompt mất nội dung phi-PII %q:\n%s", kept, prompt)
+		}
+	}
+}
+
+// V2 cũng không được để PII lọt ra, kể cả trong _meta.droppedFields và
+// _meta.originalLinks. Prompt phải giữ lại title, summary, website cho model
+// có ngữ cảnh để đề xuất có ý nghĩa.
+func TestChatPromptNeverCarriesPIIToModelForV2(t *testing.T) {
+	profile := []byte(`{
+		"schemaVersion":2,"language":"vi",
+		"sections":{
+			"intro":{
+				"fullName":"Nguyễn Văn A","email":"a@example.com","phone":"0901234567",
+				"location":"Hà Nội","avatarUrl":"https://cdn.example/avatar.jpg",
+				"title":"Kỹ sư AI","summary":"Ba năm làm edge AI","website":"https://ada.dev"
+			}
+		},
+		"_meta":{
+			"originalLinks":[
+				{"url":"https://linkedin.com/in/a","label":"LinkedIn"},
+				{"url":"https://github.com/a","label":"GitHub"}
+			],
+			"droppedFields":{
+				"/basics/dob":"1999-01-02",
+				"/basics/photo":"https://cdn.example/photo.jpg",
+				"/_unrecognized/basics/summary":"(đầu trang) LE THANH HAI 0964525151• lethhai3003@gmail.com • https://www.linkedin.com/in/hailt8/"
+			},
+			"canonical":{"Node.js":"nodejs","TypeScript":"typescript"},
+			"verified":{"\/sections\/intro\/fullName":true},
+			"source":"manual"
+		}
+	}`)
+
+	prompt := chatUserPrompt(profile, nil, "", "Viết lại phần giới thiệu")
+
+	// PII từ sections.intro, _meta.droppedFields, _meta.originalLinks không được lọt ra
+	for _, pii := range []string{
+		"Nguyễn Văn A", "a@example.com", "0901234567", // sections.intro PII
+		"Hà Nội", "cdn.example/avatar.jpg", // sections.intro PII
+		"1999-01-02", "cdn.example/photo.jpg", // _meta.droppedFields
+		"0964525151", "lethhai3003@gmail.com", // _meta.droppedFields._unrecognized
+		"linkedin.com/in/a", "github.com/a", // _meta.originalLinks
+		"Node.js", "TypeScript", // _meta.canonical
+	} {
+		if strings.Contains(prompt, pii) {
+			t.Fatalf("prompt gửi model còn chứa PII %q:\n%s", pii, prompt)
+		}
+	}
+
+	// Nội dung nghề nghiệp và trạng thái xác nhận phải còn lại
+	for _, kept := range []string{
+		"Kỹ sư AI", "Ba năm làm edge AI", "https://ada.dev", // title, summary, website
+		"manual", // _meta.source
+	} {
 		if !strings.Contains(prompt, kept) {
 			t.Fatalf("prompt mất nội dung phi-PII %q:\n%s", kept, prompt)
 		}
@@ -167,6 +260,32 @@ func TestValidateChatProposalUsesProfileSkillShape(t *testing.T) {
 	invalid := []json.RawMessage{json.RawMessage(`{"op":"replace","path":"/skills/0","value":{"category":"Data","items":["Python"]},"rationale":"Đổi nhóm","grounding":{"type":"existing_field","ref":"/skills/0"},"kbRefs":[]}`)}
 	if err := validateChatProposal(profile, invalid); err == nil {
 		t.Fatal("expected category/items shape to be rejected")
+	}
+}
+
+// v2 gom skills theo category: sections.skills[i] = {category, skills:[string]}.
+// Quy tắc v1 (name/level/canonical/group phẳng) không được áp lên v2 — path
+// v2 không bao giờ khớp tiền tố "/skills/" — nhưng v2 cũng cần chốt chặn
+// riêng, nếu không model có thể ghi field sai tên (vd "items" thay vì
+// "skills") mà không ai bắt được.
+func TestValidateChatProposalUsesV2SkillShape(t *testing.T) {
+	profile := []byte(`{"sections":{"skills":[{"category":"Ngôn ngữ","skills":["Go"]}]}}`)
+
+	valid := []json.RawMessage{json.RawMessage(`{"op":"add","path":"/sections/skills/0/skills/-","value":"Python","rationale":"Thêm kỹ năng mới nhắc trong tin nhắn","grounding":{"type":"user_message","ref":"tin nhắn người dùng"},"kbRefs":[]}`)}
+	if err := validateChatProposal(profile, valid); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sai tên field: "items" thay vì "skills" — chốt chặn cấu trúc sau patch phải bắt được.
+	wrongShape := []json.RawMessage{json.RawMessage(`{"op":"replace","path":"/sections/skills/0","value":{"category":"Data","items":["Python"]},"rationale":"Đổi nhóm kỹ năng","grounding":{"type":"existing_field","ref":"/sections/skills/0"},"kbRefs":[]}`)}
+	if err := validateChatProposal(profile, wrongShape); err == nil {
+		t.Fatal("expected category/items shape to be rejected for v2")
+	}
+
+	// Field lạ ở độ sâu con trỏ — không phải category cũng không phải skills.
+	unknownField := []json.RawMessage{json.RawMessage(`{"op":"add","path":"/sections/skills/0/label","value":"Ưu tiên","rationale":"Đánh dấu nhóm ưu tiên","grounding":{"type":"user_message","ref":"tin nhắn người dùng"},"kbRefs":[]}`)}
+	if err := validateChatProposal(profile, unknownField); err == nil {
+		t.Fatal("expected unknown sections/skills field to be rejected")
 	}
 }
 
