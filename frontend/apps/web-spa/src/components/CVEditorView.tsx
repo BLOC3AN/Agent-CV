@@ -430,63 +430,76 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
                   {editingSection === 'experience' && (
                     <div className="space-y-3 text-xs">
-                      {cv.sections.experience.map((exp, idx) => (
-                        <div key={exp.id} className="p-3 bg-white rounded-xl border border-slate-200 space-y-2 shadow-2xs">
-                          <input
-                            type="text"
-                            placeholder="Vị trí"
-                            value={exp.title}
-                            onChange={(e) => {
-                              const updated = [...cv.sections.experience];
-                              updated[idx].title = e.target.value;
-                              onUpdateCV({ ...cv, sections: { ...cv.sections, experience: updated } });
-                            }}
-                            className="w-full p-1.5 border border-slate-200 rounded font-bold text-xs focus:outline-none focus:border-indigo-500"
-                          />
-                          <input
-                            type="text"
-                            placeholder="Công ty"
-                            value={exp.company}
-                            onChange={(e) => {
-                              const updated = [...cv.sections.experience];
-                              updated[idx].company = e.target.value;
-                              onUpdateCV({ ...cv, sections: { ...cv.sections, experience: updated } });
-                            }}
-                            className="w-full p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
-                          />
-                          <div className="flex flex-col gap-2">
-                            {exp.highlights.map((line, i) => (
-                              <div key={i} className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  aria-label={`Gạch đầu dòng ${i + 1}`}
-                                  value={line}
-                                  onChange={(e) =>
-                                    onUpdateCV(setHighlight(cv, 'experience', idx, i, e.target.value))
-                                  }
-                                  className="flex-1 p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
-                                />
-                                <button
-                                  type="button"
-                                  aria-label={`Xoá gạch đầu dòng ${i + 1}`}
-                                  onClick={() => onUpdateCV(removeHighlight(cv, 'experience', idx, i))}
-                                  className="text-slate-400 hover:text-red-600"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ))}
-                            <button
-                              type="button"
-                              aria-label="Thêm gạch đầu dòng"
-                              onClick={() => onUpdateCV(addHighlight(cv, 'experience', idx))}
-                              className="self-start text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
-                            >
-                              + Thêm gạch đầu dòng
-                            </button>
+                      {cv.sections.experience.map((exp, idx) => {
+                        /*
+                         * Tên hỗ trợ tiếp cận (aria-label) của các nút gạch đầu dòng bên dưới
+                         * PHẢI phân biệt được từng mục, không chỉ từng dòng — khay này hiện
+                         * TẤT CẢ các mục kinh nghiệm cùng lúc, nên chỉ số dòng một mình sẽ
+                         * trùng giữa các mục (mục 1 và mục 2 đều có "dòng 1"). `idx` (chỉ số
+                         * mục, luôn khác nhau) đứng đầu để đảm bảo phân biệt tuyệt đối; tiêu
+                         * đề công việc (`exp.title`) chỉ là gợi ý đọc thêm — không dùng để
+                         * đảm bảo tính duy nhất, vì hai mục có thể trùng tiêu đề (dữ liệu mẫu
+                         * có hai vị trí đều tên "AI Engineer").
+                         */
+                        const itemLabel = `mục ${idx + 1}${exp.title ? ` (${exp.title})` : ''}`;
+                        return (
+                          <div key={exp.id} className="p-3 bg-white rounded-xl border border-slate-200 space-y-2 shadow-2xs">
+                            <input
+                              type="text"
+                              placeholder="Vị trí"
+                              value={exp.title}
+                              onChange={(e) => {
+                                const updated = [...cv.sections.experience];
+                                updated[idx].title = e.target.value;
+                                onUpdateCV({ ...cv, sections: { ...cv.sections, experience: updated } });
+                              }}
+                              className="w-full p-1.5 border border-slate-200 rounded font-bold text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Công ty"
+                              value={exp.company}
+                              onChange={(e) => {
+                                const updated = [...cv.sections.experience];
+                                updated[idx].company = e.target.value;
+                                onUpdateCV({ ...cv, sections: { ...cv.sections, experience: updated } });
+                              }}
+                              className="w-full p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                            <div className="flex flex-col gap-2">
+                              {exp.highlights.map((line, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    aria-label={`Gạch đầu dòng ${i + 1} — ${itemLabel}`}
+                                    value={line}
+                                    onChange={(e) =>
+                                      onUpdateCV(setHighlight(cv, 'experience', idx, i, e.target.value))
+                                    }
+                                    className="flex-1 p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label={`Xoá gạch đầu dòng ${i + 1} — ${itemLabel}`}
+                                    onClick={() => onUpdateCV(removeHighlight(cv, 'experience', idx, i))}
+                                    className="text-slate-400 hover:text-red-600"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                aria-label={`Thêm gạch đầu dòng — ${itemLabel}`}
+                                onClick={() => onUpdateCV(addHighlight(cv, 'experience', idx))}
+                                className="self-start text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+                              >
+                                + Thêm gạch đầu dòng
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 

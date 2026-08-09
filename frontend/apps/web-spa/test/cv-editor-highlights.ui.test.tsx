@@ -57,4 +57,39 @@ describe('CVEditorView — bullet sửa từng dòng', () => {
       initialCVs[0]!.sections.experience[0]!.highlights.length - 1,
     )
   })
+
+  /**
+   * Khay sửa hiện TẤT CẢ các mục kinh nghiệm cùng lúc — CV mẫu (initialCVs[0])
+   * vốn đã có hai mục đều mang bullet (exp-1 với 4 dòng, exp-2 với 2 dòng),
+   * đúng tình huống bản sửa lỗi round 1 chỉ ra: nếu tên hỗ trợ tiếp cận chỉ
+   * dựa vào chỉ số dòng, hai nút "Thêm gạch đầu dòng" (một cho mỗi mục) sẽ có
+   * tên giống hệt nhau, và người dùng đọc màn hình lẫn kiểm thử dựa trên nhãn
+   * không còn cách nào phân biệt mục nào đang được thao tác.
+   */
+  it('nút thêm/xoá của mỗi mục có tên phân biệt, không trộn giữa các mục', () => {
+    let updated: CV | null = null
+    renderEditorWithExperienceOpen((cv) => {
+      updated = cv
+    })
+
+    const addButtons = screen.getAllByRole('button', { name: /thêm gạch đầu dòng/i })
+    expect(addButtons).toHaveLength(2)
+    const addNames = addButtons.map((b) => b.getAttribute('aria-label'))
+    expect(new Set(addNames).size).toBe(2)
+
+    const removeButtons = screen.getAllByRole('button', { name: /xoá gạch đầu dòng 1 —/i })
+    expect(removeButtons).toHaveLength(2)
+    const removeNames = removeButtons.map((b) => b.getAttribute('aria-label'))
+    expect(new Set(removeNames).size).toBe(2)
+
+    // Bấm nút "Thêm" của mục THỨ HAI phải nối vào mục thứ hai, không phải mục đầu —
+    // đây là phép thử sẽ bắt được một khúc refactor tương lai lỡ đóng sai chỉ số `idx`.
+    fireEvent.click(addButtons[1]!)
+    expect(updated!.sections.experience[0]!.highlights).toHaveLength(
+      initialCVs[0]!.sections.experience[0]!.highlights.length,
+    )
+    expect(updated!.sections.experience[1]!.highlights).toHaveLength(
+      initialCVs[0]!.sections.experience[1]!.highlights.length + 1,
+    )
+  })
 })
