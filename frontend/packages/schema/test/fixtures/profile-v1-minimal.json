@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "language": "en",
+  "basics": { "name": "Minimal User", "links": [] },
+  "education": [], "work": [], "projects": [], "skills": [],
+  "activities": [], "certifications": [], "languages": [],
+  "_meta": { "verified": {}, "source": "manual" }
+}

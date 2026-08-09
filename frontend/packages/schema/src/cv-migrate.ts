@@ -1,4 +1,4 @@
-import type { Profile } from './profile.js'
+import { ProfileSchema, type Profile } from './profile.js'
 import { CVSchema, type CV } from './cv.js'
 
 /**
@@ -115,6 +115,48 @@ export function profileToCV(
     }
   })
 
+  // v2 dùng '' làm mặc định cho field optional-string (title, startDate, ...).
+  // Nếu v1 field vốn RỖNG TƯỜNG MINH (ví dụ endDate: "" cho công việc đang làm
+  // ghi bằng chuỗi rỗng thay vì bỏ field), giá trị đó và "field không tồn tại"
+  // đổ về cùng một '' ở v2 — khứ hồi không phân biệt được hai trạng thái nếu
+  // không đánh dấu. Chỉ đánh dấu đúng khi giá trị LÀ chuỗi rỗng; field absent
+  // (undefined) không cần đánh dấu vì hai chiều đã tự nhiên khớp nhau ('').
+  const archiveEmpty = (pointer: string, value: string | undefined) => {
+    if (value === '') droppedFields[pointer] = ''
+  }
+  // `email` không nằm trong danh sách: BasicsSchema validate bằng `.email()`,
+  // chuỗi rỗng không phải email hợp lệ nên ProfileSchema.parse() đã chặn từ
+  // trước — trạng thái "email rỗng tường minh" không bao giờ xảy ra với dữ
+  // liệu hợp lệ, đánh dấu cho nó là code chết.
+  archiveEmpty('/basics/headline', b.headline)
+  archiveEmpty('/basics/introduce', b.introduce)
+  archiveEmpty('/basics/phone', b.phone)
+  archiveEmpty('/basics/location', b.location)
+  profile.education.forEach((e, i) => {
+    archiveEmpty(`/education/${i}/startDate`, e.startDate)
+    archiveEmpty(`/education/${i}/endDate`, e.endDate)
+  })
+  profile.work.forEach((w, i) => {
+    archiveEmpty(`/work/${i}/startDate`, w.startDate)
+    archiveEmpty(`/work/${i}/endDate`, w.endDate)
+  })
+  profile.projects.forEach((p, i) => {
+    archiveEmpty(`/projects/${i}/role`, p.role)
+    archiveEmpty(`/projects/${i}/startDate`, p.startDate)
+    archiveEmpty(`/projects/${i}/endDate`, p.endDate)
+  })
+  profile.activities.forEach((a, i) => {
+    archiveEmpty(`/activities/${i}/role`, a.role)
+    archiveEmpty(`/activities/${i}/period`, a.period)
+  })
+  profile.certifications.forEach((c, i) => {
+    archiveEmpty(`/certifications/${i}/issuer`, c.issuer)
+    archiveEmpty(`/certifications/${i}/date`, c.date)
+  })
+  profile.languages.forEach((l, i) => {
+    archiveEmpty(`/languages/${i}/level`, l.level)
+  })
+
   // Lưu thứ tự v1 qua v2 mapping để cvToProfile() khôi phục đúng vị trí.
   // Khi group lồng nhau (ví dụ: Py(A), Docker(B), Go(A)), gom lại sẽ cho [Py, Go],
   // [Docker], và flatten ngược lại là [Py, Go, Docker] — sai thứ tự. Mảng này
@@ -199,5 +241,182 @@ export function profileToCV(
       droppedFields,
       canonical,
     },
+  })
+}
+
+/**
+ * Nghịch đảo của translateVerifiedPointer().
+ *
+ * Chỉ số phẳng của v1 KHÔNG tính lại được từ v2. Chiều đi gom nhóm, nên với
+ * `[Python(A), Docker(B), Go(A)]` thì v2 là `[[Python,Go],[Docker]]`; trải
+ * phẳng lại theo thứ tự nhóm ra `[Python, Go, Docker]` — sai thứ tự gốc, và
+ * mọi khoá `/skills/N/level`, `/skills/N/group` gán chéo sang kỹ năng khác.
+ * Thứ tự xen kẽ không còn tồn tại trong tài liệu v2, nên không công thức nào
+ * dựng lại được. Chiều đi phải ghi bảng tra vào `_meta.droppedFields`
+ * `['/skills/_order']`, và đây là chỗ đọc nó.
+ *
+ * `order[n]` = con trỏ v2 của kỹ năng ở chỉ số phẳng n của v1.
+ */
+function untranslateVerifiedPointer(
+  pointer: string,
+  order: string[],
+): string | null {
+  if (/^\/sections\/skills\/\d+\/skills\/\d+$/.test(pointer)) {
+    const flat = order.indexOf(pointer)
+    return flat === -1 ? null : `/skills/${flat}`
+  }
+  const introField: Record<string, string> = {
+    fullName: 'name', title: 'headline', summary: 'introduce',
+    email: 'email', phone: 'phone', location: 'location', avatarUrl: 'photo',
+  }
+  const section: Record<string, string> = {
+    experience: 'work', projects: 'projects', education: 'education',
+    activities: 'activities', certifications: 'certifications', languages: 'languages',
+  }
+  const parts = pointer.split('/').filter(Boolean)
+  if (parts[0] !== 'sections') return null
+  if (parts[1] === 'intro') {
+    if (parts.length === 2) return '/basics'
+    const mapped = introField[parts[2]!]
+    return mapped ? `/basics/${mapped}` : null
+  }
+  const mapped = section[parts[1]!]
+  return mapped ? ['', mapped, ...parts.slice(2)].join('/') : null
+}
+
+/**
+ * v2 → v1. Đọc `_meta.originalLinks`, `_meta.droppedFields` và `_meta.canonical`
+ * để dựng lại đúng những gì chiều đi đã cất đi.
+ *
+ * Test khứ hồi trong cv-migrate.test.ts là chốt chặn: v1 → v2 → v1 phải khớp
+ * tuyệt đối. Chốt đó hỏng nghĩa là backfill không có đường lùi, và không có
+ * đường lùi thì không được phép chạy trên dữ liệu thật.
+ */
+export function cvToProfile(cv: CV): Profile {
+  const intro = cv.sections.intro
+  const dropped = cv._meta.droppedFields
+
+  // Lấy thẳng từ _meta chứ không dựng lại từ `website`: nhãn của link đầu tiên
+  // không tồn tại ở v2, dựng lại là đoán.
+  const links = cv._meta.originalLinks
+
+  // Dựng lại mảng kỹ năng THEO BẢNG TRA, không trải phẳng theo thứ tự nhóm.
+  // Trải phẳng là sai thứ tự ngay khi hồ sơ gốc xen kẽ nhóm, và mọi khoá
+  // /skills/N/... gán chéo sang kỹ năng khác — xem ghi chú ở
+  // untranslateVerifiedPointer().
+  //
+  // `category` của v2 chỉ là nhãn hiển thị. Nhóm thật đọc từ droppedFields: kỹ
+  // năng không gắn nhóm và kỹ năng gắn nhóm tên đúng là "Khác" ra cùng một
+  // category, nên suy ngược từ category là nhập hai trạng thái làm một.
+  const order: string[] = dropped['/skills/_order']
+    ? (JSON.parse(dropped['/skills/_order']) as string[])
+    : []
+
+  const skillNameAt = (pointer: string): string | null => {
+    const m = pointer.match(/^\/sections\/skills\/(\d+)\/skills\/(\d+)$/)
+    if (!m) return null
+    return cv.sections.skills[Number(m[1])]?.skills[Number(m[2])] ?? null
+  }
+
+  const skills = order.flatMap((pointer, i) => {
+    const name = skillNameAt(pointer)
+    if (name === null) return []
+    const level = dropped[`/skills/${i}/level`]
+    const originalGroup = dropped[`/skills/${i}/group`]
+    return [{
+      name,
+      ...(level ? { level } : {}),
+      ...(cv._meta.canonical[name] ? { canonical: cv._meta.canonical[name] } : {}),
+      ...(originalGroup ? { group: originalGroup } : {}),
+    }]
+  })
+
+  const verified: Record<string, boolean> = {}
+  for (const [pointer, value] of Object.entries(cv._meta.verified)) {
+    const back = untranslateVerifiedPointer(pointer, order)
+    if (back) verified[back] = value
+  }
+
+  // Nghịch đảo của archiveEmpty() ở profileToCV. v2 default('') làm "field vốn
+  // rỗng" và "field không tồn tại" trông giống hệt nhau; droppedFields[pointer]
+  // đã được set (kể cả bằng '') đúng khi v1 field là chuỗi rỗng tường minh, nên
+  // tra bằng `in` chứ không tra bằng giá trị (giá trị đang lưu chính là '').
+  const restoreEmpty = (
+    pointer: string,
+    v2Value: string,
+    key: string,
+  ): Record<string, string> => {
+    if (v2Value) return { [key]: v2Value }
+    if (pointer in dropped) return { [key]: '' }
+    return {}
+  }
+
+  return ProfileSchema.parse({
+    schemaVersion: 1,
+    language: cv.language,
+    basics: {
+      name: intro.fullName,
+      ...restoreEmpty('/basics/headline', intro.title, 'headline'),
+      ...restoreEmpty('/basics/introduce', intro.summary, 'introduce'),
+      // email luôn dùng kiểm tra thường: '' không phải email hợp lệ ở v1 nên
+      // không bao giờ bị đánh dấu ở archiveEmpty(), xem ghi chú ở profileToCV.
+      ...(intro.email ? { email: intro.email } : {}),
+      ...restoreEmpty('/basics/phone', intro.phone, 'phone'),
+      ...restoreEmpty('/basics/location', intro.location, 'location'),
+      ...(dropped['/basics/dob'] ? { dob: dropped['/basics/dob'] } : {}),
+      ...(intro.avatarUrl ? { photo: intro.avatarUrl } : {}),
+      links,
+    },
+    education: cv.sections.education.map((e, i) => ({
+      school: e.school,
+      degree: e.degree,
+      ...(e.fieldOfStudy ? { major: e.fieldOfStudy } : {}),
+      ...restoreEmpty(`/education/${i}/startDate`, e.startDate, 'startDate'),
+      ...restoreEmpty(`/education/${i}/endDate`, e.endDate, 'endDate'),
+      ...(e.gpa ? { gpa: e.gpa } : {}),
+      highlights: e.highlights,
+    })),
+    work: cv.sections.experience.map((x, i) => ({
+      org: x.company,
+      role: x.title,
+      ...(dropped[`/work/${i}/type`] ? { type: dropped[`/work/${i}/type`] } : {}),
+      ...restoreEmpty(`/work/${i}/startDate`, x.startDate, 'startDate'),
+      ...restoreEmpty(`/work/${i}/endDate`, x.endDate, 'endDate'),
+      highlights: x.highlights,
+    })),
+    // `tech` đọc từ droppedFields chứ không bóc từ chuỗi "Công nghệ: …".
+    // Bóc chuỗi thì một bullet do người dùng tự viết mở đầu bằng đúng mấy chữ
+    // đó cũng bị nuốt, và tech nào chứa ", " sẽ bị tách sai. Dòng hiển thị ở
+    // highlights[0] chỉ là bản trình bày, dữ liệu thật nằm trong _meta.
+    projects: cv.sections.projects.map((p, i) => {
+      const rawTech = dropped[`/projects/${i}/tech`]
+      const tech = rawTech ? (JSON.parse(rawTech) as string[]) : []
+      return {
+        name: p.name,
+        ...restoreEmpty(`/projects/${i}/role`, p.role, 'role'),
+        tech,
+        ...(p.link ? { url: p.link } : {}),
+        ...restoreEmpty(`/projects/${i}/startDate`, p.startDate, 'startDate'),
+        ...restoreEmpty(`/projects/${i}/endDate`, p.endDate, 'endDate'),
+        highlights: rawTech ? p.highlights.slice(1) : p.highlights,
+      }
+    }),
+    skills,
+    activities: cv.sections.activities.map((a, i) => ({
+      name: a.organization,
+      ...restoreEmpty(`/activities/${i}/role`, a.role, 'role'),
+      ...restoreEmpty(`/activities/${i}/period`, a.startDate, 'period'),
+      highlights: a.highlights,
+    })),
+    certifications: cv.sections.certifications.map((c, i) => ({
+      name: c.name,
+      ...restoreEmpty(`/certifications/${i}/issuer`, c.issuer, 'issuer'),
+      ...restoreEmpty(`/certifications/${i}/date`, c.date, 'date'),
+    })),
+    languages: cv.sections.languages.map((l, i) => ({
+      name: l.language,
+      ...restoreEmpty(`/languages/${i}/level`, l.proficiency, 'level'),
+    })),
+    _meta: { verified, source: cv._meta.source },
   })
 }

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ProfileSchema } from '../src/profile.js'
-import { profileToCV } from '../src/cv-migrate.js'
+import { profileToCV, cvToProfile } from '../src/cv-migrate.js'
+
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 
 const META = { id: 'cv-1', title: 'CV của tôi', lastModified: '2026-08-09T10:00:00Z' }
 
@@ -206,5 +211,51 @@ describe('profileToCV', () => {
 
     // Nếu xoá dòng `droppedFields['/skills/_order'] = ...` thì test này fail
     // (not a string khi gọi JSON.parse trên undefined)
+  })
+})
+
+describe('khứ hồi v1 → v2 → v1', () => {
+  const files = readdirSync(FIXTURES).filter((f) => f.endsWith('.json'))
+
+  it('có fixture để chạy', () => {
+    expect(files.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it.each(files)('%s khôi phục nguyên trạng', (file) => {
+    const original = ProfileSchema.parse(
+      JSON.parse(readFileSync(join(FIXTURES, file), 'utf8')),
+    )
+    const restored = cvToProfile(profileToCV(original, META))
+    expect(restored).toEqual(original)
+  })
+
+  // profile-v1-full.json chỉ lộ ca này qua đúng một field (work[1].endDate).
+  // Test riêng này phủ hết các field optional-string còn lại có cùng bệnh: v2
+  // dùng `.default('')` nên "field rỗng tường minh" và "field vắng mặt" đổ về
+  // cùng một '' — nếu bất kỳ dòng restoreEmpty() nào trong cvToProfile() bị
+  // xoá (quay lại `x.field ? {...} : {}` đơn thuần), field tương ứng ở đây sẽ
+  // rụng khỏi kết quả và test lệch.
+  it('field optional-string rỗng tường minh khứ hồi đúng, không lẫn với field vắng mặt', () => {
+    const original = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: {
+        name: 'Rỗng Tường Minh',
+        headline: '',
+        introduce: '',
+        phone: '',
+        location: '',
+        links: [],
+      },
+      education: [{ school: 'X', degree: 'Y', startDate: '', endDate: '' }],
+      work: [{ org: 'O', role: 'R', startDate: '', endDate: '' }],
+      projects: [{ name: 'P', role: '', startDate: '', endDate: '' }],
+      activities: [{ name: 'A', role: '', period: '' }],
+      certifications: [{ name: 'C', issuer: '', date: '' }],
+      languages: [{ name: 'L', level: '' }],
+      _meta: { verified: {}, source: 'manual' },
+    })
+    const restored = cvToProfile(profileToCV(original, META))
+    expect(restored).toEqual(original)
   })
 })

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "language": "vi",
+  "basics": {
+    "name": "Trần Thị B",
+    "headline": "Kỹ sư dữ liệu",
+    "introduce": "Bốn năm dựng pipeline dữ liệu",
+    "email": "b@example.com",
+    "phone": "0912345678",
+    "location": "Đà Nẵng",
+    "dob": "1998-05-20",
+    "photo": "https://cdn.example/b.jpg",
+    "links": [
+      { "label": "GitHub", "url": "https://github.com/b" },
+      { "label": "LinkedIn", "url": "https://linkedin.com/in/b" }
+    ]
+  },
+  "education": [
+    { "school": "ĐH Bách khoa", "degree": "Kỹ sư", "major": "CNTT",
+      "startDate": "2016-09", "endDate": "2020-06", "gpa": "3.4/4",
+      "highlights": ["Đồ án tốt nghiệp loại giỏi"] }
+  ],
+  "work": [
+    { "org": "VNG", "role": "Data Engineer", "type": "fulltime",
+      "startDate": "2020-08", "endDate": "2023-04",
+      "highlights": ["Dựng pipeline 2TB/ngày", "Giảm 30% chi phí lưu trữ"] },
+    { "org": "Momo", "role": "Senior Data Engineer",
+      "startDate": "2023-05", "endDate": "",
+      "highlights": ["Chuẩn hoá 40 nguồn dữ liệu"] }
+  ],
+  "projects": [
+    { "name": "Realtime CDC", "role": "Tech lead", "tech": ["Debezium", "Kafka"],
+      "url": "https://example.dev/cdc", "startDate": "2022-01", "endDate": "2022-09",
+      "highlights": ["Độ trễ dưới 2 giây"] }
+  ],
+  "skills": [
+    { "name": "Python", "level": "advanced", "canonical": "python", "group": "Ngôn ngữ" },
+    { "name": "SQL", "level": "advanced", "canonical": "sql", "group": "Ngôn ngữ" },
+    { "name": "Airflow", "level": "intermediate", "canonical": "apache-airflow", "group": "Điều phối" }
+  ],
+  "activities": [
+    { "name": "GDG Đà Nẵng", "role": "Diễn giả", "period": "2022",
+      "highlights": ["Trình bày về CDC cho 120 người"] }
+  ],
+  "certifications": [
+    { "name": "GCP Professional Data Engineer", "issuer": "Google", "date": "2022-11" }
+  ],
+  "languages": [
+    { "name": "Tiếng Anh", "level": "IELTS 7.0" }
+  ],
+  "_meta": {
+    "verified": {
+      "/basics/name": true,
+      "/basics/email": true,
+      "/work/0/highlights/0": true,
+      "/education/0": true,
+      "/skills/2": true
+    },
+    "source": "pdf_import"
+  }
+}
