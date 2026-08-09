@@ -1692,9 +1692,7 @@ func redactProfileForModel(raw []byte) []byte {
 	if json.Unmarshal(raw, &obj) != nil {
 		return nil
 	}
-	if basics, ok := obj["basics"].(map[string]any); ok {
-		pii.RedactBasics(basics)
-	}
+	pii.RedactDocument(obj)
 	out, err := json.Marshal(obj)
 	if err != nil {
 		return nil

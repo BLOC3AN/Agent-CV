@@ -18,3 +18,33 @@ func RedactBasics(basics map[string]any) {
 		delete(basics, key)
 	}
 }
+
+// IntroKeys là các khoá PII trong `sections.intro` của CV v2.
+// Phải khớp PII_PATHS_V2 ở frontend/packages/schema/src/cv.ts.
+//
+// `website` và `summary` KHÔNG có ở đây: chúng là nội dung nghề nghiệp, model
+// cần đọc để đề xuất có nghĩa. Che quá tay cũng là hỏng, chỉ theo hướng khác.
+var IntroKeys = []string{"fullName", "email", "phone", "location", "avatarUrl"}
+
+// RedactIntro xoá mọi khoá PII khỏi `sections.intro` của v2, sửa tại chỗ.
+func RedactIntro(intro map[string]any) {
+	for _, key := range IntroKeys {
+		delete(intro, key)
+	}
+}
+
+// RedactDocument nhận diện hình dạng rồi che đúng chỗ.
+//
+// Nhận diện bằng dữ liệu chứ không bằng cờ phiên bản: trong giai đoạn chuyển
+// tiếp, hồ sơ v1 và v2 cùng đi qua một binary, và một hồ sơ thiếu
+// `schemaVersion` không được phép trở thành hồ sơ không bị che.
+func RedactDocument(doc map[string]any) {
+	if sections, ok := doc["sections"].(map[string]any); ok {
+		if intro, ok := sections["intro"].(map[string]any); ok {
+			RedactIntro(intro)
+		}
+	}
+	if basics, ok := doc["basics"].(map[string]any); ok {
+		RedactBasics(basics)
+	}
+}
