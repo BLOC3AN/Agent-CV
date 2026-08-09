@@ -8,9 +8,9 @@ import {
   HelpCircle,
   ChevronDown,
 } from 'lucide-react';
+import { useSession } from '../lib/session';
 
 interface HeaderProps {
-  userEmail?: string;
   onOpenPreview?: () => void;
   onOpenShare?: () => void;
   onDownloadPDF?: () => void;
@@ -18,7 +18,6 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  userEmail = 'tester@example.com',
   onOpenPreview,
   onOpenShare,
   onDownloadPDF,
@@ -26,6 +25,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const location = useLocation();
   const isEditor = location.pathname.startsWith('/builder');
+  const { email, signOut } = useSession();
+  const userEmail = email ?? 'Chưa đăng nhập';
 
   return (
     <header className="h-[88px] bg-white border-b border-slate-200/80 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xs">
@@ -123,6 +124,13 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <User className="w-4 h-4 text-slate-600" />
             </div>
+
+            <button
+              onClick={signOut}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
+            >
+              Đăng xuất
+            </button>
           </>
         ) : (
           /* Dashboard / My CVs Actions */
@@ -148,6 +156,13 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <HelpCircle className="w-4 h-4" />
             </Link>
+
+            <button
+              onClick={signOut}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
+            >
+              Đăng xuất
+            </button>
           </>
         )}
       </div>

@@ -1,7 +1,8 @@
 import React from 'react';
 import type { RouteObject } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import { Link, Outlet } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
+import { LoginPage } from './LoginPage';
 import { initialCVs } from '../mockData';
 import { DashboardView } from '../components/DashboardView';
 import { MyCVsView } from '../components/MyCVsView';
@@ -9,6 +10,7 @@ import { CVEditorView } from '../components/CVEditorView';
 import { JobMatchView } from '../components/JobMatchView';
 import { TemplatesView } from '../components/TemplatesView';
 import { SettingsView } from '../components/SettingsView';
+import { RequireAuth, SessionProvider } from '../lib/session';
 
 /**
  * Bản đồ URL — một chỗ duy nhất.
@@ -34,71 +36,99 @@ function NotFound() {
 /** Chỗ giữ chân cho các prop dữ liệu chưa được nối. Task 7 và SP-3 thay dần. */
 const noop = () => {};
 
-export const appRoutes: RouteObject[] = [
+const protectedChildren: RouteObject[] = [
   {
-    element: <AppLayout />,
-    children: [
-      {
-        index: true,
-        element: (
-          <div data-testid="view-dashboard">
-            <DashboardView cvs={initialCVs} onOpenUploadModal={noop} />
-          </div>
-        ),
-      },
-      {
-        path: 'cv',
-        element: (
-          <div data-testid="view-my-cvs">
-            <MyCVsView
-              cvs={initialCVs}
-              onCreateNewCV={noop}
-              onOpenUploadModal={noop}
-              onDeleteCV={noop}
-            />
-          </div>
-        ),
-      },
-      // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
-      // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
-      // chỉ là dạng chọn sẵn khi tới từ một CV cụ thể.
-      {
-        path: 'analyze',
-        element: (
-          <div data-testid="view-job-match">
-            <JobMatchView cvs={initialCVs} />
-          </div>
-        ),
-      },
-      {
-        path: 'analyze/:cvId',
-        element: (
-          <div data-testid="view-job-match">
-            <JobMatchView cvs={initialCVs} />
-          </div>
-        ),
-      },
-      { path: 'templates', element: <div data-testid="view-templates"><TemplatesView cvs={initialCVs} /></div> },
-      { path: 'settings', element: <div data-testid="view-settings"><SettingsView /></div> },
-      { path: '*', element: <NotFound /> },
-    ],
+    index: true,
+    element: (
+      <div data-testid="view-dashboard">
+        <DashboardView cvs={initialCVs} onOpenUploadModal={noop} />
+      </div>
+    ),
   },
   {
-    element: <AppLayout hideSidebar />,
+    path: 'cv',
+    element: (
+      <div data-testid="view-my-cvs">
+        <MyCVsView
+          cvs={initialCVs}
+          onCreateNewCV={noop}
+          onOpenUploadModal={noop}
+          onDeleteCV={noop}
+        />
+      </div>
+    ),
+  },
+  // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
+  // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
+  // chỉ là dạng chọn sẵn khi tới từ một CV cụ thể.
+  {
+    path: 'analyze',
+    element: (
+      <div data-testid="view-job-match">
+        <JobMatchView cvs={initialCVs} />
+      </div>
+    ),
+  },
+  {
+    path: 'analyze/:cvId',
+    element: (
+      <div data-testid="view-job-match">
+        <JobMatchView cvs={initialCVs} />
+      </div>
+    ),
+  },
+  { path: 'templates', element: <div data-testid="view-templates"><TemplatesView cvs={initialCVs} /></div> },
+  { path: 'settings', element: <div data-testid="view-settings"><SettingsView /></div> },
+  { path: '*', element: <NotFound /> },
+];
+
+const builderChildren: RouteObject[] = [
+  {
+    path: 'builder/:cvId',
+    element: (
+      <div data-testid="view-editor">
+        <CVEditorView
+          cv={initialCVs[0]!}
+          onUpdateCV={noop}
+          onOpenPreview={noop}
+          onOpenShare={noop}
+          onDownloadPDF={noop}
+        />
+      </div>
+    ),
+  },
+];
+
+/**
+ * Route gốc không có `path` chỉ để bọc toàn cây trong `SessionProvider` —
+ * mọi màn hình con, kể cả `/login`, đều cần đọc được `useSession()`.
+ * `/login` nằm NGOÀI `RequireAuth`: nếu bọc vào trong, chưa đăng nhập thì nó
+ * tự chuyển hướng về chính nó và trình duyệt treo trong vòng lặp.
+ */
+export const appRoutes: RouteObject[] = [
+  {
+    element: (
+      <SessionProvider>
+        <Outlet />
+      </SessionProvider>
+    ),
     children: [
+      { path: 'login', element: <LoginPage /> },
       {
-        path: 'builder/:cvId',
         element: (
-          <div data-testid="view-editor">
-            <CVEditorView
-              cv={initialCVs[0]!}
-              onUpdateCV={noop}
-              onOpenPreview={noop}
-              onOpenShare={noop}
-              onDownloadPDF={noop}
-            />
-          </div>
+          <RequireAuth>
+            <AppLayout />
+          </RequireAuth>
         ),
+        children: protectedChildren,
+      },
+      {
+        element: (
+          <RequireAuth>
+            <AppLayout hideSidebar />
+          </RequireAuth>
+        ),
+        children: builderChildren,
       },
     ],
   },

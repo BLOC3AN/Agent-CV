@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom/vitest'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { appRoutes } from '../src/routes/routes.js'
+import * as api from '../src/lib/api.js'
 
 function renderAt(path: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
@@ -10,6 +11,12 @@ function renderAt(path: string) {
 }
 
 describe('bản đồ URL', () => {
+  // Bản đồ URL nay nằm sau `RequireAuth` (Task 6) — test này không kiểm tra
+  // đăng nhập, nên giả lập một phiên đã đăng nhập để tập trung vào routing.
+  beforeEach(() => {
+    vi.spyOn(api, 'getSession').mockResolvedValue({ authenticated: true, email: 'ha@example.com' })
+  })
+
   it('/ mở màn hình tổng quan', async () => {
     renderAt('/')
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument()
