@@ -84,6 +84,32 @@ func TestParseCVJobResultIsMetadataOnly(t *testing.T) {
 	}
 }
 
+// compactProfile() dựng prompt gap_analysis. Nó phải che đúng sáu field PII
+// mà PII_PATHS khai — bản đầu xoá khoá "address", một khoá không hề tồn tại
+// trong hồ sơ, nên `location` cùng `name`, `dob`, `photo` vẫn đi kèm prompt.
+func TestCompactProfileRemovesEveryPIIField(t *testing.T) {
+	raw := `{"basics":{"name":"Nguyễn Văn A","email":"a@example.com",` +
+		`"phone":"0901234567","location":"Hà Nội","dob":"1999-01-02",` +
+		`"photo":"https://cdn.example/x.jpg","headline":"Kỹ sư AI"},` +
+		`"work":[{"org":"FPT","role":"Engineer"}]}`
+
+	compact := compactProfile(raw)
+
+	for _, pii := range []string{
+		"Nguyễn Văn A", "a@example.com", "0901234567",
+		"Hà Nội", "1999-01-02", "cdn.example",
+	} {
+		if strings.Contains(compact, pii) {
+			t.Fatalf("compactProfile giữ lại PII %q: %s", pii, compact)
+		}
+	}
+	for _, kept := range []string{"Kỹ sư AI", "FPT", "Engineer"} {
+		if !strings.Contains(compact, kept) {
+			t.Fatalf("compactProfile xoá nhầm nội dung phi-PII %q: %s", kept, compact)
+		}
+	}
+}
+
 func TestProfileFromSegmentsKeepsCVSections(t *testing.T) {
 	profile := profileFromSegments("en", map[string]string{
 		"introduce":      "INTRODUCTION\nSoftware Engineer focused on Go",

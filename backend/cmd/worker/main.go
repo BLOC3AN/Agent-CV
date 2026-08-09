@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hr-agent/backend/internal/pii"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -560,9 +561,9 @@ func compactProfile(raw string) string {
 		return raw
 	}
 	if basics, ok := obj["basics"].(map[string]any); ok {
-		delete(basics, "email")
-		delete(basics, "phone")
-		delete(basics, "address")
+		for _, key := range pii.ProfileKeys {
+			delete(basics, key)
+		}
 	}
 	return jsonString(obj)
 }

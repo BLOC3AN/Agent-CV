@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hr-agent/backend/internal/pii"
+
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/phpdave11/gofpdf"
 	"github.com/redis/go-redis/v9"
@@ -1622,11 +1624,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
-	hint := ""
-	if body.Hint != "" {
-		hint = "\n\nGỢI Ý BIẾN ĐỔI TỪ GIAO DIỆN: " + body.Hint
-	}
-	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": "PROFILE:\n" + string(profileRaw) + "\n\nHISTORY:\n" + jsonString(history) + hint + "\n\nUSER:\n" + body.Message}}
+	// profileRaw giữ nguyên PII cho validateChatProposal và applyJSONPatch bên
+	// dưới — hai bước đó chạy trên máy chủ. Chỉ bản gửi model mới bị che.
+	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Hint, body.Message)}}
 	sendStep("Đang hiểu yêu cầu của bạn")
 	sendStep("Đang xem lại hồ sơ để trả lời")
 	sendStep("Đang suy nghĩ")
@@ -1676,6 +1676,42 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	payload, _ := json.Marshal(map[string]any{"kind": "reply", "text": assistantContent, "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID})
 	fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+}
+
+// Bỏ PII nhưng GIỮ NGUYÊN hình dạng hồ sơ.
+//
+// Xoá hẳn khoá `basics` thì nhẹ hơn, nhưng model trả JSON Pointer trỏ vào hồ
+// sơ thật; mất `basics` là mọi con trỏ `/basics/...` trỏ vào hư không và đề
+// xuất không áp dụng được — cùng lỗi mà redactKeepShape() bên TypeScript đã
+// ghi lại sau khi đo trên model thật.
+//
+// Parse hỏng thì trả rỗng chứ không trả nguyên bản: hồ sơ dị dạng không được
+// trở thành đường vòng đưa PII ra ngoài.
+func redactProfileForModel(raw []byte) []byte {
+	var obj map[string]any
+	if json.Unmarshal(raw, &obj) != nil {
+		return nil
+	}
+	if basics, ok := obj["basics"].(map[string]any); ok {
+		pii.RedactBasics(basics)
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
+// Dựng phần user của prompt chat. Tách khỏi handler để test chứng minh được
+// PII không lọt ra — chốt chặn nằm ở đây thì không ai quên gọi nó.
+func chatUserPrompt(profileRaw []byte, history []map[string]string, hint, message string) string {
+	hintBlock := ""
+	if hint != "" {
+		hintBlock = "\n\nGỢI Ý BIẾN ĐỔI TỪ GIAO DIỆN: " + hint
+	}
+	return "PROFILE:\n" + string(redactProfileForModel(profileRaw)) +
+		"\n\nHISTORY:\n" + jsonString(history) + hintBlock +
+		"\n\nUSER:\n" + message
 }
 
 func chatSystemPrompt() string {

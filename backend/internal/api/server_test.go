@@ -79,6 +79,71 @@ func TestChatPromptUsesIntroduceForCVField(t *testing.T) {
 	}
 }
 
+// config.yml khai `redact_pii.required_local: true` và
+// `never_send_raw_pii: true`. Người dùng chọn được `openai.luna` hoặc
+// `deepseek.v4` trong bộ chọn model, nên prompt này đi thẳng ra cloud —
+// gửi PII kèm theo là vi phạm, và là loại vi phạm không ném lỗi ở đâu cả.
+func TestChatPromptNeverCarriesPIIToModel(t *testing.T) {
+	profile := []byte(`{"schemaVersion":1,"language":"vi","basics":{` +
+		`"name":"Nguyễn Văn A","email":"a@example.com","phone":"0901234567",` +
+		`"location":"Hà Nội","dob":"1999-01-02","photo":"https://cdn.example/x.jpg",` +
+		`"headline":"Kỹ sư AI","introduce":"Ba năm làm edge AI"},` +
+		`"work":[{"org":"FPT","role":"Engineer","highlights":["Giảm 40% độ trễ"]}]}`)
+
+	prompt := chatUserPrompt(profile, nil, "", "Viết lại phần giới thiệu")
+
+	for _, pii := range []string{
+		"Nguyễn Văn A", "a@example.com", "0901234567",
+		"Hà Nội", "1999-01-02", "cdn.example",
+	} {
+		if strings.Contains(prompt, pii) {
+			t.Fatalf("prompt gửi model còn chứa PII %q:\n%s", pii, prompt)
+		}
+	}
+
+	// Che quá tay cũng là hỏng: model mất ngữ cảnh thì đề xuất vô dụng.
+	for _, kept := range []string{"Kỹ sư AI", "Ba năm làm edge AI", "Giảm 40% độ trễ"} {
+		if !strings.Contains(prompt, kept) {
+			t.Fatalf("prompt mất nội dung phi-PII %q:\n%s", kept, prompt)
+		}
+	}
+}
+
+// Model trả JSON Pointer trỏ vào hồ sơ thật. Nếu che PII bằng cách xoá luôn
+// khoá `basics`, mọi con trỏ `/basics/...` model sinh ra đều trỏ vào hư không
+// — đúng lỗi mà redactKeepShape() bên TypeScript đã ghi lại.
+func TestRedactProfileForModelKeepsPointerShape(t *testing.T) {
+	profile := []byte(`{"basics":{"name":"Ada","email":"ada@example.com","headline":"CTO"},"skills":[{"name":"Go"}]}`)
+
+	redacted := redactProfileForModel(profile)
+
+	var got map[string]any
+	if err := json.Unmarshal(redacted, &got); err != nil {
+		t.Fatalf("kết quả che PII không còn là JSON hợp lệ: %v", err)
+	}
+	basics, ok := got["basics"].(map[string]any)
+	if !ok {
+		t.Fatalf("khoá basics phải còn lại để con trỏ /basics/... có nghĩa: %s", redacted)
+	}
+	if _, leaked := basics["name"]; leaked {
+		t.Fatalf("basics.name vẫn còn: %s", redacted)
+	}
+	if basics["headline"] != "CTO" {
+		t.Fatalf("field phi-PII trong basics bị xoá nhầm: %s", redacted)
+	}
+	if len(got["skills"].([]any)) != 1 {
+		t.Fatalf("mục ngoài basics phải giữ nguyên: %s", redacted)
+	}
+}
+
+// Hồ sơ hỏng không được biến thành đường vòng đưa PII ra ngoài: parse thất bại
+// thì trả rỗng chứ không trả lại nguyên bản.
+func TestRedactProfileForModelFailsClosedOnInvalidJSON(t *testing.T) {
+	if got := redactProfileForModel([]byte(`{"basics":{"email":"a@example.com"`)); len(got) != 0 {
+		t.Fatalf("JSON hỏng phải trả rỗng, nhận: %s", got)
+	}
+}
+
 func TestApplyJSONPatchRejectsMissingPath(t *testing.T) {
 	_, err := applyJSONPatch([]byte(`{"basics":{}}`), []byte(`[{"op":"replace","path":"/missing","value":true}]`))
 	if err == nil {
