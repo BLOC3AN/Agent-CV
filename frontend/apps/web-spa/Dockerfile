@@ -2,7 +2,8 @@
 #
 # Build từ GỐC repo, không phải từ apps/web-spa — `npm ci` cần package.json
 # của mọi workspace mà package-lock khai:
-#   docker compose --profile full build web-spa   (context: .. — xem docker-compose.yml)
+#   docker compose up -d --build   (hoặc riêng: docker compose build web-spa)
+#   (context: .. — xem docker-compose.yml)
 
 # ── Giai đoạn build ────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS builder
@@ -45,6 +46,10 @@ COPY --from=builder /app/apps/web-spa/dist  ./dist
 EXPOSE 3002
 ENV PORT=3002
 
+# Gọi /api/health nên healthcheck này đi xuyên qua Go — cố ý: container chỉ
+# thật sự "khoẻ" khi cả proxy lẫn backend nó dựa vào đều sống. Hệ quả: backend
+# chập chờn/restart sẽ làm web-spa cũng báo unhealthy dù tiến trình Express
+# vẫn ổn — đừng nhầm đó là lỗi riêng của web-spa.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://localhost:3002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
