@@ -98,7 +98,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
                       <span>{e.title} — {e.company}</span>
                       <span className="text-xs text-gray-500">{e.startDate} – {e.endDate}</span>
                     </div>
-                    <p className="text-xs text-gray-700 whitespace-pre-line mt-1">{e.description}</p>
+                    <p className="text-xs text-gray-700 whitespace-pre-line mt-1">{e.highlights.join('\n')}</p>
                   </div>
                 ))}
               </div>

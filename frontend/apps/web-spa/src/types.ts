@@ -16,7 +16,15 @@ export interface ExperienceItem {
   startDate: string;
   endDate: string;
   current: boolean;
-  description: string;
+  /**
+   * Từng gạch đầu dòng là một phần tử riêng, không phải một khối văn bản.
+   *
+   * Chat sinh JSON Patch nhắm vào /sections/experience/0/highlights/2. Nếu đây
+   * là một chuỗi, mọi đề xuất của AI biến thành ghi đè nguyên khối và màn duyệt
+   * diff chỉ còn "toàn bộ đoạn cũ" đổi thành "toàn bộ đoạn mới" — không còn gì
+   * đáng để người dùng duyệt.
+   */
+  highlights: string[];
 }
 
 export interface ProjectItem {
@@ -26,7 +34,15 @@ export interface ProjectItem {
   startDate: string;
   endDate: string;
   link?: string;
-  description: string;
+  /**
+   * Từng gạch đầu dòng là một phần tử riêng, không phải một khối văn bản.
+   *
+   * Chat sinh JSON Patch nhắm vào /sections/projects/0/highlights/2. Nếu đây
+   * là một chuỗi, mọi đề xuất của AI biến thành ghi đè nguyên khối và màn duyệt
+   * diff chỉ còn "toàn bộ đoạn cũ" đổi thành "toàn bộ đoạn mới" — không còn gì
+   * đáng để người dùng duyệt.
+   */
+  highlights: string[];
 }
 
 export interface EducationItem {
@@ -51,7 +67,15 @@ export interface ActivityItem {
   role: string;
   startDate: string;
   endDate: string;
-  description: string;
+  /**
+   * Từng gạch đầu dòng là một phần tử riêng, không phải một khối văn bản.
+   *
+   * Chat sinh JSON Patch nhắm vào /sections/activities/0/highlights/2. Nếu đây
+   * là một chuỗi, mọi đề xuất của AI biến thành ghi đè nguyên khối và màn duyệt
+   * diff chỉ còn "toàn bộ đoạn cũ" đổi thành "toàn bộ đoạn mới" — không còn gì
+   * đáng để người dùng duyệt.
+   */
+  highlights: string[];
 }
 
 export interface CertificationItem {

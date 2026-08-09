@@ -25,6 +25,34 @@ interface CVEditorViewProps {
   onDownloadPDF: () => void;
 }
 
+/**
+ * Ba mục có `highlights: string[]` — chỉ khay sửa "Kinh nghiệm làm việc"
+ * đang có giao diện chỉnh sửa từng dòng (Task 8); dự án/hoạt động dùng chung
+ * kiểu này để SP-3/SP-4 nối chat vào không phải đổi type lần nữa.
+ */
+type BulletSection = 'experience' | 'projects' | 'activities';
+
+function mapHighlights(
+  cv: CV,
+  section: BulletSection,
+  index: number,
+  fn: (lines: string[]) => string[],
+): CV {
+  const items = cv.sections[section].map((item, i) =>
+    i === index ? { ...item, highlights: fn(item.highlights) } : item,
+  );
+  return { ...cv, sections: { ...cv.sections, [section]: items } };
+}
+
+const setHighlight = (cv: CV, s: BulletSection, idx: number, line: number, value: string) =>
+  mapHighlights(cv, s, idx, (lines) => lines.map((l, i) => (i === line ? value : l)));
+
+const removeHighlight = (cv: CV, s: BulletSection, idx: number, line: number) =>
+  mapHighlights(cv, s, idx, (lines) => lines.filter((_, i) => i !== line));
+
+const addHighlight = (cv: CV, s: BulletSection, idx: number) =>
+  mapHighlights(cv, s, idx, (lines) => [...lines, '']);
+
 export const CVEditorView: React.FC<CVEditorViewProps> = ({
   cv,
   onUpdateCV,
@@ -175,7 +203,9 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const handleApplyAISuggestion = (action: any) => {
     if (action.targetSection === 'experience' && cv.sections.experience.length > 0) {
       const updatedExp = [...cv.sections.experience];
-      updatedExp[0].description = action.content;
+      // Gợi ý AI vẫn tới dưới dạng một khối văn bản nhiều dòng ở demo này;
+      // tách theo dòng để không ghi đè nguyên khối vào mảng highlights.
+      updatedExp[0] = { ...updatedExp[0]!, highlights: action.content.split('\n') };
       onUpdateCV({
         ...cv,
         sections: {
@@ -424,17 +454,37 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                             }}
                             className="w-full p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
                           />
-                          <textarea
-                            rows={3}
-                            placeholder="Mô tả công việc"
-                            value={exp.description}
-                            onChange={(e) => {
-                              const updated = [...cv.sections.experience];
-                              updated[idx].description = e.target.value;
-                              onUpdateCV({ ...cv, sections: { ...cv.sections, experience: updated } });
-                            }}
-                            className="w-full p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
-                          />
+                          <div className="flex flex-col gap-2">
+                            {exp.highlights.map((line, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  aria-label={`Gạch đầu dòng ${i + 1}`}
+                                  value={line}
+                                  onChange={(e) =>
+                                    onUpdateCV(setHighlight(cv, 'experience', idx, i, e.target.value))
+                                  }
+                                  className="flex-1 p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
+                                />
+                                <button
+                                  type="button"
+                                  aria-label={`Xoá gạch đầu dòng ${i + 1}`}
+                                  onClick={() => onUpdateCV(removeHighlight(cv, 'experience', idx, i))}
+                                  className="text-slate-400 hover:text-red-600"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              aria-label="Thêm gạch đầu dòng"
+                              onClick={() => onUpdateCV(addHighlight(cv, 'experience', idx))}
+                              className="self-start text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+                            >
+                              + Thêm gạch đầu dòng
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -652,7 +702,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
-                      {exp.description}
+                      {exp.highlights.join('\n')}
                     </p>
                   </div>
                 ))}
@@ -680,7 +730,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                         {proj.startDate} - {proj.endDate}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-700">{proj.description}</p>
+                    <p className="text-xs text-slate-700">{proj.highlights.join(' ')}</p>
                   </div>
                 ))}
               </div>
