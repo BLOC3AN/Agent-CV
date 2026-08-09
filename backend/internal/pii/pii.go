@@ -33,6 +33,21 @@ func RedactIntro(intro map[string]any) {
 	}
 }
 
+// RedactMeta xoá các khoá PII khỏi `_meta`, sửa tại chỗ.
+//
+// `_meta.originalLinks` và `_meta.droppedFields` lưu toàn bộ giá trị từ v1,
+// gồm PII như `dob`, `photo` và các field không được nhận diện. Chúng đều có
+// thể chứa tên, số điện thoại, email.
+//
+// Giữ lại `verified` (map khoá -> boolean) và `source` (enum): chúng không
+// chứa thông tin định danh. Đó là đường phân chia với `website`/`summary`:
+// xoá thông tin định danh, giữ nội dung nghề nghiệp.
+func RedactMeta(meta map[string]any) {
+	delete(meta, "originalLinks") // từng URL có nhãn từ v1.basics.links
+	delete(meta, "droppedFields") // giá trị lưu trữ của /basics/dob, /basics/photo, v.v.
+	delete(meta, "canonical")     // danh sách tên kỹ năng
+}
+
 // RedactDocument nhận diện hình dạng rồi che đúng chỗ.
 //
 // Nhận diện bằng dữ liệu chứ không bằng cờ phiên bản: trong giai đoạn chuyển
@@ -46,5 +61,8 @@ func RedactDocument(doc map[string]any) {
 	}
 	if basics, ok := doc["basics"].(map[string]any); ok {
 		RedactBasics(basics)
+	}
+	if meta, ok := doc["_meta"].(map[string]any); ok {
+		RedactMeta(meta)
 	}
 }

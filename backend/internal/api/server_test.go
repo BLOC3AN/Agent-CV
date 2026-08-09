@@ -109,6 +109,62 @@ func TestChatPromptNeverCarriesPIIToModel(t *testing.T) {
 	}
 }
 
+// V2 cũng không được để PII lọt ra, kể cả trong _meta.droppedFields và
+// _meta.originalLinks. Prompt phải giữ lại title, summary, website cho model
+// có ngữ cảnh để đề xuất có ý nghĩa.
+func TestChatPromptNeverCarriesPIIToModelForV2(t *testing.T) {
+	profile := []byte(`{
+		"schemaVersion":2,"language":"vi",
+		"sections":{
+			"intro":{
+				"fullName":"Nguyễn Văn A","email":"a@example.com","phone":"0901234567",
+				"location":"Hà Nội","avatarUrl":"https://cdn.example/avatar.jpg",
+				"title":"Kỹ sư AI","summary":"Ba năm làm edge AI","website":"https://ada.dev"
+			}
+		},
+		"_meta":{
+			"originalLinks":[
+				{"url":"https://linkedin.com/in/a","label":"LinkedIn"},
+				{"url":"https://github.com/a","label":"GitHub"}
+			],
+			"droppedFields":{
+				"/basics/dob":"1999-01-02",
+				"/basics/photo":"https://cdn.example/photo.jpg",
+				"/_unrecognized/basics/summary":"(đầu trang) LE THANH HAI 0964525151• lethhai3003@gmail.com • https://www.linkedin.com/in/hailt8/"
+			},
+			"canonical":{"Node.js":"nodejs","TypeScript":"typescript"},
+			"verified":{"\/sections\/intro\/fullName":true},
+			"source":"manual"
+		}
+	}`)
+
+	prompt := chatUserPrompt(profile, nil, "", "Viết lại phần giới thiệu")
+
+	// PII từ sections.intro, _meta.droppedFields, _meta.originalLinks không được lọt ra
+	for _, pii := range []string{
+		"Nguyễn Văn A", "a@example.com", "0901234567", // sections.intro PII
+		"Hà Nội", "cdn.example/avatar.jpg", // sections.intro PII
+		"1999-01-02", "cdn.example/photo.jpg", // _meta.droppedFields
+		"0964525151", "lethhai3003@gmail.com", // _meta.droppedFields._unrecognized
+		"linkedin.com/in/a", "github.com/a", // _meta.originalLinks
+		"Node.js", "TypeScript", // _meta.canonical
+	} {
+		if strings.Contains(prompt, pii) {
+			t.Fatalf("prompt gửi model còn chứa PII %q:\n%s", pii, prompt)
+		}
+	}
+
+	// Nội dung nghề nghiệp và trạng thái xác nhận phải còn lại
+	for _, kept := range []string{
+		"Kỹ sư AI", "Ba năm làm edge AI", "https://ada.dev", // title, summary, website
+		"manual", // _meta.source
+	} {
+		if !strings.Contains(prompt, kept) {
+			t.Fatalf("prompt mất nội dung phi-PII %q:\n%s", kept, prompt)
+		}
+	}
+}
+
 // Model trả JSON Pointer trỏ vào hồ sơ thật. Nếu che PII bằng cách xoá luôn
 // khoá `basics`, mọi con trỏ `/basics/...` model sinh ra đều trỏ vào hư không
 // — đúng lỗi mà redactKeepShape() bên TypeScript đã ghi lại.
