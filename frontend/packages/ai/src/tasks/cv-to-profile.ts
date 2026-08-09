@@ -33,7 +33,7 @@ Quy tắc bắt buộc:
 - "language" đặt là "vi".
 - schemaVersion luôn là 1.
 
-Toàn bộ nội dung văn xuôi (highlights, summary, headline, tên mục) phải viết
+Toàn bộ nội dung văn xuôi (highlights, introduce, headline, tên mục) phải viết
 bằng TIẾNG VIỆT tự nhiên, đúng ngữ pháp, giọng chuyên nghiệp. Nếu CV gốc là
 tiếng Anh thì DỊCH sang tiếng Việt — dịch nghĩa, không dịch từng từ. Giữ nguyên
 tên riêng, tên công nghệ, tên công ty, tên trường ở dạng gốc.`
@@ -50,7 +50,7 @@ Hard rules:
 - Set "language" to "en".
 - schemaVersion is always 1.
 
-All prose (highlights, summary, headline) must be natural, professional English.`
+All prose (highlights, introduce, headline) must be natural, professional English.`
 
 export const cvToProfileTask = defineTask<CvToProfileInput, ParsedProfile>({
   name: 'parse_cv_to_profile',

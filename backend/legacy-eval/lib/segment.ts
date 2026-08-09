@@ -12,7 +12,7 @@
  */
 
 export type SectionKind =
-  | 'summary'
+  | 'introduce'
   | 'education'
   | 'work'
   | 'projects'
@@ -31,7 +31,7 @@ export interface CvSection {
 
 /** Từ khoá tiêu đề — song ngữ, thứ tự quan trọng (khớp cụ thể trước) */
 const HEADINGS: [SectionKind, RegExp][] = [
-  ['summary', /^(summary|profile|objective|about( me)?|introduction|giới thiệu|mục tiêu( nghề nghiệp)?|tóm tắt|sơ lược|bản thân)\b/i],
+  ['introduce', /^(summary|profile|objective|about( me)?|introduction|giới thiệu|mục tiêu( nghề nghiệp)?|tóm tắt|sơ lược|bản thân)\b/i],
   ['education', /^(education|academic|qualifications?|học vấn|trình độ( học vấn)?|quá trình học tập|bằng cấp)\b/i],
   ['work', /^(work|experience|employment|professional|career|kinh nghiệm( làm việc)?|quá trình công tác|kinh nghiệm)\b/i],
   ['projects', /^(projects?|portfolio|dự án|sản phẩm|đồ án)\b/i],
@@ -83,10 +83,10 @@ export function segmentCv(text: string): CvSection[] {
   }
   if (current) sections.push(current)
 
-  // Phần đầu trước tiêu đề đầu tiên (tên, chức danh, liên hệ) → summary
+  // Phần đầu trước tiêu đề đầu tiên (tên, chức danh, liên hệ) → introduce
   const head = preamble.join('\n').trim()
   if (head.length > 0) {
-    sections.unshift({ kind: 'summary', heading: '(đầu trang)', body: head })
+    sections.unshift({ kind: 'introduce', heading: '(đầu trang)', body: head })
   }
 
   return sections

@@ -71,8 +71,8 @@ function targetOf(id: string, profile: Profile): { path: string; section: string
   if (id.includes('project')) return { path: '/projects', section: 'Dự án' }
   if (id.includes('edu') || id.includes('gpa')) return { path: '/education', section: 'Học vấn' }
   if (id.includes('skill') || id.includes('tech')) return { path: '/skills', section: 'Kỹ năng' }
-  if (id.includes('summary') || id.includes('headline')) {
-    return { path: '/basics/summary', section: 'Giới thiệu' }
+  if (id.includes('summary') || id.includes('introduce') || id.includes('headline')) {
+    return { path: '/basics/introduce', section: 'Giới thiệu' }
   }
   // Các tiêu chí về gạch đầu dòng (số liệu, động từ hành động) rơi vào mục nào
   // ĐANG CÓ nội dung — trỏ vào mục rỗng thì người dùng tới nơi không có gì để sửa.

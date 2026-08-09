@@ -335,7 +335,7 @@ function wouldBreakProfile(profile: Profile, op: PatchOp): string | null {
 
   // Parse THÀNH CÔNG vẫn chưa đủ: Zod LƯỢC BỎ khoá lạ chứ không báo lỗi.
   //
-  // Đo thật: model đề xuất `add /summary` (hồ sơ chưa có phần giới thiệu nên
+  // Đo thật: model đề xuất `add /introduce` (hồ sơ chưa có phần giới thiệu nên
   // nó đoán chỗ). `pathExists` cho qua vì `add` được phép tạo field mới,
   // `safeParse` cũng cho qua vì Zod chỉ lặng lẽ vứt `summary` đi. Op được áp,
   // hệ thống báo "đã áp dụng 1 thay đổi", và nội dung BIẾN MẤT — người dùng

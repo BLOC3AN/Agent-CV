@@ -1554,6 +1554,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		Message   string              `json:"message"`
 		Answers   []map[string]string `json:"answers"`
 		ModelRef  string              `json:"modelRef"`
+		Hint      string              `json:"hint"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || body.ProfileID == "" || len(strings.TrimSpace(body.Message)) < 2 || len(body.Message) > 2000 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body chat không hợp lệ"})
@@ -1609,7 +1610,11 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
-	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": "PROFILE:\n" + string(profileRaw) + "\n\nHISTORY:\n" + jsonString(history) + "\n\nUSER:\n" + body.Message}}
+	hint := ""
+	if body.Hint != "" {
+		hint = "\n\nGỢI Ý BIẾN ĐỔI TỪ GIAO DIỆN: " + body.Hint
+	}
+	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": "PROFILE:\n" + string(profileRaw) + "\n\nHISTORY:\n" + jsonString(history) + hint + "\n\nUSER:\n" + body.Message}}
 	sendStep("Đang hiểu yêu cầu của bạn")
 	sendStep("Đang xem lại hồ sơ để trả lời")
 	sendStep("Đang suy nghĩ")
@@ -1669,7 +1674,7 @@ Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
 Nếu người dùng yêu cầu sửa, viết lại, nhóm, sắp xếp hoặc cập nhật hồ sơ, KHÔNG được nói đã cập nhật. Hãy trả đề xuất để người dùng duyệt:
 {"kind":"patch","summary":"...","ops":[{"op":"add|replace|remove","path":"/skills/0/group","value":"...","rationale":"...","grounding":{"type":"existing_field|user_message|kb|inference","ref":"..."},"kbRefs":[]}]}
 
-Quy tắc bắt buộc: không tự ghi hồ sơ; không bịa dữ kiện; tối đa 20 ops; skills luôn là mảng các object có name và chỉ được dùng name, level, canonical, group; muốn nhóm skills thì cập nhật field group tại từng /skills/N. value bắt buộc với add/replace. Mỗi op/path chỉ xuất hiện một lần.`
+Quy tắc bắt buộc: không tự ghi hồ sơ; không bịa dữ kiện; tối đa 20 ops; skills luôn là mảng các object có name và chỉ được dùng name, level, canonical, group; muốn nhóm skills thì cập nhật field group tại từng /skills/N. Phần giới thiệu cá nhân luôn dùng đường dẫn /basics/introduce. value bắt buộc với add/replace. Mỗi op/path chỉ xuất hiện một lần.`
 }
 
 func parseChatModelOutput(raw string) chatModelOutput {
@@ -2022,7 +2027,13 @@ func postCloudChat(ctx context.Context, messages []map[string]string, provider s
 		return "", fmt.Errorf("thiếu secret %s cho %s", pc.APIKeyEnv, provider)
 	}
 	endpoint := strings.TrimRight(pc.BaseURL, "/") + "/chat/completions"
-	request := map[string]any{"model": mc.ModelID, "messages": messages, "temperature": 0.2, "max_tokens": 1800}
+	request := map[string]any{"model": mc.ModelID, "messages": messages}
+	if provider == "openai" && strings.HasPrefix(mc.ModelID, "gpt-5") {
+		request["max_completion_tokens"] = 1800
+	} else {
+		request["temperature"] = 0.2
+		request["max_tokens"] = 1800
+	}
 	if mc.StructuredOutput == "json_object" {
 		request["response_format"] = map[string]any{"type": "json_object"}
 	} else if mc.StructuredOutput == true {
@@ -2093,18 +2104,18 @@ func chatResponseSchema() map[string]any {
 			"kbRefs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		},
 	}
-	return map[string]any{"anyOf": []any{
-		map[string]any{
-			"type": "object", "additionalProperties": false,
-			"required":   []string{"kind", "text"},
-			"properties": map[string]any{"kind": map[string]any{"type": "string", "const": "reply"}, "text": map[string]any{"type": "string"}},
+	// OpenAI structured outputs require a root object. Keep reply/patch in one
+	// strict object; unused fields are empty for the other response kind.
+	return map[string]any{
+		"type": "object", "additionalProperties": false,
+		"required": []string{"kind", "text", "summary", "ops"},
+		"properties": map[string]any{
+			"kind":    map[string]any{"type": "string", "enum": []string{"reply", "patch"}},
+			"text":    map[string]any{"type": "string"},
+			"summary": map[string]any{"type": "string"},
+			"ops":     map[string]any{"type": "array", "maxItems": 20, "items": patchOp},
 		},
-		map[string]any{
-			"type": "object", "additionalProperties": false,
-			"required":   []string{"kind", "summary", "ops"},
-			"properties": map[string]any{"kind": map[string]any{"type": "string", "const": "patch"}, "summary": map[string]any{"type": "string"}, "ops": map[string]any{"type": "array", "minItems": 1, "maxItems": 20, "items": patchOp}},
-		},
-	}}
+	}
 }
 
 func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {

@@ -15,16 +15,14 @@ backend/
   internal/             Go HTTP/API code
   db/                   migrations
   docs/                 product, TDD, use cases, test cases, migration notes
-  legacy-node-services/ PDFKit chuyển tiếp
+  legacy-node-services/ PDFKit dependency cho Go worker
 frontend/
   apps/web/             React + Next.js UI
-  packages/             schema, templates và runtime chuyển tiếp
-  services/worker/      worker Node chuyển tiếp
+  packages/             schema, templates và thư viện dùng chung
 ```
 
-Backend Go đang được chuyển dần theo API contract. Frontend React/Next.js và
-Tailwind CSS được giữ ổn định trong lúc migration; phần Node legacy không mở
-rộng thêm.
+Backend Go hiện là runtime nghiệp vụ duy nhất theo API contract. Frontend
+React/Next.js chỉ đảm nhiệm UI; phần Node legacy đã được gỡ khỏi runtime.
 
 ## Chạy backend Go
 
@@ -43,7 +41,7 @@ Backend hiện có vertical slice đầu tiên:
 Mỗi lần upload phải có `uploadId` riêng. Cùng một file ở hai lần upload khác
 nhau không được dùng lại kết quả cũ.
 
-## Chạy frontend legacy trong giai đoạn chuyển tiếp
+## Chạy frontend và backend Go
 
 ```bash
 cd frontend
@@ -52,8 +50,8 @@ npm run typecheck
 npm run dev
 ```
 
-Frontend hiện vẫn dùng một số package và worker Node cũ để giữ chức năng. Các
-route sẽ được chuyển sang Go theo quy trình trong
+Frontend dùng các package dùng chung cho UI/schema; API và worker production
+đều chạy bằng Go. Quy ước và contract được ghi trong
 [backend/docs/MIGRATION_GO.md](backend/docs/MIGRATION_GO.md).
 
 ## Docker Compose
@@ -63,7 +61,6 @@ Compose nằm ở `backend/docker-compose.yml`:
 Để chạy đầy đủ stack và cho frontend gọi trực tiếp Go API:
 
 ```bash
-GO_API_CUTOVER=true \
 BUILDX_BUILDER=default \
 docker compose -f backend/docker-compose.yml --env-file .env \
   --profile full up -d --build
@@ -117,9 +114,9 @@ BUILDX_BUILDER=default ./backend/scripts/build-all.sh
 
 Hướng dẫn sửa DNS lâu dài cho Docker daemon: [`backend/docs/DOCKER_DNS.md`](backend/docs/DOCKER_DNS.md).
 
-Các service gồm Go backend, Next frontend, Postgres, Redis, PDFKit và worker
-chuyển tiếp. Dev có giá trị `AUTH_SECRET` mặc định; production phải đặt secret
-riêng trong `.env` hoặc secret manager.
+Các service gồm Go backend, Go worker, Next frontend, Postgres, Redis và PDFKit
+(dependency tách text). Dev có giá trị `AUTH_SECRET` mặc định; production phải
+đặt secret riêng trong `.env` hoặc secret manager.
 
 Chat giữ lịch sử bền vững trong PostgreSQL và cache tối đa 10 tin gần nhất theo
 `chat:memory:{userID}:{sessionID}` trong Redis (TTL 7 ngày). Khi một đề xuất
@@ -130,9 +127,8 @@ Khung chat dùng theme CV hiện tại (màu nhấn, font, cỡ chữ và giãn 
 456px trên desktop. Nội dung assistant hỗ trợ Markdown/GFM, LaTeX (`$...$`,
 `$$...$$`) và Mermaid code fence với `securityLevel: strict`.
 
-`GO_API_CUTOVER=true` là cờ để middleware rewrite toàn bộ `/api/*` từ frontend
-sang Go backend. Đặt `false` để rollback về Node API route trong giai đoạn
-chuyển tiếp.
+Middleware luôn rewrite toàn bộ `/api/*` từ frontend sang Go backend. Next chỉ
+render UI; không còn Node API fallback.
 
 ## Tài liệu
 
@@ -144,14 +140,14 @@ chuyển tiếp.
 - [Use cases](backend/docs/USECASES.md)
 - [Test cases](backend/docs/TESTCASES.md)
 
-##TODO
-Hiện vẫn nên giữ fallback Node vì còn các phần sau:
+## TODO — Go-only cutover
 
-  - Worker xử lý CV và OCR/image branch vẫn dùng Node/Python.
-  - Một số API phụ của Next chưa chuyển hoàn toàn sang Go: auth, upload/import, job stream, analyze, KB.
-  - PDF export/render nâng cao vẫn còn phụ thuộc Playwright/Next.
-  - Các edge case contract chưa có integration test đầy đủ với dữ liệu thật.
-  - Cần rollback nhanh nếu Go gặp lỗi production như timeout, migration hoặc ownership.
+Runtime nghiệp vụ đã chuyển hoàn toàn sang Go và Node API/worker fallback đã
+được gỡ. Các việc còn lại là kiểm thử staging và vận hành, được xác nhận bằng
+[GO_CUTOVER_USECASES.md](backend/docs/GO_CUTOVER_USECASES.md) và
+[GO_CUTOVER_TESTCASES.md](backend/docs/GO_CUTOVER_TESTCASES.md):
 
-  Tuy nhiên, với flow trung tâm reply → proposal → confirm → apply, Go đã là đường chính. Node hiện chỉ nên giữ như safety net, không phải runtime nghiệp vụ mặc định.
-
+- Chạy integration/staging test với dữ liệu thật, gồm ownership, retry,
+  retention, SSE, import, analyze, chat/proposal và export.
+- Theo dõi các job Go và PDFKit dependency trong production; không có request
+  nghiệp vụ nào được fallback sang Next.

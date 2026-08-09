@@ -259,7 +259,7 @@ export interface ProposePatchInput {
    */
   corrections?: string[]
   /** Hint có cấu trúc từ gợi ý UI, giúp model chọn phép biến đổi phù hợp. */
-  hint?: 'enrich_content' | 'tighten_bullets' | 'strong_verbs' | 'rewrite_summary'
+  hint?: 'enrich_content' | 'tighten_bullets' | 'strong_verbs' | 'rewrite_introduce'
 }
 
 const PATCH_VI = `Bạn đề xuất thay đổi cho CV dưới dạng JSON Patch (RFC 6902). Trả về DUY NHẤT một object JSON.
@@ -302,7 +302,7 @@ QUY TẮC CỨNG:
 - Mỗi cặp "op + path" chỉ được xuất hiện MỘT LẦN. Không lặp lại cùng một
   đường dẫn, kể cả khi rationale khác nhau. Với mỗi kỹ năng chỉ tạo tối đa một
   op cập nhật trường "group".
-- Phần giới thiệu bản thân nằm ở "/basics/summary", KHÔNG phải "/summary".
+- Phần giới thiệu bản thân nằm ở "/basics/introduce", KHÔNG phải "/introduce".
   Chức danh nằm ở "/basics/headline". Field nào hồ sơ chưa có thì vẫn dùng
   đúng đường dẫn đó để thêm.
 - TUYỆT ĐỐI KHÔNG xoá một mục rồi thêm lại bản đã sửa. Sửa tại chỗ bằng
@@ -329,7 +329,7 @@ KHI YÊU CẦU LÀ "LÀM GIÀU" / "ENRICH_CONTENT":
 
 HINT TỪ GIAO DIỆN (nếu có) là chỉ dẫn về CÁCH BIẾN ĐỔI, không phải dữ kiện mới:
 enrich_content = làm giàu chiều sâu; tighten_bullets = cô đọng;
-strong_verbs = tăng động từ chủ động; rewrite_summary = viết lại summary.
+strong_verbs = tăng động từ chủ động; rewrite_introduce = viết lại phần giới thiệu.
 
 "summary" — một câu tóm tắt bạn đã đề xuất gì.`
 
@@ -368,7 +368,7 @@ HARD RULES:
   Never replace it with a string — each skill is an object with "name".
 - Emit each op + path pair only ONCE. Never repeat a path with a different
   rationale. For each skill, create at most one op for the "group" field.
-- The personal summary lives at "/basics/summary", never "/summary".
+- The personal introduction lives at "/basics/introduce", never "/introduce".
 - NEVER remove an item and re-add an edited copy. Edit in place with "replace",
   or set just the field you need. Remove-then-re-add loses content if the re-add
   is truncated, and shifts the indices of every later op.

@@ -78,7 +78,7 @@ export function chunkProfile(profile: Profile): ProfileChunk[] {
   }
 
   push('/basics/headline', profile.basics.headline)
-  push('/basics/summary', profile.basics.summary)
+  push('/basics/introduce', profile.basics.introduce)
 
   profile.skills.forEach((s, i) => push(`/skills/${i}/name`, s.name))
   profile.languages.forEach((l, i) => push(`/languages/${i}`, `${l.name} ${l.level ?? ''}`))

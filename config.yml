@@ -228,9 +228,7 @@ providers:
   deepseek:
     enabled: true
     base_url: "https://api.deepseek.com"
-    # Tương thích với .env hiện tại đang dùng DEEPSEAK_API_KEY (sai chính tả).
-    # Có thể đổi sang DEEPSEEK_API_KEY sau khi chuẩn hoá secret.
-    api_key_env: DEEPSEAK_API_KEY
+    api_key_env: DEEPSEEK_API_KEY
     models:
       v4:
         model_id: "deepseek-v4-flash"

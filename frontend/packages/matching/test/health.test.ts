@@ -27,7 +27,7 @@ const weak = () =>
 
 const strong = () =>
   p({
-    basics: { name: 'A', summary: 'Kỹ sư phần mềm 3 năm kinh nghiệm.' },
+    basics: { name: 'A', introduce: 'Kỹ sư phần mềm 3 năm kinh nghiệm.' },
     work: [
       {
         org: 'ABC',

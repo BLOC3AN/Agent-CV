@@ -12,9 +12,8 @@ FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
-# `npm ci` cần package.json của MỌI workspace mà package-lock khai, kể cả
-# workspace mà web không dùng: thiếu một file thì lock bị coi là lệch và lệnh
-# dừng ngay. Copy riêng từng file để sửa code không phải cài lại npm.
+# `npm ci` cần package.json của mọi workspace mà package-lock khai. Copy riêng
+# từng file để sửa code không phải cài lại npm.
 COPY frontend/package.json frontend/package-lock.json ./
 COPY frontend/apps/web/package.json             apps/web/
 COPY frontend/packages/schema/package.json      packages/schema/
@@ -22,18 +21,13 @@ COPY frontend/packages/ai/package.json          packages/ai/
 COPY frontend/packages/db/package.json          packages/db/
 COPY frontend/packages/kb/package.json          packages/kb/
 COPY frontend/packages/matching/package.json    packages/matching/
-COPY frontend/packages/pdf/package.json         packages/pdf/
 COPY frontend/packages/templates/package.json   packages/templates/
-COPY frontend/services/worker/package.json      services/worker/
 
 # KHÔNG `--omit=dev`: `next build` cần typescript và @types/* để biên dịch.
-# `--ignore-scripts` chặn postinstall của playwright tải browser ~400MB — web
-# không render PDF, đó là việc của worker.
 RUN npm ci --ignore-scripts
 
 COPY frontend/tsconfig.base.json frontend/tsconfig.json config.yml ./
 COPY frontend/packages/          packages/
-COPY frontend/services/worker/   services/worker/
 COPY frontend/apps/web/          apps/web/
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -45,19 +39,13 @@ FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-
 COPY --from=builder /app /app
 
-# Bỏ devDependencies SAU khi build: vitest, playwright và @types/* chỉ cần lúc
-# biên dịch. Prune ở đây chứ không cài hai lần — cài lại từ đầu sẽ phân giải ra
+# Bỏ devDependencies SAU khi build: vitest và @types/* chỉ cần lúc biên dịch.
+# Prune ở đây chứ không cài hai lần — cài lại từ đầu sẽ phân giải ra
 # cây phụ thuộc khác với cây vừa build xong.
 #
 RUN npm prune --omit=dev --ignore-scripts && npm cache clean --force
-
-# PDF export chạy trong web route khi người dùng bấm tải xuống. Browser phải
-# có mặt ở runtime; chỉ cài package Playwright là chưa đủ.
-RUN npx playwright install --with-deps chromium
 
 # `typescript` phải QUAY LẠI sau khi prune, dù nó là devDependency.
 # `next.config.ts` viết bằng TypeScript và `next start` đọc file config MỖI LẦN
@@ -71,9 +59,7 @@ RUN npx playwright install --with-deps chromium
 # vừa dùng để build.
 COPY --from=builder /app/node_modules/typescript /app/node_modules/typescript
 
-# Thư mục file upload — web GHI, worker ĐỌC, dùng chung volume `uploads`.
-# Đường dẫn phải khớp STORAGE_ROOT của worker, nếu không worker báo FILE_MISSING
-# với mọi file web vừa lưu.
+# Thư mục file upload dùng chung với Go worker.
 RUN mkdir -p /app/var/storage
 ENV STORAGE_ROOT=/app/var/storage
 

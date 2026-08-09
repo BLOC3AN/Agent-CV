@@ -59,12 +59,12 @@ export function profileCompleteness(profile: Profile): Completeness {
       path: '/basics',
     },
     {
-      key: 'summary',
+      key: 'introduce',
       label: 'Giới thiệu bản thân',
       weight: 15,
-      done: Boolean(profile.basics.summary?.trim()),
+      done: Boolean(profile.basics.introduce?.trim()),
       todo: 'Viết vài dòng giới thiệu bản thân',
-      path: '/basics/summary',
+      path: '/basics/introduce',
     },
     {
       // Kinh nghiệm HOẶC dự án — sinh viên chưa đi làm không vì thế mà bị trừ

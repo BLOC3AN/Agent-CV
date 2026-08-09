@@ -65,7 +65,7 @@ const SECTION_VI: Record<string, string> = {
   certifications: 'Chứng chỉ',
   cert: 'Chứng chỉ',
   basics: 'Thông tin chung',
-  summary: 'Giới thiệu',
+  introduce: 'Giới thiệu',
   headline: 'Chức danh',
 }
 

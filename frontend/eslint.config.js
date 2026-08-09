@@ -29,7 +29,6 @@ const NO_MODEL_SDK = MODEL_SDKS.map((name) => ({
 }))
 
 /**
- * `@hr/worker/queues` là subpath ĐƯỢC KHAI trong "exports" — hợp lệ.
  * `@hr/ai/src/gateway` thì không: nó bám vào bố cục thư mục nội bộ của package
  * khác, nên mọi lần sắp xếp lại file sẽ gãy ở chỗ không ai ngờ.
  */
@@ -42,7 +41,7 @@ const NO_DEEP_IMPORT = {
 
 const NO_UPWARD_IMPORT = [
   {
-    group: ['@hr/web', '@hr/worker', '@hr/worker/*'],
+    group: ['@hr/web'],
     message:
       'TDD §4: chiều phụ thuộc là apps/services → packages, KHÔNG có chiều ngược lại. ' +
       'Cần dữ liệu từ tầng trên thì nhận qua tham số, đừng import ngược.',
@@ -111,7 +110,6 @@ export default tseslint.config(
       // `destructuring: 'all'` chứ không phải mặc định 'any': `let { valid, rejected }`
       // với `rejected` được gán lại là cách viết đúng, mặc định lại bắt lỗi nó.
       'prefer-const': ['error', { destructuring: 'all' }],
-      // `skipRegExps`: services/worker/src/cv-chunk.ts có U+200B NẰM TRONG regex
       // nhận diện gạch đầu dòng — đó là ký tự cần khớp, không phải lỗi gõ nhầm.
       'no-irregular-whitespace': ['error', { skipRegExps: true }],
     },
@@ -137,7 +135,7 @@ export default tseslint.config(
   // xoá sạch cái trước. Đây không phải lý thuyết — bản đầu của file này viết
   // thành 4 khối chồng nhau, và 2 trong 3 rule kiến trúc lặng lẽ không bao giờ
   // nổ. Vì vậy mỗi phạm vi có ĐÚNG MỘT khối, gộp bằng hàm dưới đây.
-  ...['apps/**/*.{ts,tsx}', 'services/worker/**/*.ts', 'eval/**/*.ts', 'scripts/**/*.ts'].map(
+  ...['apps/**/*.{ts,tsx}', 'eval/**/*.ts', 'scripts/**/*.ts'].map(
     (glob) => ({
       files: [glob],
       rules: { 'no-restricted-imports': ['error', restricted({ layer: 'top' })] },

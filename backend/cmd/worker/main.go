@@ -188,8 +188,8 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	if phone := firstMatch(seg.Text, `(?:\+|00)?[0-9][0-9 ()-]{7,}[0-9]`); phone != "" {
 		basics["phone"] = strings.TrimSpace(phone)
 	}
-	if summary := sectionText(seg.Merged["summary"]); summary != "" {
-		basics["summary"] = summary
+	if introduce := sectionText(seg.Merged["introduce"]); introduce != "" {
+		basics["introduce"] = introduce
 	}
 	profile := profileFromSegments(lang, seg.Merged)
 	profile["basics"] = basics
@@ -198,9 +198,21 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	if err := db.QueryRowContext(ctx, `INSERT INTO profiles(user_id,data,language) VALUES($1,$2::jsonb,$3) RETURNING id`, j.UserID, raw, lang).Scan(&profileID); err != nil {
 		return fmt.Errorf("PROFILE_CREATE_FAILED: %w", err)
 	}
-	result := jsonString(map[string]any{"profileId": profileID, "language": lang, "quality": seg.Quality, "warnings": seg.Reasons, "sections": seg.Merged})
+	// Job results are exposed through the job API and must stay metadata-only.
+	// The full profile is stored in profiles.data; copying extracted sections
+	// here duplicates names, email, phone and CV text into the queue result.
+	result := jsonString(parseCVJobResult(profileID, lang, seg.Quality, seg.Reasons))
 	_, err = db.ExecContext(ctx, `UPDATE jobs SET status='done',result=$2::jsonb,error=NULL,finished_at=now() WHERE id=$1`, j.ID, result)
 	return err
+}
+
+func parseCVJobResult(profileID, language, quality string, warnings []string) map[string]any {
+	return map[string]any{
+		"profileId": profileID,
+		"language":  language,
+		"quality":   quality,
+		"warnings":  warnings,
+	}
 }
 
 // PDFKit has already separated the CV into deterministic sections. Keep that
@@ -214,8 +226,8 @@ func profileFromSegments(language string, merged map[string]string) map[string]a
 		"activities": []any{}, "certifications": []any{}, "languages": []any{},
 		"_meta": map[string]any{"source": "pdf_import", "verified": map[string]any{}},
 	}
-	if summary := sectionText(merged["summary"]); summary != "" {
-		p["basics"].(map[string]any)["summary"] = summary
+	if introduce := sectionText(merged["introduce"]); introduce != "" {
+		p["basics"].(map[string]any)["introduce"] = introduce
 	}
 	p["education"] = parseEducation(merged["education"])
 	p["work"] = parseWork(merged["work"])
@@ -244,7 +256,7 @@ func stripBullet(line string) string {
 
 func sectionText(raw string) string {
 	lines := cleanLines(raw)
-	if len(lines) > 0 && (strings.EqualFold(lines[0], "summary") || strings.EqualFold(lines[0], "profile")) {
+	if len(lines) > 0 && (strings.EqualFold(lines[0], "summary") || strings.EqualFold(lines[0], "profile") || strings.EqualFold(lines[0], "introduction")) {
 		lines = lines[1:]
 	}
 	return strings.TrimSpace(strings.Join(lines, " "))

@@ -15,7 +15,7 @@ describe('expandCompactPath', () => {
 
   it('con trỏ vốn đã đúng thì giữ nguyên — gọi lên là vô hại', () => {
     expect(expandCompactPath('/work/0/highlights/0')).toBe('/work/0/highlights/0')
-    expect(expandCompactPath('/basics/summary')).toBe('/basics/summary')
+  expect(expandCompactPath('/basics/introduce')).toBe('/basics/introduce')
   })
 
   it('null đi qua nguyên vẹn', () => {

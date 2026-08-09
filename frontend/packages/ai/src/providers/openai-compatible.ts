@@ -55,7 +55,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
           : { type: 'json_object' }
     }
     const res = await this.request(body, req.signal)
-    if (!stream) return this.parse(await res.json())
+    if (!stream) return this.parse((await res.json()) as CompletionResponse)
     return this.readStream(res, req.onToken!)
   }
 

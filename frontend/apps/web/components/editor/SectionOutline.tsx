@@ -16,7 +16,7 @@ import type { Profile } from '@hr/schema'
 function countItems(profile: Profile | null, id: SectionId): number {
   if (!profile) return 0
   switch (id) {
-    case 'summary': return profile.basics.summary ? 1 : 0
+    case 'introduce': return profile.basics.introduce ? 1 : 0
     case 'work': return profile.work.length
     case 'projects': return profile.projects.length
     case 'education': return profile.education.length

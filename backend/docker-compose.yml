@@ -71,9 +71,8 @@ services:
     image: redis:7-alpine
     container_name: hr-redis
     restart: unless-stopped
-    # maxmemory-policy PHẢI là noeviction: BullMQ lưu trạng thái job trong
-    # Redis, `allkeys-lru` sẽ xoá âm thầm khi đầy — job biến mất mà không ai
-    # báo lỗi. Thà từ chối ghi để lộ ra ngay còn hơn mất việc của user.
+    # maxmemory-policy PHẢI là noeviction: Redis chỉ là cache/chat memory;
+    # trạng thái job bền vững nằm trong PostgreSQL.
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '512mb', '--maxmemory-policy', 'noeviction']
     ports:
       - '6380:6379'
@@ -121,8 +120,6 @@ services:
       # Dev default giúp `docker compose` quản lý từng service; production
       # phải ghi đè bằng AUTH_SECRET thật trong .env/secret manager.
       AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me}
-      # Go đã là business API mặc định; đặt false chỉ khi cần rollback tạm thời.
-      GO_API_CUTOVER: ${GO_API_CUTOVER:-true}
       GO_BACKEND_URL: http://backend:8080
     ports:
       - '3000:3000'
@@ -134,7 +131,7 @@ services:
       redis: { condition: service_healthy }
     profiles: ['full']
 
-  # BullMQ: parse CV, export PDF (Playwright), embed
+  # Go worker: parse CV, match analysis và retention
   worker:
     build:
       context: .

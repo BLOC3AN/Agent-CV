@@ -14,7 +14,7 @@ Luna và `Neura Plus` dùng DeepSeek V4 Flash.
 | Neura Pro | `openai.luna` | OpenAI `gpt-5.6-luna` | Không |
 | Neura Plus | `deepseek.v4` | DeepSeek `deepseek-v4-flash` | Không |
 
-Khi Go cutover bật, OpenAI và DeepSeek được Go routing gọi qua contract OpenAI-compatible; Node provider cũ chỉ còn là rollback safety net. Không đưa SDK hoặc API key vào
+OpenAI và DeepSeek được Go routing gọi qua contract OpenAI-compatible. Không đưa SDK hoặc API key vào
 frontend; lựa chọn chỉ đi qua API route và server validate bằng allow-list.
 
 ## Luồng
@@ -22,7 +22,7 @@ frontend; lựa chọn chỉ đi qua API route và server validate bằng allow-
 1. UI chọn `modelRef` và gửi cùng request `POST /api/chat`.
 2. Go API nhận `modelRef` và resolve provider/alias từ `HR_CONFIG_PATH` (mặc định `/app/config.yml`).
 3. Endpoint, `model_id`, `thinking`, structured output và secret env đều lấy từ `config.yml`; không hard-code trong Go.
-4. Node provider cũ chỉ dùng khi rollback bằng `GO_API_CUTOVER=false`.
+4. Go provider chịu trách nhiệm routing; không có Node provider fallback.
 
 Nếu key cloud thiếu hoặc provider lỗi, lượt chat trả lỗi theo cơ chế hiện tại;
 không tự động gửi dữ liệu sang provider khác ngoài model người dùng đã chọn.
@@ -33,7 +33,7 @@ không tự động gửi dữ liệu sang provider khác ngoài model người 
 
 - `OPENAI_API_KEY`
 - `DEEPSEEK_API_KEY` (tên chuẩn)
-- `DEEPSEAK_API_KEY` là tên đang khai báo trong `config.yml`; Go đọc đúng trường `api_key_env` và không log secret
+- Go đọc đúng trường `api_key_env` từ `config.yml` và không log secret.
 
 Không commit `.env`. Nên đổi/thu hồi key nếu key đã từng bị ghi vào log, issue
 hoặc chia sẻ ngoài môi trường triển khai.

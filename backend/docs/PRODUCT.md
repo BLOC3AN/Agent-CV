@@ -248,7 +248,7 @@ cụ thể, và người dùng bấm vào phải xem được nó gồm những 
 | Thành phần | Trọng số | Đủ khi |
 |---|---|---|
 | Thông tin liên hệ | 10% | có tên + ít nhất một cách liên hệ |
-| Giới thiệu | 15% | `basics.summary` không rỗng |
+| Giới thiệu | 15% | `basics.introduce` không rỗng |
 | Kinh nghiệm **hoặc** Dự án | 30% | ít nhất một mục có gạch đầu dòng |
 | Học vấn | 15% | ít nhất một mục |
 | Kỹ năng | 15% | ít nhất 5 kỹ năng |

@@ -19,7 +19,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Gateway, makeSectionTask } from '@hr/ai'
-import { chunkSection } from '@hr/worker/cv-chunk'
+import { chunkSection } from './lib/chunk.js'
 import { ProfileSchema, type Profile } from '@hr/schema'
 
 const HERE = dirname(fileURLToPath(import.meta.url))

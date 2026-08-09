@@ -30,7 +30,7 @@ const profile: Profile = ProfileSchema.parse({
     phone: '0901234567',
     location: 'Hà Nội',
     links: [{ label: 'GitHub', url: 'https://github.com/khoinm' }],
-    summary: 'Sinh viên năm cuối ngành Kỹ thuật phần mềm, tập trung Node.js.',
+    introduce: 'Sinh viên năm cuối ngành Kỹ thuật phần mềm, tập trung Node.js.',
   },
   education: [
     {

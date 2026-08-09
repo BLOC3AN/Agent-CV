@@ -38,7 +38,7 @@ describe('allowedFieldsAt', () => {
 
   it('/basics là object, có bộ field riêng', () => {
     const b = allowedFieldsAt('/basics')
-    expect(b?.fields).toContain('summary')
+    expect(b?.fields).toContain('introduce')
     expect(b?.fields).toContain('headline')
   })
 

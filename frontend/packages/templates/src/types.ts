@@ -18,7 +18,7 @@ export type TemplateId = 'elegant' | 'minimal'
 
 /** Mã section — trùng khoá của Profile để layout tham chiếu trực tiếp */
 export type SectionId =
-  | 'summary'
+  | 'introduce'
   | 'education'
   | 'work'
   | 'projects'
@@ -28,7 +28,7 @@ export type SectionId =
   | 'languages'
 
 export const ALL_SECTIONS: SectionId[] = [
-  'summary',
+  'introduce',
   'work',
   'projects',
   'education',

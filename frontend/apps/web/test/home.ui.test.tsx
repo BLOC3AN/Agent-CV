@@ -23,7 +23,7 @@ const p = (over: Partial<Profile> = {}): Profile =>
 
 const full = (): Profile =>
   p({
-    basics: { name: 'A', email: 'a@example.com', summary: 'Kỹ sư phần mềm.' },
+    basics: { name: 'A', email: 'a@example.com', introduce: 'Kỹ sư phần mềm.' },
     work: [{ org: 'ABC', role: 'Dev', highlights: ['Giảm 40% thời gian xử lý'] }],
     education: [{ school: 'X', degree: 'Kỹ sư' }],
     skills: ['a', 'b', 'c', 'd', 'e'].map((n) => ({ name: n })),

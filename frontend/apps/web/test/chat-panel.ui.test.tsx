@@ -61,7 +61,7 @@ describe('gợi ý dựng từ hồ sơ thật', () => {
       profile({
         work: [{ org: 'X', role: 'D', highlights: ['a'] }],
         projects: [{ name: 'P', tech: [], highlights: [] }],
-        basics: { name: 'A', summary: 'Tóm tắt', links: [] },
+        basics: { name: 'A', introduce: 'Giới thiệu', links: [] },
         skills: Array.from({ length: 12 }, (_, i) => ({ name: `S${i}` })),
       }),
     )
@@ -107,7 +107,7 @@ function sseResponse(events: [string, unknown][]): Response {
 describe('UC-56 — hỏi trợ lý', () => {
   it('OK khi có đề xuất sẽ tự áp dụng toàn bộ thay đổi đang chờ', async () => {
     const onProfileChange = vi.fn()
-    const updated = profile({ basics: { name: 'Nguyễn Văn A', summary: 'Đã cập nhật', links: [] } })
+    const updated = profile({ basics: { name: 'Nguyễn Văn A', introduce: 'Đã cập nhật', links: [] } })
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ profile: updated, applied: 2 }),
@@ -121,10 +121,10 @@ describe('UC-56 — hỏi trợ lý', () => {
       ops: [
         {
           op: 'replace',
-          path: '/basics/summary',
+          path: '/basics/introduce',
           value: 'Đã cập nhật',
           rationale: 'Rõ hơn',
-          grounding: { type: 'existing_field', ref: '/basics/summary' },
+          grounding: { type: 'existing_field', ref: '/basics/introduce' },
           kbRefs: [],
         },
         {

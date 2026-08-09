@@ -30,7 +30,7 @@ export interface ChatMessage {
 }
 
 export type ChatModelRef = 'local.reasoner' | 'openai.luna' | 'deepseek.v4'
-export type ChatHint = 'enrich_content' | 'tighten_bullets' | 'strong_verbs' | 'rewrite_summary'
+export type ChatHint = 'enrich_content' | 'tighten_bullets' | 'strong_verbs' | 'rewrite_introduce'
 
 export const CHAT_MODELS: { ref: ChatModelRef; label: string; description: string }[] = [
   { ref: 'local.reasoner', label: 'Neura flash', description: 'Local model' },

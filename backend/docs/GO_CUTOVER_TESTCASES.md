@@ -17,7 +17,7 @@
 | CUT-11 | Restart Go container giữa job | Job không mất trong PostgreSQL |
 | CUT-12 | Redis restart | Không tạo job trùng; hệ thống báo queued/degraded rõ ràng |
 | CUT-13 | Model server timeout | Job failed có mã lỗi; không kẹt running vô hạn |
-| CUT-14 | PDF không có text layer | `NO_TEXT_LAYER`/manual rõ ràng; OCR/image branch ngoài phạm vi |
+| CUT-14 | PDF không có text layer | Job kết thúc rõ ràng với `NO_TEXT_LAYER`; không tạo profile giả |
 | CUT-15 | CV tiếng Anh | Prompt/result giữ `language=en`, không tự dịch sang tiếng Việt |
 | CUT-16 | Patch AI chứa field cấm/PII | Bị reject, profile không đổi |
 | CUT-17 | Hai request patch đồng thời | Không mất update; revision order xác định |
@@ -50,7 +50,7 @@
 | CUT-39 | Proposal có index ngoài phạm vi | 422, proposal/profile không đổi |
 | CUT-40 | Match job với embedding + reasoner + reranker | `go-semantic+reasoner`, `degraded=false`, advice chỉ dùng gapId hợp lệ |
 | CUT-41 | Restart worker khi job đang running | Reaper đưa job về queued tối đa 3 attempts, không kẹt vô hạn |
-| CUT-42 | Frontend với `GO_API_CUTOVER=true` | `/api/health`, auth, upload/job đi qua Go; UI vẫn render được |
+| CUT-42 | Frontend Go-only | `/api/health`, auth, upload/job đi qua Go; UI vẫn render được |
 | CUT-43 | Contract SSE/import review | Job phát `progress/done/failed`; analyze phát `report/done`; import status trả `profile/items/progress/quality`; complete chưa verify trả 409 |
 | CUT-44 | Cross-user resource access | User B đọc/sửa/xóa profile, CV, job, import, analyze hoặc proposal của User A đều nhận 401/404 và dữ liệu A không đổi |
 | CUT-45 | Retry/backoff parity | Lỗi hạ tầng retry tối đa 3 lần với `retry_at`; lỗi dữ liệu terminal ngay; stale quá 30 phút sau lần 3 thành `STALE` |
@@ -58,6 +58,16 @@
 | CUT-47 | Staging reconciliation | Script đối soát counts/checksums users/profiles/CV/jobs/revisions/matches, chỉ cho cutover khi khớp; script read-only |
 | CUT-48 | Chat reply → proposal → confirm → apply | Request sửa CV trả `kind=patch` + `proposalId`; confirm chỉ áp dụng op đã chọn, tạo revision `ai`; reply thường không đổi profile |
 | CUT-49 | Skills proposal sai shape | Proposal `category/items`, path dạng mảng hoặc field ngoài `name/level/canonical/group` bị reject; profile không đổi |
+| CUT-50 | Go export presentation | PDF trả từ Go với `Content-Type` đúng, CV đúng ownership, không gọi Next export route |
+| CUT-51 | Go export ATS | Variant `ats` trả PDF hợp lệ, filename ổn định, không tạo dữ liệu ngoài ý muốn |
+| CUT-52 | Export CV của user khác | Trả 404/401, không trả snapshot hoặc PDF của user A |
+| CUT-53 | Export CV không tồn tại | Trả 404, không tạo export artifact giả |
+| CUT-54 | API route coverage | Toàn bộ route nghiệp vụ trong bảng route contract đều trả từ Go; không còn Next API fallback |
+| CUT-55 | Go worker coverage | `parse_cv` và `match_analysis` được claim/xử lý bởi Go worker; không có Node worker cùng claim một job |
+| CUT-56 | Go-only compose | Stack production không khởi động Node API/worker; chỉ PDFKit được phép tồn tại như dependency xử lý PDF |
+| CUT-57 | No fallback smoke test | Tắt Node API/worker, toàn bộ flow auth → upload → import → analyze → chat → proposal → apply → export vẫn pass |
+| CUT-58 | Contract regression v1.0 | Snapshot response/status/SSE của toàn bộ route Go khớp contract v1.0; không đổi tên field hoặc status code ngoài tài liệu |
+| CUT-59 | Job result không chứa PII | Kết quả `parse_cv` chỉ có metadata; không có tên/email/phone/DOB/text CV và không vượt giới hạn kích thước |
 
 ## Lệnh kiểm tra tối thiểu
 
@@ -71,9 +81,10 @@ docker compose -f backend/docker-compose.yml --env-file .env config --quiet
 curl -fsS http://localhost:8080/api/health
 
 # frontend cutover smoke test
-GO_API_CUTOVER=true BUILDX_BUILDER=default docker compose -f backend/docker-compose.yml --env-file .env --profile full up -d --build web
+BUILDX_BUILDER=default docker compose -f backend/docker-compose.yml --env-file .env --profile full up -d --build web
 curl -fsS http://localhost:3000/api/health
 ```
 
-Không tắt Node chỉ vì các lệnh build pass; phải chạy hết CUT-03 đến CUT-49
-trên database staging hoặc bản snapshot có thể khôi phục.
+Chỉ được tắt Node fallback sau khi chạy CUT-03 đến CUT-59 trên database staging
+hoặc snapshot có thể khôi phục. CUT-50 đến CUT-59 là gate bắt buộc để xác nhận
+mục tiêu Go-only; build pass đơn thuần không đủ.

@@ -15,7 +15,7 @@ const p = (over: Partial<Profile> = {}): Profile =>
 /** Hồ sơ đạt đủ mọi thành phần */
 const full = (): Profile =>
   p({
-    basics: { name: 'Trần Hoàng Nam', email: 'nam@example.com', summary: 'Kỹ sư phần mềm.' },
+    basics: { name: 'Trần Hoàng Nam', email: 'nam@example.com', introduce: 'Kỹ sư phần mềm.' },
     work: [{ org: 'ABC', role: 'Dev', highlights: ['Giảm thời gian tải từ 3s xuống 0,8s'] }],
     education: [{ school: 'ĐH X', degree: 'Kỹ sư' }],
     skills: ['a', 'b', 'c', 'd', 'e'].map((n) => ({ name: n })),

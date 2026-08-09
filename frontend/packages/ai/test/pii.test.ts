@@ -17,7 +17,7 @@ const sample: Profile = ProfileSchema.parse({
     location: 'Số 12, ngõ 5, phố Tạ Quang Bửu, Hà Nội',
     dob: '01/01/2002',
     links: [{ label: 'GitHub', url: 'https://github.com/vanan' }],
-    summary: 'Sinh viên năm cuối ngành Kỹ thuật phần mềm.',
+    introduce: 'Sinh viên năm cuối ngành Kỹ thuật phần mềm.',
   },
   education: [
     {

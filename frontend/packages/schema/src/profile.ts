@@ -35,7 +35,7 @@ export const BasicsSchema = z.object({
   dob: z.string().optional(),
   photo: z.string().optional(),
   links: z.array(LinkSchema).default([]),
-  summary: z.string().optional(),
+  introduce: z.string().optional(),
 })
 
 export const EducationSchema = z.object({
@@ -210,7 +210,7 @@ export function allowedFieldsAt(
 export const ParsedBasicsSchema = z.object({
   headline: z.string().optional(),
   links: z.array(LinkSchema).default([]),
-  summary: z.string().optional(),
+  introduce: z.string().optional(),
 })
 
 export const ParsedProfileSchema = z.object({
@@ -231,7 +231,7 @@ export type ParsedProfile = z.infer<typeof ParsedProfileSchema>
 /** Ghép ParsedProfile (từ model) với danh tính (từ bảng PII đã tách) → Profile */
 export function assembleProfile(
   parsed: ParsedProfile,
-  identity: { name: string } & Partial<Omit<Basics, 'name' | 'links' | 'summary' | 'headline'>>,
+  identity: { name: string } & Partial<Omit<Basics, 'name' | 'links' | 'introduce' | 'headline'>>,
   source: Profile['_meta']['source'] = 'pdf_import',
 ): Profile {
   return ProfileSchema.parse({

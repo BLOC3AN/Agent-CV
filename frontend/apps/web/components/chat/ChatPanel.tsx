@@ -65,7 +65,7 @@ function suggestionsFor(p: Profile): { text: string; hint?: ChatHint }[] {
     out.push({ text: 'Làm giàu nội dung các điểm nổi bật', hint: 'enrich_content' })
   }
   if (p.projects.length > 0) out.push({ text: 'Thêm số liệu cho dự án đầu tiên' })
-  if (p.basics.summary) out.push({ text: 'Viết lại phần giới thiệu cho gọn hơn', hint: 'rewrite_summary' })
+  if (p.basics.introduce) out.push({ text: 'Viết lại phần giới thiệu cho gọn hơn', hint: 'rewrite_introduce' })
   if (p.work.some((w) => w.highlights.length > 0)) {
     out.push({ text: 'Viết lại các gạch đầu dòng bằng động từ mạnh', hint: 'strong_verbs' })
   }

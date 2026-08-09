@@ -14,7 +14,7 @@ import { SqlFilterSelector, toClarifyQuestions, toPromptChunks } from '../src/se
  */
 
 const DB = process.env.DATABASE_URL ?? 'postgres://postgres:hragent_dev@localhost:5433/hragent'
-const SEED = resolve(import.meta.dirname, '../../../kb/seed/it-software-vn.yaml')
+const SEED = resolve(import.meta.dirname, '../../../../backend/kb/seed/it-software-vn.yaml')
 
 let pool: pg.Pool
 let selector: SqlFilterSelector

@@ -174,7 +174,7 @@ function hasField(p: Profile, dotted: string): boolean {
  */
 export function estimatePages(p: Profile): number {
   const chars =
-    (p.basics.summary?.length ?? 0) +
+    (p.basics.introduce?.length ?? 0) +
     allHighlights(p).reduce((s, h) => s + h.text.length, 0) +
     p.work.length * 60 +
     p.projects.length * 60 +

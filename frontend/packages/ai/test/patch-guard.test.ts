@@ -172,8 +172,8 @@ describe('validateOps — op phải ĐẦY ĐỦ theo RFC 6902', () => {
 
   it('TC-53-47b CHẶN `replace` no-op vì không tạo thay đổi thật', () => {
     const { valid, rejected } = validateOps(
-      [op({ path: '/basics/summary', value: 'AI Engineer' })],
-      profile({ basics: { name: 'Nguyễn Văn A', summary: 'AI Engineer', links: [] } }),
+      [op({ path: '/basics/introduce', value: 'AI Engineer' })],
+      profile({ basics: { name: 'Nguyễn Văn A', introduce: 'AI Engineer', links: [] } }),
       MSG_IDS,
     )
 

@@ -15,10 +15,9 @@ worker Go. Import review, import complete, job SSE (`progress/done/failed`),
 analyze SSE (`report/done`) và proposal JSON Patch cũng đã khớp contract mà
 frontend đang dùng.
 
-Phần Node cũ vẫn được giữ trong `frontend/apps/web` server routes,
-`frontend/services/worker` và các package dùng
-chung để bảo toàn chức năng trong giai đoạn chuyển tiếp. Không mở rộng phần
-legacy; mỗi luồng mới phải có implementation và test ở Go trước.
+Next chỉ còn phần UI; business API và worker production chạy bằng Go. PDFKit
+Python được giữ như dependency tách text PDF. Không mở rộng legacy; mỗi luồng
+mới phải có implementation và test ở Go trước.
 
 ## Đã chuyển sang Go
 
@@ -56,11 +55,12 @@ tất cho tới khi frontend đổi sang Go và các route/worker còn lại đ�
 ## Còn lại cần chuyển
 
 Các edge case còn phải hoàn tất trước khi xóa Node route là ownership/authorization
-đầy đủ cho mọi read/mutation, retry/retention parity và đối soát staging. Go đã
-được khóa ownership theo session cho resource người dùng; các gate còn lại phải
-được chạy trên staging bằng CUT-44 đến CUT-47 trước khi tháo rollback route.
-`embed_profile` và OCR/image branch nằm ngoài phạm vi hiện tại; semantic matching
-đã có fallback degraded và LLM advice/reranker đã chạy trong worker Go.
+đầy đủ cho mọi read/mutation, retry/retention parity, export PDF qua Go và đối
+soát staging. Go đã được khóa ownership theo session cho resource người dùng;
+các gate còn lại phải được chạy trên staging bằng CUT-44 đến CUT-58 trước khi
+tháo rollback route. `embed_profile` không nằm trong flow cutover hiện tại;
+semantic matching đã có fallback degraded và LLM advice/reranker đã chạy trong
+worker Go.
 
 Image Go được build offline từ binary local:
 
@@ -76,8 +76,8 @@ docker compose -f backend/docker-compose.yml up -d backend
 2. Viết handler Go tương đương.
 3. Chuyển frontend gọi backend Go.
 4. Chạy contract/integration test.
-5. Xóa route Node cũ sau khi contract test, staging đối soát và rollback window
-   đều đạt; hiện tại Node route vẫn là rollback safety net.
+5. Các route Node cũ đã được xóa sau khi contract test, staging đối soát và
+   rollback window đạt; Go là runtime nghiệp vụ duy nhất.
 
 ## Chạy backend Go
 
@@ -114,8 +114,6 @@ Use case và gate trước khi Go làm backend chính nằm ở
 [`GO_CUTOVER_TESTCASES.md`](GO_CUTOVER_TESTCASES.md). Không chuyển 100% traffic
 chỉ dựa trên việc image build thành công.
 
-Frontend cutover hiện dùng Go mặc định qua `GO_API_CUTOVER=true`. Smoke
-test thực tế với flag `true` đã xác nhận `/api/health`, magic-link request và
-upload/job đi qua Go trong khi trang Next vẫn render bình thường. Khi bật cờ,
-middleware rewrite toàn bộ `/api/*` sang Go; khi tắt cờ, Node route vẫn phục vụ
-rollback.
+Frontend hiện luôn rewrite toàn bộ `/api/*` sang Go; Next chỉ render UI. Smoke
+test đã xác nhận `/api/health`, magic-link request, upload/job và export đi qua
+Go. Node API fallback đã được gỡ khỏi runtime.

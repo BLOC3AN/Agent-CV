@@ -765,9 +765,9 @@ describe('TC-53-45b op bị Zod LƯỢC BỎ phải bị loại, không được
     expect(rejected[0]!.reason).toMatch(/không có chỗ|sẽ bị mất/)
   })
 
-  it('CHO QUA `add /basics/summary` — đúng chỗ thì vẫn thêm được', () => {
+  it('CHO QUA `add /basics/introduce` — đúng chỗ thì vẫn thêm được', () => {
     const { valid, rejected } = validateOps(
-      [op({ op: 'add', path: '/basics/summary', value: 'AI Engineer chuyên sâu về Edge AIoT' })],
+      [op({ op: 'add', path: '/basics/introduce', value: 'AI Engineer chuyên sâu về Edge AIoT' })],
       profile(),
       MSG_IDS,
     )
@@ -813,12 +813,12 @@ describe('mọi chuỗi HIỂN THỊ của đề xuất đều sạch con trỏ'
         ops: [
           op({
             op: 'add',
-            path: '/basics/summary',
+            path: '/basics/introduce',
             value: 'AI Engineer',
-            rationale: 'Thêm phần giới thiệu vào /basics/summary cho hồ sơ đầy đủ hơn',
+            rationale: 'Thêm phần giới thiệu vào /basics/introduce cho hồ sơ đầy đủ hơn',
           }),
         ],
-        summary: 'Đã thêm nội dung vào /basics/summary',
+        summary: 'Đã thêm nội dung vào /basics/introduce',
       },
     })
     const r = await runChatTurn(deps(g), {
@@ -832,7 +832,7 @@ describe('mọi chuỗi HIỂN THỊ của đề xuất đều sạch con trỏ'
     expect(r.proposal.summary).not.toMatch(/\/basics|\/summary/)
     expect(r.proposal.ops[0]!.rationale).not.toMatch(/\/basics|\/summary/)
     // `path` là dữ liệu cho máy, KHÔNG phải chữ cho người — giữ nguyên
-    expect(r.proposal.ops[0]!.path).toBe('/basics/summary')
+    expect(r.proposal.ops[0]!.path).toBe('/basics/introduce')
   })
 })
 

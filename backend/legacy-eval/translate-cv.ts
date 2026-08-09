@@ -127,10 +127,10 @@ for (const [i, file] of files.entries()) {
     continue
   }
 
-  // Tóm tắt lấy từ mục summary nếu có (không cần model)
-  const summary = merged.get('summary' as SectionKind)
-  if (summary) {
-    parsed.basics.summary = summary.split('\n').slice(1).join('\n').trim().slice(0, 600)
+  // Phần giới thiệu lấy từ mục introduce nếu có (không cần model)
+  const introduce = merged.get('introduce' as SectionKind)
+  if (introduce) {
+    parsed.basics.introduce = introduce.split('\n').slice(1).join('\n').trim().slice(0, 600)
   }
 
   // ── 5. Gắn danh tính giả ─────────────────────────────────────────────────

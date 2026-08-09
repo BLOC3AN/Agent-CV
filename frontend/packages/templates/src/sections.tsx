@@ -12,7 +12,7 @@ import type { SectionId, TemplateVariant } from './types.js'
 
 const L = {
   vi: {
-    summary: 'Giới thiệu',
+    introduce: 'Giới thiệu',
     work: 'Kinh nghiệm',
     projects: 'Dự án',
     education: 'Học vấn',
@@ -23,7 +23,7 @@ const L = {
     present: 'Hiện tại',
   },
   en: {
-    summary: 'Summary',
+    introduce: 'Introduce',
     work: 'Experience',
     projects: 'Projects',
     education: 'Education',
@@ -118,12 +118,12 @@ export function renderSection(id: SectionId, p: SectionProps): ReactNode | null 
   const t = (k: SectionId) => sectionTitle(k, lang)
 
   switch (id) {
-    case 'summary': {
-      const s = profile.basics.summary
+    case 'introduce': {
+      const s = profile.basics.introduce
       if (!s) return null
       return (
-        <Section key={id} id={id} title={t('summary')}>
-          <Field path={ptr('basics', 'summary')} as="p" multiline>
+        <Section key={id} id={id} title={t('introduce')}>
+          <Field path={ptr('basics', 'introduce')} as="p" multiline>
             {s}
           </Field>
         </Section>

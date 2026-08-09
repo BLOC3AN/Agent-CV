@@ -3,16 +3,16 @@ import type { Pool } from 'pg'
 /**
  * Repository cho job bất đồng bộ — TDD §8.1, §12.1, UC-72.
  *
- * Vì sao có bảng `jobs` khi BullMQ đã tự quản lý hàng đợi:
+ * Vì sao có bảng `jobs` khi worker đã tự quản lý hàng đợi:
  *
- *   · BullMQ dọn job cũ (removeOnComplete) — bảng này là lịch sử BỀN VỮNG,
+ *   · Queue runtime có thể dọn job cũ — bảng này là lịch sử BỀN VỮNG,
  *     user vẫn xem lại được kết quả sau nhiều ngày.
  *   · Redis mất dữ liệu (restart, maxmemory eviction) không được làm mất
  *     trạng thái job của user. Postgres là nguồn sự thật, Redis là phương tiện.
  *   · Idempotency (BR-72.1) cần một UNIQUE constraint thật, không phải jobId
- *     của BullMQ vốn chỉ tồn tại trong vòng đời của queue.
+ *     của queue vốn chỉ tồn tại trong vòng đời của process.
  *
- * Quy ước: BullMQ điều phối *khi nào* chạy; bảng này ghi *đã xảy ra gì*.
+ * Quy ước: Go worker điều phối *khi nào* chạy; bảng này ghi *đã xảy ra gì*.
  */
 
 export type JobKind =
@@ -194,7 +194,7 @@ export class JobRepo {
    * Đánh dấu bắt đầu chạy. Trả `false` nếu job đã ở trạng thái cuối hoặc đã bị
    * huỷ — worker phải bỏ qua, không chạy tiếp.
    *
-   * Điều kiện `status IN ('queued','running')` cho phép BullMQ retry một job
+   * Điều kiện `status IN ('queued','running')` cho phép Go worker retry một job
    * đang `running` (worker trước chết giữa chừng) nhưng chặn hẳn job đã
    * `cancelled`: user bấm huỷ trong lúc job nằm trong hàng đợi thì công việc
    * đó không được âm thầm chạy.
@@ -223,7 +223,7 @@ export class JobRepo {
   /**
    * `willRetry` phân biệt "lần thử này hỏng" với "job hỏng hẳn". Chỉ lần cuối
    * mới chuyển sang `failed`; các lần giữa vẫn giữ `running` để UI không nhấp
-   * nháy giữa lỗi và đang chạy khi BullMQ retry.
+   * nháy giữa lỗi và đang chạy khi Go worker retry.
    */
   async markFailed(
     id: string,
@@ -257,12 +257,12 @@ export class JobRepo {
    * không?".
    *
    * `reapStale` chỉ nhìn `running`, tức chỉ bắt được worker chết GIỮA CHỪNG.
-   * Nhưng job có thể chết TRƯỚC ĐÓ: bản BullMQ bị khử trùng theo `jobId`, hoặc
-   * Redis mất dữ liệu. Khi đó hàng DB nằm ở `queued` mà không hàng đợi nào giữ
+   * Nhưng job có thể chết TRƯỚC ĐÓ: worker bị khởi động lại, hoặc Redis mất dữ
+   * liệu. Khi đó hàng DB nằm ở `queued` mà không worker nào giữ
    * việc — không lỗi, không tiến độ, và màn hình chờ của user đứng im mãi mãi.
    *
-   * Ở đây chỉ TRẢ VỀ ứng viên: câu hỏi "còn item BullMQ không" thuộc về tầng
-   * worker, `JobRepo` không được biết tới Redis.
+   * Ở đây chỉ TRẢ VỀ ứng viên; logic dispatch/retry thuộc về Go worker,
+   * `JobRepo` không phụ thuộc vào Redis.
    *
    * Mốc thời gian tính theo `created_at` nên job vừa hồi sinh (`created_at` cũ)
    * đủ điều kiện ngay. Đó là chủ ý: chúng chính là nhóm dễ bị bỏ rơi nhất, và

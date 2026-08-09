@@ -12,7 +12,7 @@ import { chromium, type Browser, type Page } from 'playwright'
  * Test đơn vị không bắt được nhóm đó vì chúng kiểm từng mảnh rời. Cái hỏng nằm
  * ở CHỖ GHÉP: server component + client component + cookie + điều hướng.
  *
- * Dùng thư viện `playwright` có sẵn (đã dùng để xuất PDF) thay vì thêm
+ * Dùng thư viện `playwright` có sẵn cho browser E2E thay vì thêm
  * `@playwright/test`: một bộ chạy test là đủ, và mọi test khác đang ở vitest.
  *
  *   bash scripts/dev-restart.sh && npm run test:int

@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +28,54 @@ func TestApplyJSONPatch(t *testing.T) {
 	basics := got["basics"].(map[string]any)
 	if basics["name"] != "New" || basics["headline"] != "Engineer" {
 		t.Fatalf("unexpected profile: %#v", got)
+	}
+}
+
+func TestChatModelRefsResolveFromConfig(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	configPath := filepath.Join(filepath.Dir(filename), "../../../config.yml")
+	t.Setenv("HR_CONFIG_PATH", configPath)
+	cfg, err := loadChatRuntimeConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		ref      string
+		provider chatProviderConfig
+		alias    string
+	}{
+		{ref: "local.reasoner", provider: cfg.Providers.Local, alias: "reasoner"},
+		{ref: "openai.luna", provider: cfg.Providers.OpenAI, alias: "luna"},
+		{ref: "deepseek.v4", provider: cfg.Providers.DeepSeek, alias: "v4"},
+	}
+	for _, tc := range cases {
+		provider, alias, err := splitModelRef(tc.ref)
+		if err != nil || alias != tc.alias {
+			t.Fatalf("%s parsed as %s.%s: %v", tc.ref, provider, alias, err)
+		}
+		if !tc.provider.Enabled {
+			t.Fatalf("%s is disabled in config.yml", tc.ref)
+		}
+		model, exists := tc.provider.Models[tc.alias]
+		if !exists || model.ModelID == "" {
+			t.Fatalf("%s is missing model_id in config.yml", tc.ref)
+		}
+	}
+	if os.Getenv("HR_CONFIG_PATH") != configPath {
+		t.Fatal("HR_CONFIG_PATH was not set for the config-backed routing test")
+	}
+}
+
+func TestChatPromptUsesIntroduceForCVField(t *testing.T) {
+	prompt := chatSystemPrompt()
+	if !strings.Contains(prompt, "/basics/introduce") {
+		t.Fatal("chat prompt must identify the CV introduction field")
+	}
+	if strings.Contains(prompt, "/basics/summary") {
+		t.Fatal("chat prompt must not instruct the model to write the legacy CV summary field")
 	}
 }
 
@@ -71,6 +122,15 @@ func TestHealth(t *testing.T) {
 	NewServer().Routes().ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("health status = %d", w.Code)
+	}
+}
+
+func TestExportRouteIsRegisteredInGoAPI(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/cv/00000000-0000-0000-0000-000000000000/export?variant=ats", nil)
+	w := httptest.NewRecorder()
+	NewServer().Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("export route status = %d, want %d when PostgreSQL is unavailable", w.Code, http.StatusServiceUnavailable)
 	}
 }
 

@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestDetectLanguagePreservesEnglishCV(t *testing.T) {
 	got := detectLanguage("Sơn Trịnh\nSUMMARY\nSoftware Engineer with experience in React and Docker\n(đầu trang)")
@@ -50,9 +54,32 @@ func TestRetryableErrorClassification(t *testing.T) {
 	}
 }
 
+func TestParseCVJobResultIsMetadataOnly(t *testing.T) {
+	result, err := json.Marshal(parseCVJobResult("profile-1", "vi", "good", []string{"low_quality"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(result)
+	for _, pii := range []string{"Nguyễn Văn A", "a@example.com", "0901234567", "EXPERIENCE"} {
+		if strings.Contains(text, pii) {
+			t.Fatalf("job result contains CV content %q: %s", pii, text)
+		}
+	}
+	var got map[string]any
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["profileId"] != "profile-1" || got["language"] != "vi" {
+		t.Fatalf("unexpected metadata: %#v", got)
+	}
+	if _, ok := got["sections"]; ok {
+		t.Fatal("job result must not include extracted sections")
+	}
+}
+
 func TestProfileFromSegmentsKeepsCVSections(t *testing.T) {
 	profile := profileFromSegments("en", map[string]string{
-		"summary":        "LE THANH HAI\n0964525151 • hai@example.com",
+		"introduce":      "INTRODUCTION\nSoftware Engineer focused on Go",
 		"education":      "EDUCATION\nHCMUTE\n• Graduated: Bachelor of Mechatronic Engineering\n• GPA: 7.18/10",
 		"work":           "EXPERIENCE\niMESPRO\nAI Engineer\nDecember, 2025 – Current\n• Built MLOps platform",
 		"activities":     "ACTIVITIES\n2026 – Neura Agent\n• Built an agent",
@@ -68,5 +95,12 @@ func TestProfileFromSegmentsKeepsCVSections(t *testing.T) {
 	activities := profile["activities"].([]any)
 	if activities[0].(map[string]any)["name"] != "Neura Agent" {
 		t.Fatalf("activity heading was not decoded: %#v", activities[0])
+	}
+	basics := profile["basics"].(map[string]any)
+	if basics["introduce"] != "Software Engineer focused on Go" {
+		t.Fatalf("introduce field was not decoded: %#v", basics)
+	}
+	if _, legacy := basics["summary"]; legacy {
+		t.Fatal("profile must not emit the legacy basics.summary field")
 	}
 }

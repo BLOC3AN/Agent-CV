@@ -9,14 +9,8 @@ const alias = {
   '@hr/ai': path.resolve(root, 'packages/ai/src/index.ts'),
   '@hr/templates': path.resolve(root, 'packages/templates/src/index.ts'),
   '@hr/db': path.resolve(root, 'packages/db/src/index.ts'),
-  '@hr/pdf': path.resolve(root, 'packages/pdf/src/index.ts'),
   '@hr/matching': path.resolve(root, 'packages/matching/src/index.ts'),
   '@hr/kb': path.resolve(root, 'packages/kb/src/index.ts'),
-  '@hr/worker/queues': path.resolve(root, 'services/worker/src/queues.ts'),
-  '@hr/worker/pdfkit': path.resolve(root, 'services/worker/src/pdfkit-client.ts'),
-  '@hr/worker/storage': path.resolve(root, 'services/worker/src/storage.ts'),
-  '@hr/worker': path.resolve(root, 'services/worker/src/index.ts'),
-  '@hr/worker/cv-chunk': path.resolve(root, 'services/worker/src/cv-chunk.ts'),
   '@': path.resolve(root, 'apps/web'),
 }
 
@@ -32,7 +26,6 @@ export default defineWorkspace([
         'packages/**/test/**/*.test.tsx',
         'apps/**/test/**/*.test.ts',
         'apps/**/test/**/*.test.tsx',
-        'services/**/test/**/*.test.ts',
       ],
       // Loại test GIAO DIỆN: chúng khớp `*.test.tsx` nên sẽ chạy CẢ ở đây,
       // trong môi trường `node` không có DOM, và đỏ vì `document is not defined`.
@@ -63,7 +56,6 @@ export default defineWorkspace([
       include: [
         '../backend/legacy-eval/**/*.test.ts',
         'packages/**/test/**/*.int.test.ts',
-        'services/**/test/**/*.int.test.ts',
         // Lớp E2E chạy trình duyệt thật — cùng nhóm với test tích hợp vì cả hai
         // đều cần hạ tầng sống, và một bộ chạy test là đủ cho cả dự án.
         'apps/**/test/**/*.int.test.ts',

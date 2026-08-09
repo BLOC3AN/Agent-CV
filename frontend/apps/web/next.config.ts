@@ -2,11 +2,11 @@ import type { NextConfig } from 'next'
 
 const config: NextConfig = {
   // Monorepo: các package nội bộ là TS nguồn, không build sẵn
-  transpilePackages: ['@hr/schema', '@hr/templates', '@hr/db', '@hr/ai', '@hr/pdf'],
+  transpilePackages: ['@hr/schema', '@hr/templates', '@hr/db', '@hr/ai'],
 
   // packages/db dùng `pg` (driver Node) — không bundle vào client
-  // playwright là binary Node — không bundle
-  serverExternalPackages: ['pg', 'playwright'],
+  // pg là driver Node — không bundle
+  serverExternalPackages: ['pg'],
 
   experimental: {
     serverActions: { bodySizeLimit: '12mb' },
@@ -21,7 +21,7 @@ const config: NextConfig = {
      * không. `extensionAlias` dạy nó cách phân giải.
      *
      * Cách khác là bỏ đuôi `.js` trong import, nhưng làm vậy sẽ hỏng khi chạy
-     * bằng Node thuần (services/worker ở M2) — nên sửa ở đây là đúng chỗ.
+     * bằng Node thuần — nên sửa ở đây là đúng chỗ.
      */
     cfg.resolve.extensionAlias = {
       ...cfg.resolve.extensionAlias,

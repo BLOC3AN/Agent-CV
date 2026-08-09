@@ -17,7 +17,7 @@ import { rubrics } from '../src/kb-load.js'
  *   npm run test:int
  */
 
-const JD_DIR = resolve(import.meta.dirname, '../../../eval/jd')
+const JD_DIR = resolve(import.meta.dirname, '../../../../backend/legacy-eval/jd')
 
 let gw: Gateway
 let embedder: { embedBatch(t: string[]): Promise<number[][]> } | null = null
