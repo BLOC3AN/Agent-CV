@@ -58,7 +58,18 @@ export interface EducationItem {
 export interface SkillItem {
   id: string;
   category: string; // e.g. "Core AI", "MLOps", "Programming"
-  skills: string; // Comma separated or list
+  /**
+   * Từng kỹ năng là một phần tử riêng, không phải một chuỗi nối bằng dấu phẩy.
+   *
+   * Đây là hợp đồng với CV v2, không phải sở thích: `SkillItemSchema` khai
+   * `skills: z.array(z.string())`, prompt v2 dạy model thêm kỹ năng bằng
+   * `/sections/skills/0/skills/-`, và `validateChatProposal` phía Go từ chối
+   * thẳng nếu giá trị không phải mảng. Để là chuỗi thì mọi patch kỹ năng mà
+   * model được dạy sinh ra hoặc báo lỗi, hoặc làm hỏng state của SPA.
+   *
+   * Hiển thị vẫn là một dòng ngăn bằng ", " — nối lúc render, không lưu.
+   */
+  skills: string[];
 }
 
 export interface ActivityItem {

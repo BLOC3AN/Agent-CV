@@ -115,7 +115,8 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
                 {cv.sections.skills.map((s) => (
                   <div key={s.id} className="flex">
                     <span className="font-bold w-36 text-gray-900">{s.category}:</span>
-                    <span className="text-gray-700">{s.skills}</span>
+                    {/* Mảng ở dữ liệu, một dòng ngăn bằng ", " ở màn hình. */}
+                    <span className="text-gray-700">{s.skills.join(', ')}</span>
                   </div>
                 ))}
               </div>

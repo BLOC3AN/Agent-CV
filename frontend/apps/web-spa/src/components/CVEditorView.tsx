@@ -743,7 +743,13 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                         {proj.startDate} - {proj.endDate}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-700">{proj.highlights.join(' ')}</p>
+                    {/* Cùng cách trình bày với mục kinh nghiệm ở trên và với
+                        PreviewModal: nối bằng '\n' dưới whitespace-pre-line.
+                        Nối bằng ' ' làm các gạch đầu dòng dính thành một câu,
+                        và đây là bản người dùng in ra PDF để gửi đi. */}
+                    <p className="text-xs text-slate-700 whitespace-pre-line">
+                      {proj.highlights.join('\n')}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -765,7 +771,9 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                     <span className="font-bold w-40 shrink-0 text-slate-900">
                       {sk.category}:
                     </span>
-                    <span className="text-slate-700">{sk.skills}</span>
+                    {/* Lưu là mảng (hợp đồng CV v2), hiển thị vẫn là một dòng
+                        ngăn bằng ", " — không đổi gì về thị giác. */}
+                    <span className="text-slate-700">{sk.skills.join(', ')}</span>
                   </div>
                 ))}
               </div>
