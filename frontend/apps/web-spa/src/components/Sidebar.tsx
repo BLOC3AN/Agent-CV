@@ -117,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => 
           <span>HR-Agent Pro v2.4</span>
         </div>
         <p className="text-[11px] text-slate-500 leading-normal">
-          Mô hình Gemini 3.6 Flash tự động tối ưu hóa CV chuẩn ATS.
+          Mô hình chạy nội bộ, tối ưu CV theo chuẩn ATS. Dữ liệu cá nhân không rời máy chủ.
         </p>
       </div>
     </aside>

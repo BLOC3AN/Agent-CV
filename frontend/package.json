@@ -10,13 +10,18 @@
   "engines": {
     "node": ">=20.10"
   },
+  "//overrides": "vitest ép cả cây dùng vite@5 (dependency cứng, không phải peer). web-spa khai vite@^6 riêng cho bản build của nó. Không ép một bản vite DUY NHẤT toàn cây, hai plugin của web-spa bám theo vite@5 đã hoist ở gốc thay vì vite@6 web-spa khai, và tsc thấy hai bản khai kiểu Plugin<T> vật lý khác nhau — coi là không tương thích dù cùng tên.",
+  "overrides": {
+    "vite": "^6.2.3"
+  },
   "scripts": {
     "build": "npm run typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "npm run typecheck:core && npm run typecheck:web",
+    "typecheck": "npm run typecheck:core && npm run typecheck:web && npm run typecheck:spa",
     "typecheck:core": "tsc --noEmit -p tsconfig.json",
     "typecheck:web": "tsc --noEmit -p apps/web/tsconfig.json",
+    "typecheck:spa": "tsc --noEmit -p apps/web-spa/tsconfig.json",
     "test": "vitest run --project unit --project ui",
     "test:unit": "vitest run --project unit",
     "test:int": "vitest run --project integration",

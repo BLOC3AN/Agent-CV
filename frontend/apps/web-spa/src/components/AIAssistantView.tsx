@@ -68,7 +68,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({ activeCV }) =>
             Trợ lý AI Nghề nghiệp (HR-Agent AI)
           </h1>
           <p className="text-xs text-slate-500">
-            Hỗ trợ bởi mô hình Gemini 3.6 Flash — Tư vấn CV, chiến lược phỏng vấn & định hướng sự nghiệp.
+            Hỗ trợ bởi mô hình chạy nội bộ — Tư vấn CV, chiến lược phỏng vấn & định hướng sự nghiệp.
           </p>
         </div>
       </div>

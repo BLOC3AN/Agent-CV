@@ -38,7 +38,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
   // Right AI Assistant State
   const [showAIPanel, setShowAIPanel] = useState(true);
-  const [aiModel, setAiModel] = useState('Gemini 3.6 Flash');
+  const [aiModel, setAiModel] = useState('standard');
   const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
     {
       id: 'm-1',
@@ -807,8 +807,8 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                   onChange={(e) => setAiModel(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-medium text-slate-800 appearance-none focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="Gemini 3.6 Flash">Gemini 3.6 Flash (Nhanh)</option>
-                  <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Chuyên sâu)</option>
+                  <option value="standard">Chuẩn (Nhanh)</option>
+                  <option value="deep">Chuyên sâu</option>
                 </select>
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-2 pointer-events-none" />
               </div>

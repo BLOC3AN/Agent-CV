@@ -34,14 +34,14 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Gemini API Key Status */}
+        {/* Trạng thái kết nối mô hình AI */}
         <div className="p-6 space-y-3 bg-white">
           <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs uppercase tracking-wider">
             <Key className="w-4 h-4 text-indigo-600" />
-            <span>Kết nối Gemini AI API</span>
+            <span>Kết nối mô hình AI</span>
           </div>
           <p className="text-xs text-slate-600 leading-relaxed">
-            API key được tự động bảo mật trên server Cloud Run. Không hiển thị trên giao diện trình duyệt để đảm bảo an toàn tuyệt đối.
+            Mô hình chạy nội bộ trên máy chủ, không lộ ra giao diện trình duyệt để đảm bảo an toàn tuyệt đối.
           </p>
           <div className="inline-flex items-center space-x-2 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
