@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
-  Sparkles,
   Eye,
   Share2,
   Download,
@@ -128,15 +127,6 @@ export const Header: React.FC<HeaderProps> = ({
         ) : (
           /* Dashboard / My CVs Actions */
           <>
-            <Link
-              to="/builder"
-              id="btn-header-tro-ly"
-              className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-violet-700 hover:bg-violet-800 rounded-xl transition shadow-xs"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Trợ lý AI</span>
-            </Link>
-
             <div
               id="user-dropdown"
               className="flex items-center space-x-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition"

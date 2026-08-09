@@ -17,11 +17,22 @@ interface NavItem {
   icon: typeof LayoutDashboard;
 }
 
+/*
+ * Sidebar còn 5 mục, không phải 6.
+ *
+ * Bản SPA gốc có mục "Trợ lý AI" trỏ tới một màn hình chat đứng riêng. Spec
+ * §5.1 gộp trợ lý thành panel của `/builder/:cvId`, vì trợ lý tách khỏi CV thì
+ * không sinh được đề xuất có ngữ cảnh — nên mục sidebar đó không còn đích đến
+ * và bị bỏ. Quyết định của chủ sản phẩm ngày 2026-08-09.
+ *
+ * `/analyze` KHÔNG kèm id là một màn hình thật: `JobMatchView` vốn đã nhận cả
+ * danh sách CV và tự cho người dùng chọn. `/analyze/:cvId` chỉ là dạng chọn
+ * sẵn.
+ */
 const primary: NavItem[] = [
   { to: '/', end: true, id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
   { to: '/cv', end: false, id: 'cv', label: 'CV của tôi', icon: FileText },
   { to: '/analyze', end: false, id: 'analyze', label: 'Đối chiếu việc làm', icon: GitCompare },
-  { to: '/builder', end: false, id: 'builder', label: 'Trợ lý AI', icon: Sparkles },
 ];
 
 const secondary: NavItem[] = [

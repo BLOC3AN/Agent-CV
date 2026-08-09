@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { ChatMessage, CV } from '../types';
 import { Bot, Send, Sparkles, User, Mic } from 'lucide-react';
 
+/**
+ * Chưa được gắn vào route nào trong SP-1 — trợ lý AI đứng riêng đã bị bỏ
+ * khỏi Sidebar/Header theo spec §5.1 (quyết định của chủ sản phẩm
+ * 2026-08-09), vì tách khỏi CV thì không sinh được đề xuất có ngữ cảnh.
+ * File này giữ lại làm nguồn cho panel chat của `/builder/:cvId` ở SP-4.
+ */
 interface AIAssistantViewProps {
   activeCV: CV;
 }

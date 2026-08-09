@@ -41,4 +41,21 @@ describe('bản đồ URL', () => {
     const link = await screen.findByTestId('sidebar-item-cv')
     expect(link).toHaveAttribute('aria-current', 'page')
   })
+
+  it('/analyze (không kèm id) mở màn hình đối chiếu việc làm — cùng màn hình với /analyze/:cvId', async () => {
+    renderAt('/analyze')
+    expect(await screen.findByTestId('view-job-match')).toBeInTheDocument()
+  })
+
+  it('/analyze/:cvId mở màn hình đối chiếu việc làm', async () => {
+    renderAt('/analyze/cv-1')
+    expect(await screen.findByTestId('view-job-match')).toBeInTheDocument()
+  })
+
+  it('/builder/:cvId mở trình soạn CV và ẩn hẳn sidebar', async () => {
+    renderAt('/builder/cv-1')
+    expect(await screen.findByTestId('view-editor')).toBeInTheDocument()
+    expect(screen.queryByTestId('sidebar-item-cv')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('sidebar-item-dashboard')).not.toBeInTheDocument()
+  })
 })

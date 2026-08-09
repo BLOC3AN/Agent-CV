@@ -1,9 +1,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, Sparkles } from 'lucide-react';
-import { initialCVs } from '../mockData';
+import { CV } from '../types';
 
-export const TemplatesView: React.FC = () => {
+interface TemplatesViewProps {
+  cvs: CV[];
+}
+
+export const TemplatesView: React.FC<TemplatesViewProps> = ({ cvs }) => {
   const navigate = useNavigate();
   const templates = [
     {
@@ -66,7 +70,7 @@ export const TemplatesView: React.FC = () => {
 
             <div className="p-6 pt-0">
               <button
-                onClick={() => navigate(`/builder/${initialCVs[0]?.id ?? ''}`)}
+                onClick={() => navigate(`/builder/${cvs[0]?.id ?? ''}?template=${tpl.id}`)}
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition shadow-xs flex items-center justify-center space-x-2"
               >
                 <Sparkles className="w-4 h-4" />

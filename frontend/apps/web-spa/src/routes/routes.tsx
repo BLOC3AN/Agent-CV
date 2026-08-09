@@ -59,6 +59,17 @@ export const appRoutes: RouteObject[] = [
           </div>
         ),
       },
+      // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
+      // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
+      // chỉ là dạng chọn sẵn khi tới từ một CV cụ thể.
+      {
+        path: 'analyze',
+        element: (
+          <div data-testid="view-job-match">
+            <JobMatchView cvs={initialCVs} />
+          </div>
+        ),
+      },
       {
         path: 'analyze/:cvId',
         element: (
@@ -67,7 +78,7 @@ export const appRoutes: RouteObject[] = [
           </div>
         ),
       },
-      { path: 'templates', element: <div data-testid="view-templates"><TemplatesView /></div> },
+      { path: 'templates', element: <div data-testid="view-templates"><TemplatesView cvs={initialCVs} /></div> },
       { path: 'settings', element: <div data-testid="view-settings"><SettingsView /></div> },
       { path: '*', element: <NotFound /> },
     ],
