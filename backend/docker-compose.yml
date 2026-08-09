@@ -107,7 +107,6 @@ services:
       resources:
         limits:
           memory: 1G
-    profiles: ['full']
 
   web:
     build:
@@ -129,7 +128,23 @@ services:
       backend: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    profiles: ['full']
+
+  # SPA mới — chạy song song với `web` (Next) suốt SP-1..SP-4.
+  # Cổng 3002 chứ không 3000: việc chiếm cổng 3000 là bước cutover ở SP-5.
+  web-spa:
+    build:
+      context: ..
+      dockerfile: frontend/apps/web-spa/Dockerfile
+    container_name: hr-web-spa
+    restart: unless-stopped
+    environment:
+      PORT: 3002
+      NODE_ENV: production
+      BACKEND_URL: http://backend:8080
+    ports:
+      - '3002:3002'
+    depends_on:
+      backend: { condition: service_started }
 
   # Go worker: parse CV, match analysis và retention
   worker:
@@ -152,7 +167,6 @@ services:
       resources:
         limits:
           memory: 2G
-    profiles: ['full']
 
 volumes:
   pgdata:
