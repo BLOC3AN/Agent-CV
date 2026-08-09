@@ -15,6 +15,10 @@ describe('bản đồ URL', () => {
   // đăng nhập, nên giả lập một phiên đã đăng nhập để tập trung vào routing.
   beforeEach(() => {
     vi.spyOn(api, 'getSession').mockResolvedValue({ authenticated: true, email: 'ha@example.com' })
+    // `/cv` (Task 7) nạp dữ liệu thật qua `listCVs()`. Test này kiểm bản đồ
+    // URL, không phải hành vi nạp dữ liệu — giả lập danh sách rỗng để tập
+    // trung vào routing.
+    vi.spyOn(api, 'listCVs').mockResolvedValue([])
   })
 
   it('/ mở màn hình tổng quan', async () => {

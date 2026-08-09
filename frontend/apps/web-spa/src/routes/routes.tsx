@@ -5,7 +5,7 @@ import { AppLayout } from './AppLayout';
 import { LoginPage } from './LoginPage';
 import { initialCVs } from '../mockData';
 import { DashboardView } from '../components/DashboardView';
-import { MyCVsView } from '../components/MyCVsView';
+import { MyCVsRoute } from './MyCVsRoute';
 import { CVEditorView } from '../components/CVEditorView';
 import { JobMatchView } from '../components/JobMatchView';
 import { TemplatesView } from '../components/TemplatesView';
@@ -45,19 +45,7 @@ const protectedChildren: RouteObject[] = [
       </div>
     ),
   },
-  {
-    path: 'cv',
-    element: (
-      <div data-testid="view-my-cvs">
-        <MyCVsView
-          cvs={initialCVs}
-          onCreateNewCV={noop}
-          onOpenUploadModal={noop}
-          onDeleteCV={noop}
-        />
-      </div>
-    ),
-  },
+  { path: 'cv', element: <MyCVsRoute /> },
   // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
   // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
   // chỉ là dạng chọn sẵn khi tới từ một CV cụ thể.
