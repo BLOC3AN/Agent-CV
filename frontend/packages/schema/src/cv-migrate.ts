@@ -115,6 +115,14 @@ export function profileToCV(
     }
   })
 
+  // Lưu thứ tự v1 qua v2 mapping để cvToProfile() khôi phục đúng vị trí.
+  // Khi group lồng nhau (ví dụ: Py(A), Docker(B), Go(A)), gom lại sẽ cho [Py, Go],
+  // [Docker], và flatten ngược lại là [Py, Go, Docker] — sai thứ tự. Mảng này
+  // là chân lý để khôi phục [Py, Docker, Go] và canh chỉnh đúng /skills/i/* keys.
+  if (profile.skills.length > 0) {
+    droppedFields['/skills/_order'] = JSON.stringify(skillPointerByV1Index)
+  }
+
   return CVSchema.parse({
     schemaVersion: 2,
     id: meta.id,

@@ -175,4 +175,36 @@ describe('profileToCV', () => {
     expect(verified['/sections/education/0/school']).toBe(true)
     expect(verified['/education/0/school']).toBeUndefined()
   })
+
+  it('kỹ năng với group lồng nhau (interleaved) lưu thứ tự v1 trong /skills/_order', () => {
+    const v1Interleaved = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      skills: [
+        { name: 'Python', group: 'Ngôn ngữ' },      // v1 index 0
+        { name: 'Docker', group: 'MLOps' },          // v1 index 1
+        { name: 'Go', group: 'Ngôn ngữ' },           // v1 index 2
+      ],
+    })
+    const cv = profileToCV(v1Interleaved, META)
+    const dropped = cv._meta.droppedFields
+
+    // Xác nhận v2 grouping: [Ngôn ngữ: Python, Go], [MLOps: Docker]
+    expect(cv.sections.skills.map((s) => s.category)).toEqual(['Ngôn ngữ', 'MLOps'])
+    expect(cv.sections.skills[0]!.skills).toEqual(['Python', 'Go'])
+    expect(cv.sections.skills[1]!.skills).toEqual(['Docker'])
+
+    // Quan trọng: /skills/_order cho phép khôi phục thứ tự v1 và canh chỉnh level/group
+    const order = JSON.parse(dropped['/skills/_order']!)
+    // v1 index 0 (Python) → v2 /sections/skills/0/skills/0
+    expect(order[0]).toBe('/sections/skills/0/skills/0')
+    // v1 index 1 (Docker) → v2 /sections/skills/1/skills/0
+    expect(order[1]).toBe('/sections/skills/1/skills/0')
+    // v1 index 2 (Go) → v2 /sections/skills/0/skills/1
+    expect(order[2]).toBe('/sections/skills/0/skills/1')
+
+    // Nếu xoá dòng `droppedFields['/skills/_order'] = ...` thì test này fail
+    // (not a string khi gọi JSON.parse trên undefined)
+  })
 })
