@@ -217,9 +217,29 @@ export const useChat = create<ChatState>((set, get) => ({
         rejected?: { path: string; reason: string }[]
         nextSteps?: string[]
         error?: string
+        detail?: string
+        code?: string
+        requestId?: string
       }
 
-      if (parsed.kind === 'clarify' && parsed.request) {
+      if (parsed.kind === 'error') {
+        const detail = parsed.detail ?? parsed.message ?? 'Model chưa khả dụng'
+        console.error('[chat] backend model error', {
+          code: parsed.code,
+          detail,
+          requestId: parsed.requestId,
+          modelRef,
+        })
+        set({
+          messages: [
+            ...get().messages,
+            {
+              role: 'assistant',
+              content: `${parsed.message ?? 'Model chưa khả dụng'}: ${detail}${parsed.requestId ? ` (requestId: ${parsed.requestId})` : ''}`,
+            },
+          ],
+        })
+      } else if (parsed.kind === 'clarify' && parsed.request) {
         set({
           messages: [...get().messages, { role: 'assistant', content: parsed.request.reason }],
           clarify: { originalMessage: text, request: parsed.request },
@@ -248,6 +268,7 @@ export const useChat = create<ChatState>((set, get) => ({
       }
     } catch (e) {
       if (controller?.signal.aborted) return
+      console.error('[chat] request failed', { modelRef, profileId, error: e })
       set({
         messages: [
           ...get().messages,

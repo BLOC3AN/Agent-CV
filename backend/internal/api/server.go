@@ -1545,6 +1545,12 @@ func (s *Server) streamAnalyze(w http.ResponseWriter, r *http.Request, cvID stri
 }
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
+	requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+	if requestID == "" {
+		requestID = newID()
+	}
+	w.Header().Set("X-Request-ID", requestID)
+	log.Printf("chat start requestId=%s", requestID)
 	if s.db == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Chat cần PostgreSQL"})
 		return
@@ -1618,11 +1624,12 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	sendStep("Đang hiểu yêu cầu của bạn")
 	sendStep("Đang xem lại hồ sơ để trả lời")
 	sendStep("Đang suy nghĩ")
+	log.Printf("chat model request requestId=%s modelRef=%q hint=%q", requestID, body.ModelRef, body.Hint)
 	answer, modelErr := callChatModel(r.Context(), prompt, body.ModelRef)
 	if modelErr != nil {
-		log.Printf("chat model unavailable modelRef=%q session=%s err=%v", body.ModelRef, sessionID, modelErr)
+		log.Printf("chat model unavailable requestId=%s modelRef=%q session=%s err=%v", requestID, body.ModelRef, sessionID, modelErr)
 		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "Model chưa khả dụng: "+modelErr.Error())
-		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_UNAVAILABLE", "message": "Model chưa khả dụng", "detail": modelErr.Error(), "sessionId": sessionID})
+		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_UNAVAILABLE", "message": "Model chưa khả dụng", "detail": modelErr.Error(), "requestId": requestID, "sessionId": sessionID})
 		fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
 		if flusher != nil {
 			flusher.Flush()
@@ -2068,7 +2075,7 @@ func postChatCompletion(ctx context.Context, endpoint string, request map[string
 	defer res.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
 	if res.StatusCode >= 300 {
-		return "", fmt.Errorf("model HTTP %d", res.StatusCode)
+		return "", fmt.Errorf("model HTTP %d: %s", res.StatusCode, providerErrorMessage(body))
 	}
 	var out struct {
 		Choices []struct {
@@ -2081,6 +2088,27 @@ func postChatCompletion(ctx context.Context, endpoint string, request map[string
 		return "", fmt.Errorf("empty model response")
 	}
 	return out.Choices[0].Message.Content, nil
+}
+
+func providerErrorMessage(body []byte) string {
+	var out struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    any    `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &out) == nil && strings.TrimSpace(out.Error.Message) != "" {
+		msg := strings.TrimSpace(out.Error.Message)
+		if out.Error.Type != "" {
+			msg = out.Error.Type + ": " + msg
+		}
+		if len(msg) > 400 {
+			msg = msg[:400] + "..."
+		}
+		return msg
+	}
+	return "upstream provider rejected the request"
 }
 
 func chatResponseSchema() map[string]any {
