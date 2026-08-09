@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Phiên bản** | 1.0 |
+| **Phiên bản** | 1.1 |
 | **Ngày** | 2026-08-06 |
 | **Phụ thuộc** | [TDD.md](./TDD.md) — đặc biệt §2 (ràng buộc), §5.5 (degrade), §14 (năng lực) |
 
@@ -136,6 +136,48 @@ Con số "Hồ sơ đã đầy đủ N%" tính bằng `profileCompleteness()` v�
 **Quyết định bố cục — chỉ 2 pane, không phải 3.** Sinh viên Việt Nam phần lớn dùng laptop 1366×768. Ba pane cố định làm vùng xem trước còn ~500px, không đọc được CV. Chat là **slide-over đè lên**, không chiếm chỗ cố định.
 
 **Sửa nội dung ở đâu?** Ngay trên bản xem trước (inline editing), không có form riêng. Click vào một dòng → thành ô nhập tại chỗ. Đây là điểm khác biệt với các CV builder truyền thống dùng form + preview tách đôi, vốn khiến người dùng phải liên tục đối chiếu hai bên.
+
+#### 3.1.1 Luồng trợ lý — chat trước, CV sau
+
+Khi người dùng mở `/builder/:cvId?assistant=1`, màn hình bắt đầu bằng một
+canvas tập trung vào trợ lý. CV chưa chiếm diện tích và chưa tạo nhiễu thị giác.
+Ngay khi lượt **user đầu tiên** được ghi vào `useChat`, workspace chuyển sang
+hai vùng bằng animation:
+
+```
+Trước lượt đầu tiên:                 Sau lượt đầu tiên:
+┌──────────────────────┐             ┌───────────────────────┬──────────────┐
+│  ✦ HR-Agent AI       │             │ CV live preview (60%) │ Chat (40%)   │
+│  Cùng làm CV nhé     │   ─────→    │ inline edit + trạng  │ lịch sử +    │
+│  [Nhập câu hỏi…]     │             │ thái lưu               │ input        │
+└──────────────────────┘             └───────────────────────┴──────────────┘
+```
+
+Các quy tắc bắt buộc:
+
+- Trigger chuyển cảnh lúc submit, không đợi model trả lời; người dùng thấy hệ
+  thống đã nhận thao tác ngay cả khi lượt AI mất nhiều giây.
+- Không xoá hoặc khởi tạo lại `ChatPanel`; lịch sử, clarify và proposal vẫn nằm
+  trong `lib/chat-store.ts`.
+- CV dùng cùng `@hr/templates` và `editableRenderer` với editor hiện tại; AI
+  vẫn chỉ tạo proposal, người dùng vẫn duyệt patch trước khi áp dụng.
+- Nếu mở builder bằng `?focus=...`, CV được hiển thị ngay để focus path hoạt
+  động. Nếu đóng chat, builder trở về chế độ CV bình thường.
+- `prefers-reduced-motion` tắt animation; mobile xếp CV và chat theo chiều dọc.
+
+Implementation: `BuilderShell` gắn `data-assistant-state="idle|active"` và
+dùng lớp `builder-workspace`, còn `assistantWorkspaceState` là hàm thuần để
+kiểm thử invariant chuyển trạng thái mà không cần dựng React.
+
+Visual của workspace này dùng lớp `.builder-neo`, port từ reference
+`hr-agent---ai-cv-builder-&-job-matcher`: nền vàng, màu nhấn hồng/xanh/lục,
+viền đen dày và shadow offset. Lớp visual chỉ áp dụng cho builder; dashboard và
+các màn hình nghiệp vụ khác tiếp tục dùng design tokens teal/ink hiện tại.
+
+Builder không render thêm global top navigation cũ. Ở viewport chuẩn 16:9
+Full HD (1920×1080), header reference cao 58px, rail điều khiển 320px, panel
+trợ lý 320px và vùng CV giữ phần chiều rộng còn lại; tránh bố cục hybrid và
+giữ A4 đủ lớn để đọc trên laptop 15.6 inch.
 
 ### 3.2 Breakpoint
 

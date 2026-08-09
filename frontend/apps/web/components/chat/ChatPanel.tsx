@@ -118,12 +118,12 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
   const suggestions = suggestionsFor(profile)
 
   return (
-    <section aria-label="Trợ lý CV" className="flex h-full flex-col">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+    <section aria-label="Trợ lý CV" className="builder-chat-panel flex h-full flex-col">
+      <h2 className="builder-chat-kicker mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Trợ lý CV
       </h2>
 
-      <label className="mb-3 flex items-center gap-2 text-sm text-ink-muted">
+      <label className="builder-chat-model mb-3 flex items-center gap-2 text-sm text-ink-muted">
         <span>Model</span>
         <select
           aria-label="Chọn model"
@@ -140,9 +140,9 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
         </select>
       </label>
 
-      <div className="min-h-[200px] flex-1 space-y-3 overflow-y-auto rounded-lg border border-border p-3">
+      <div className="builder-chat-messages min-h-[200px] flex-1 space-y-3 overflow-y-auto rounded-lg border border-border p-3">
         {messages.length === 0 && (
-          <div className="text-sm text-ink-muted">
+          <div className="builder-chat-empty text-sm text-ink-muted">
             <p>Bạn muốn sửa gì trong CV? Ví dụ:</p>
             <ul className="mt-2 space-y-1">
               {suggestions.map((s) => (
@@ -150,7 +150,7 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
                   <button
                     type="button"
                   onClick={() => void send(s.text, [], s.hint)}
-                    className="text-left underline underline-offset-2 hover:text-brand"
+                    className="builder-chat-suggestion text-left underline underline-offset-2 hover:text-brand"
                   >
                     {s.text}
                   </button>
@@ -164,10 +164,10 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           <div
             key={i}
             className={[
-              'max-w-[90%] rounded-lg px-3 py-2 text-sm',
+              'builder-chat-message max-w-[90%] rounded-lg px-3 py-2 text-sm',
               m.role === 'user'
-                ? 'chat-user ml-auto bg-brand text-white'
-                : 'bg-canvas',
+                ? 'builder-chat-user chat-user ml-auto bg-brand text-white'
+                : 'builder-chat-assistant bg-canvas',
             ].join(' ')}
           >
             {m.role === 'assistant' ? <RichText content={m.content} /> : m.content}
@@ -180,7 +180,7 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
                       type="button"
                       disabled={busy}
                       onClick={() => void send(s)}
-                      className="text-left text-brand-ink underline underline-offset-2 hover:text-brand-ink disabled:opacity-40"
+                      className="builder-chat-next text-left text-brand-ink underline underline-offset-2 hover:text-brand-ink disabled:opacity-40"
                     >
                       {s}
                     </button>
@@ -195,7 +195,7 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           <div
             role="status"
             aria-live="polite"
-            className="flex max-w-[90%] items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm text-ink-muted"
+            className="builder-chat-loading flex max-w-[90%] items-center gap-2 rounded-lg bg-canvas px-3 py-2 text-sm text-ink-muted"
           >
             <span
               aria-hidden
@@ -224,7 +224,7 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           e.preventDefault()
           void send(input)
         }}
-        className="mt-3 flex gap-2"
+        className="builder-chat-form mt-3 flex gap-2"
       >
         <input
           value={input}
@@ -232,13 +232,13 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           disabled={busy}
           placeholder="Bạn muốn sửa gì?"
           aria-label="Tin nhắn cho trợ lý"
-          className="flex-1 rounded border border-border-strong px-3 py-2 text-sm"
+          className="builder-chat-input flex-1 rounded border border-border-strong px-3 py-2 text-sm"
         />
         {busy ? (
           <button
             type="button"
             onClick={stop}
-            className="rounded border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+            className="builder-chat-stop rounded border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
           >
             Dừng
           </button>
@@ -246,7 +246,7 @@ export function ChatPanel({ profileId, profile, onProfileChange }: Props) {
           <button
             type="submit"
             disabled={!input.trim()}
-            className="rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            className="builder-chat-send rounded bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
           >
             Gửi
           </button>

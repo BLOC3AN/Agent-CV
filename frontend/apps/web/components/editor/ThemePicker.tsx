@@ -25,7 +25,7 @@ export function ThemePicker({ showTemplate = false }: { showTemplate?: boolean }
   const setTemplate = useEditor((s) => s.setTemplate)
 
   return (
-    <div className="flex flex-col gap-3 px-2 text-sm">
+    <div className="builder-theme-picker flex flex-col gap-3 px-2 text-sm">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Trình bày
       </h2>

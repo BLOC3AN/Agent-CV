@@ -10,6 +10,8 @@ import { SectionOutline } from './SectionOutline'
 import { UndoRedo, SaveStatus } from './UndoRedo'
 import { ThemePicker } from './ThemePicker'
 import { ChatPanel } from '@/components/chat/ChatPanel'
+import { useChat } from '@/lib/chat-store'
+import { assistantWorkspaceState } from '@/lib/assistant-workspace'
 import { VersionHistory } from './VersionHistory'
 import { Sheet } from '@/components/ui'
 
@@ -31,17 +33,22 @@ interface Props {
   title: string
   initialDrawer?: Exclude<Drawer, null> | null
   focusPath?: string | null
+  startWithCv?: boolean
 }
 
 type Drawer = 'chat' | 'history' | null
 
 export function BuilderShell(props: Props) {
-  const [drawer, setDrawer] = useState<Drawer>(props.initialDrawer ?? 'chat')
+  const [drawer, setDrawer] = useState<Drawer>(props.initialDrawer === undefined ? 'chat' : props.initialDrawer)
   const init = useEditor((s) => s.init)
   const storeProfile = useEditor((s) => s.profile)
   const storeTheme = useEditor((s) => s.theme)
   const storeLayout = useEditor((s) => s.layout)
   const storeTemplateId = useEditor((s) => s.templateId)
+  const chatMessages = useChat((s) => s.messages)
+  const workspaceState = props.startWithCv
+    ? 'active'
+    : assistantWorkspaceState(chatMessages, drawer, props.focusPath)
 
   useEffect(() => {
     init({
@@ -88,9 +95,9 @@ export function BuilderShell(props: Props) {
   // TopNav nằm ngoài BuilderShell; trừ chiều cao của nó để workspace không
   // cao hơn viewport và sidebar trợ lý luôn giữ được vùng nhập.
   return (
-    <div className="flex h-[calc(100vh-49px)] min-h-0 flex-col overflow-hidden">
+    <div className="builder-neo frontend-new flex h-screen min-h-0 flex-col overflow-hidden">
       {/* ── Thanh trên ─────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 border-b border-border bg-surface px-4 py-2">
+      <header className="builder-topbar flex items-center gap-3 border-b border-border bg-surface px-4 py-2">
         <h1 className="truncate font-medium">{props.title}</h1>
         <span className="text-ink-subtle">·</span>
         <SaveStatus />
@@ -101,7 +108,7 @@ export function BuilderShell(props: Props) {
           type="button"
           onClick={() => setDrawer((d) => (d === 'history' ? null : 'history'))}
           aria-pressed={drawer === 'history'}
-          className="rounded-lg border border-border-strong px-3 py-1.5 text-sm hover:bg-canvas"
+          className="builder-control rounded-lg border border-border-strong px-3 py-1.5 text-sm hover:bg-canvas"
         >
           Lịch sử
         </button>
@@ -109,7 +116,7 @@ export function BuilderShell(props: Props) {
           type="button"
           onClick={() => setDrawer((d) => (d === 'chat' ? null : 'chat'))}
           aria-pressed={drawer === 'chat'}
-          className="rounded-lg border border-brand-border bg-brand-subtle px-3 py-1.5 text-sm font-medium text-brand-ink hover:bg-brand-border"
+          className="builder-control builder-control-ai rounded-lg border border-brand-border bg-brand-subtle px-3 py-1.5 text-sm font-medium text-brand-ink hover:bg-brand-border"
         >
           Trợ lý
         </button>
@@ -117,23 +124,26 @@ export function BuilderShell(props: Props) {
           href={`/print/${props.cvId}?variant=presentation`}
           target="_blank"
           rel="noreferrer"
-          className="rounded-lg border border-border-strong px-3 py-1.5 text-sm hover:bg-canvas"
+          className="builder-control rounded-lg border border-border-strong px-3 py-1.5 text-sm hover:bg-canvas"
         >
           Xem bản in
         </a>
         <ExportButton cvId={props.cvId} />
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div
+        data-assistant-state={workspaceState}
+        className={`builder-workspace min-h-0 flex-1 flex-col lg:flex-row is-${workspaceState}`}
+      >
         {/* ── Mục lục (ẩn dưới 768px — FRONTEND.md §3.2) ─────────────── */}
-        <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-border bg-surface p-2 md:block">
+        <aside className="builder-outline hidden w-80 shrink-0 overflow-y-auto border-r border-border bg-surface p-2 md:block">
           <SectionOutline />
           <hr className="my-3 border-border" />
           <ThemePicker showTemplate />
         </aside>
 
         {/* ── Xem trước + sửa inline ─────────────────────────────────── */}
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-canvas p-6">
+        <main className="builder-cv-stage min-h-0 min-w-0 overflow-y-auto bg-canvas p-6">
           <div className="mx-auto w-fit">
             <FieldProvider renderer={editableRenderer}>
               <Template profile={profile} theme={theme} layout={layout} variant="screen" />
@@ -147,7 +157,7 @@ export function BuilderShell(props: Props) {
         {drawer === 'chat' && (
           <aside
             aria-label="Trợ lý CV"
-            className="chat-theme flex min-h-[360px] w-full shrink-0 flex-col border-t border-border bg-surface lg:min-h-0 lg:w-[456px] lg:border-l lg:border-t-0"
+            className="builder-chat-dock chat-theme flex min-h-[360px] w-full shrink-0 flex-col border-t border-border bg-surface lg:min-h-0 lg:w-80 lg:border-l lg:border-t-0"
             style={{
               '--chat-accent': theme.accent ?? '#0D9488',
               '--chat-font': theme.fontFamily ?? 'inherit',
@@ -155,8 +165,11 @@ export function BuilderShell(props: Props) {
               '--chat-line': theme.lineHeight ?? 1.5,
             } as CSSProperties}
           >
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-[15px] font-semibold text-ink">Trợ lý CV</h2>
+            <div className="builder-chat-header flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="builder-ai-mark">✦</span>
+                <h2 className="text-[15px] font-semibold text-ink">Trợ lý CV</h2>
+              </div>
               <button
                 type="button"
                 onClick={() => setDrawer(null)}
@@ -166,7 +179,16 @@ export function BuilderShell(props: Props) {
                 <span aria-hidden="true">✕</span>
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div className="builder-chat-body min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              <div className="builder-chat-intro mb-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-ink">HR-Agent AI</p>
+                <h3 className="mt-2 text-2xl font-semibold tracking-tight text-ink">
+                  Mình cùng làm CV này tốt hơn nhé.
+                </h3>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-ink-muted">
+                  Hãy bắt đầu bằng một câu hỏi. Khi bạn gửi tin nhắn đầu tiên, bản CV sẽ mở ra bên cạnh để mình chỉnh cùng nhau.
+                </p>
+              </div>
               <ChatPanel
                 profileId={props.profileId}
                 profile={profile}

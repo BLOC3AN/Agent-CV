@@ -41,7 +41,7 @@ export function ClarifyForm({ data, onSubmit, onSkip }: Props) {
         e.preventDefault()
         onSubmit(answered)
       }}
-      className="rounded-lg border border-brand-border bg-brand-subtle/60 p-3  "
+      className="builder-clarify-form rounded-lg border border-brand-border bg-brand-subtle/60 p-3  "
     >
       <p className="text-sm text-ink ">{data.request.reason}</p>
 

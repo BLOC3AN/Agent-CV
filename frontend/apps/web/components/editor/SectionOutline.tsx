@@ -69,7 +69,7 @@ export function SectionOutline() {
   }
 
   return (
-    <nav aria-label="Mục lục CV" className="flex flex-col gap-0.5 text-sm">
+    <nav aria-label="Mục lục CV" className="builder-section-outline flex flex-col gap-0.5 text-sm">
       <h2 className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
         Các mục
       </h2>

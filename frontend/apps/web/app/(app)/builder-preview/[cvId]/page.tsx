@@ -5,15 +5,16 @@ import { BuilderShell } from '@/components/editor/BuilderShell'
 import { parseStoredProfile } from '@/lib/profile-data'
 
 /**
- * Màn hình soạn CV — UC-24, UC-31, FRONTEND.md §3.
+ * Production-backed redesign route.
  *
- * Server Component nạp dữ liệu, giao cho BuilderShell (client) lo tương tác.
- * Không cần LLM → hoạt động bình thường khi model server chết (TC-DEG-01).
+ * This is deliberately a Next Server Component, not the standalone Vite
+ * reference app: it reads the live profile/CV document and keeps the same
+ * auth, database and /api contracts as /builder/:cvId. It is the safe route
+ * for visual smoke testing before making the redesign the default route.
  */
-
 export const dynamic = 'force-dynamic'
 
-export default async function BuilderPage({
+export default async function BuilderPreviewPage({
   params,
   searchParams,
 }: {
@@ -23,7 +24,6 @@ export default async function BuilderPage({
   const { cvId } = await params
   const query = await searchParams
   if (!isUuid(cvId)) notFound()
-
   const { rows } = await getPool().query<{
     profile_id: string
     profile_data: unknown
@@ -32,11 +32,6 @@ export default async function BuilderPage({
     layout: unknown
     title: string | null
   }>(
-    // Đọc hồ sơ SỐNG (`p.data`), KHÔNG phải `c.profile_snapshot`.
-    // Snapshot là ảnh chụp lúc tạo CV, dùng để đối chiếu "lúc nộp trông thế
-    // nào" (TDD §8.5) — render từ nó thì mọi chỉnh sửa sẽ không hiện ra.
-    // Bí danh cũ `p.data AS profile_snapshot` đọc như đang dùng snapshot,
-    // khiến người đọc tưởng phần tách bản đã xong.
     `SELECT c.profile_id, p.data AS profile_data, c.template_id,
             c.theme, c.layout, c.title
      FROM cv_documents c
@@ -47,18 +42,16 @@ export default async function BuilderPage({
   if (rows.length === 0) notFound()
 
   const row = rows[0]!
-  const profile = parseStoredProfile(row.profile_data)
-
   return (
     <BuilderShell
       profileId={row.profile_id}
       cvId={cvId}
-      initialProfile={profile}
+      initialProfile={parseStoredProfile(row.profile_data)}
       templateId={row.template_id}
       theme={(row.theme ?? {}) as Partial<Theme>}
       layout={(row.layout ?? {}) as Partial<Layout>}
       title={row.title ?? 'CV chưa đặt tên'}
-      initialDrawer={query.assistant === '1' ? 'chat' : null}
+      initialDrawer="chat"
       focusPath={query.focus ?? null}
       startWithCv={!query.assistant}
     />
