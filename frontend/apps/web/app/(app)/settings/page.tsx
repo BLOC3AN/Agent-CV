@@ -10,10 +10,14 @@ export default async function SettingsPage() {
   if (!user) redirect('/login')
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="text-2xl font-semibold">Tài khoản</h1>
+    <main className="frontend-new-page animate-fade-in">
+      <header className="reference-page-hero p-6 md:p-8">
+        <p className="reference-eyebrow">Cấu hình hệ thống</p>
+        <h1 className="mt-2 text-2xl font-bold text-white">Cài đặt hệ thống</h1>
+        <p className="mt-1 text-sm text-slate-300">Quản lý tài khoản và cấu hình hiển thị ứng dụng.</p>
+      </header>
 
-      <section className="mt-6 rounded-xl border border-border p-4 ">
+      <section className="reference-surface mt-6 p-6">
         <p className="text-sm text-ink-muted">Email</p>
         <p className="font-medium">{user.email}</p>
       </section>

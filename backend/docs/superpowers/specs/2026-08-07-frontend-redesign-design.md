@@ -52,7 +52,7 @@ về nơi đã mở. Đây là modal chặn mọi thay đổi từ AI — dùng 
 
 | # | Quyết định | Ghi chú |
 |---|---|---|
-| D1 | **Teal + Ink** làm hệ màu thương hiệu | Thị trường tuyển dụng VN kín màu đỏ (TopCV, ITviec) và xanh dương (VietnamWorks); teal đứng riêng mà vẫn đọc là tin cậy |
+| D1 | ~~**Teal + Ink** làm hệ màu thương hiệu~~ — **bị D10 đè ngày 2026-08-09** | Lý do ban đầu: thị trường tuyển dụng VN kín màu đỏ (TopCV, ITviec) và xanh dương (VietnamWorks); teal đứng riêng mà vẫn đọc là tin cậy |
 | D2 | **Top nav cho workspace thao tác; sidebar cho dashboard đã đăng nhập** | Giữ trọn chiều ngang cho `/builder` ở 1366×768; Home/CV/settings cần rail ổn định để quét nhanh theo dashboard spec 2026-08-08 |
 | D3 | **AI nổi bật theo cả ba cách**, đặt ở ba tầng khác nhau | Bề mặt · lối vào · chứng cứ — xem §5 |
 | D4 | **Chỉ chế độ sáng**, gỡ toàn bộ `dark:` | Bớt một bảng màu phải chăm; `/print` vốn luôn sáng |
@@ -61,6 +61,7 @@ về nơi đã mở. Đây là modal chặn mọi thay đổi từ AI — dùng 
 | D7 | Ràng buộc primitive là **khuyến nghị**, không phải lỗi biên dịch | Cảnh báo `console.warn` ở dev, im lặng ở production |
 | D8 | **Điểm khớp JD không tô màu** | TDD §8.2.3 cấm khẳng định ngưỡng tuyệt đối — xem §5.4 |
 | D9 | **`/print` nằm ngoài phạm vi** | Nó là đầu vào của file PDF người dùng nộp đi |
+| D10 | **Indigo + Slate** làm hệ màu thương hiệu, đè D1 | Chốt 2026-08-09. Bản SPA `apps/web-spa` được chủ sản phẩm duyệt dùng indigo; giữ teal ở `apps/web` sẽ khiến hai bản lệch màu suốt giai đoạn SP-1→SP-5 khi cả hai cùng phục vụ. Xem §3.1 |
 
 ---
 
@@ -74,12 +75,13 @@ Ba nhóm tách bạch. **Không nhóm nào mượn màu của nhóm khác.**
 
 ```css
 @theme {
-  /* Thương hiệu — dùng cho brand VÀ cho mọi vùng AI, không dùng cho gì khác */
-  --color-brand:        #0D9488;
-  --color-brand-hover:  #0F766E;
-  --color-brand-subtle: #F0FDFA;
-  --color-brand-border: #99F6E4;
-  --color-brand-ink:    #134E4A;
+  /* Thương hiệu — dùng cho brand VÀ cho mọi vùng AI, không dùng cho gì khác.
+     Indigo theo D10 (2026-08-09); bộ teal cũ của D1 xem lịch sử git. */
+  --color-brand:        #4F46E5;
+  --color-brand-hover:  #4338CA;
+  --color-brand-subtle: #EEF2FF;
+  --color-brand-border: #C7D2FE;
+  --color-brand-ink:    #3730A3;
 
   /* Mực và nền */
   --color-ink:          #0F172A;
@@ -90,7 +92,7 @@ Ba nhóm tách bạch. **Không nhóm nào mượn màu của nhóm khác.**
   --color-border:       #E2E8F0;
   --color-border-strong:#CBD5E1;
 
-  /* Trạng thái — không bao giờ dùng teal */
+  /* Trạng thái — không bao giờ dùng màu thương hiệu */
   --color-success:        #059669;
   --color-success-subtle: #ECFDF5;
   --color-warn:           #D97706;
@@ -100,8 +102,9 @@ Ba nhóm tách bạch. **Không nhóm nào mượn màu của nhóm khác.**
 }
 ```
 
-**Quy tắc một dòng:** teal chỉ dành cho thương hiệu và AI. Thấy teal là biết máy
-đang tham gia. Trạng thái không mượn teal; AI không mượn xanh lá / vàng / đỏ.
+**Quy tắc một dòng:** màu thương hiệu chỉ dành cho brand và AI. Thấy indigo là
+biết máy đang tham gia. Trạng thái không mượn indigo; AI không mượn xanh lá /
+vàng / đỏ.
 
 ### 3.2 Chữ
 

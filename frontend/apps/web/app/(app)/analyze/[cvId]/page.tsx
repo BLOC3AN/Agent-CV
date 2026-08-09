@@ -31,16 +31,18 @@ export default async function AnalyzePage({
     .then((r) => r.rowCount! > 0)
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="frontend-new-page animate-fade-in">
       {hasAnalysis ? (
         <ReportView cvId={cvId} />
       ) : (
         <>
-          <h1 className="text-xl font-semibold">Đối chiếu CV với tin tuyển dụng</h1>
-          <p className="mt-2 text-sm text-ink-muted ">
-            Dán toàn bộ mô tả công việc vào đây. Hệ thống sẽ tạo một bản CV riêng cho
-            vị trí này — bản gốc của bạn giữ nguyên.
-          </p>
+          <header className="reference-page-hero p-6 md:p-8">
+            <p className="reference-eyebrow">Đối chiếu thông minh</p>
+            <h1 className="mt-2 text-2xl font-bold text-white">Đối chiếu CV với tin tuyển dụng</h1>
+            <p className="mt-1 text-sm text-slate-300">
+              So sánh CV với mô tả công việc để đánh giá độ tương thích ATS và nhận gợi ý chỉnh sửa.
+            </p>
+          </header>
           <JdForm cvId={cvId} />
         </>
       )}

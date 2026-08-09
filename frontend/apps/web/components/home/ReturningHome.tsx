@@ -57,13 +57,15 @@ export function ReturningHome({
   aiAvailable,
 }: Props) {
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8 lg:px-10 lg:py-10">
-      <header>
-        <p className="text-[13px] font-medium text-brand-ink">Tổng quan</p>
-        <h1 className="mt-1 text-[24px] font-semibold text-ink">{greeting}</h1>
-        <p className="mt-1 text-[15px] text-ink-muted">
-          Tiếp tục hoàn thiện hồ sơ từ nơi bạn đã dừng lại.
-        </p>
+    <main className="frontend-new-page animate-fade-in">
+      <header className="reference-page-hero flex flex-col items-start justify-between gap-5 p-6 md:flex-row md:items-center md:p-8">
+        <div>
+          <p className="reference-eyebrow">Xin chào mừng</p>
+          <h1 className="mt-2 text-2xl font-bold md:text-3xl">{greeting}</h1>
+          <p className="mt-1 max-w-xl text-sm">
+            Tiếp tục tối ưu hóa hồ sơ năng lực của bạn theo chuẩn ATS doanh nghiệp với sự trợ giúp từ AI.
+          </p>
+        </div>
       </header>
 
       <div className="mt-7 grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">

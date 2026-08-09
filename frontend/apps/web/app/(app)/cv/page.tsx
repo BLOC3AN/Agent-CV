@@ -44,9 +44,13 @@ export default async function CvListPage() {
   )
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
-      <div className="flex flex-wrap items-baseline gap-3">
-        <h1 className="text-2xl font-semibold">CV của tôi</h1>
+    <main className="frontend-new-page animate-fade-in">
+      <div className="reference-page-hero flex flex-wrap items-center gap-3 p-6 md:p-8">
+        <div className="min-w-0 flex-1">
+          <p className="reference-eyebrow">Kho hồ sơ cá nhân</p>
+          <h1 className="mt-2 text-2xl font-bold text-white">Danh sách CV của tôi</h1>
+          <p className="mt-1 text-sm text-slate-300">Quản lý, chỉnh sửa và tiếp tục hoàn thiện các phiên bản CV.</p>
+        </div>
         <span className="flex-1" />
         <Link
           href="/import"
@@ -71,7 +75,7 @@ export default async function CvListPage() {
           </p>
         </div>
       ) : (
-        <ul className="mt-6 divide-y divide-border rounded-xl border border-border  ">
+        <ul className="reference-surface mt-6 divide-y divide-border overflow-hidden">
           {rows.map((r) => (
             <li key={r.id} className="flex items-center gap-3 px-4 py-3">
               <Link

@@ -32,17 +32,17 @@ export function AppShell({
   if (!showRail) return <>{children}</>
 
   return (
-    <div className="flex min-h-[calc(100vh-49px)]">
-      <aside className="hidden w-60 shrink-0 border-r border-border bg-surface lg:block">
-        <nav aria-label="Điều hướng ứng dụng" className="sticky top-0 flex h-[calc(100vh-49px)] flex-col p-4">
+    <div className="reference-app-shell flex">
+      <aside className="reference-sidebar hidden w-60 shrink-0 border-r border-border bg-surface md:block">
+        <nav aria-label="Điều hướng ứng dụng" className="sticky top-0 flex flex-col">
           <div className="space-y-1">
-            <RailLink href="/" active={pathname === '/'} icon="⌂">
+            <RailLink href="/" active={pathname === '/'} icon="▣">
               Tổng quan
             </RailLink>
             <RailLink href="/cv" active={pathname.startsWith('/cv')} icon="▤">
               CV của tôi
             </RailLink>
-            <RailLink href={cvId ? `/analyze/${cvId}` : '/cv'} active={pathname.startsWith('/analyze/')} icon="◉">
+            <RailLink href={cvId ? `/analyze/${cvId}` : '/cv'} active={pathname.startsWith('/analyze/')} icon="◈">
               Đối chiếu việc làm
             </RailLink>
             <RailLink href={assistantHref} active={pathname.startsWith('/builder/')} icon="✦">
@@ -76,7 +76,7 @@ export function AppShell({
         </nav>
       </aside>
 
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="reference-page min-w-0 flex-1">{children}</div>
     </div>
   )
 }
@@ -97,7 +97,7 @@ function RailLink({
       href={href}
       aria-current={active ? 'page' : undefined}
       className={[
-        'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors',
+        'reference-rail-link flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors',
         active
           ? 'bg-brand-subtle font-medium text-brand-ink'
           : 'text-ink-muted hover:bg-canvas hover:text-ink',

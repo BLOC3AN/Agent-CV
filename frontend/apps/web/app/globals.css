@@ -12,17 +12,17 @@
  * `text-ink-muted`) trên 38 file. Đổi một sắc độ phải sửa 38 chỗ, và chỗ
  * thứ 39 sẽ lệch mà không ai biết.
  *
- * QUY TẮC MỘT DÒNG: teal chỉ dành cho thương hiệu và AI. Nhìn thấy teal là
- * biết máy đang tham gia. Trạng thái không mượn teal; AI không mượn xanh lá,
+ * QUY TẮC MỘT DÒNG: brand chỉ dành cho thương hiệu và AI. Nhìn thấy indigo là
+ * biết máy đang tham gia. Trạng thái không mượn indigo; AI không mượn xanh lá,
  * vàng hay đỏ.
  */
 @theme {
-  /* Thương hiệu — brand VÀ mọi vùng AI, không dùng cho gì khác */
-  --color-brand: #0D9488;
-  --color-brand-hover: #0F766E;
-  --color-brand-subtle: #F0FDFA;
-  --color-brand-border: #99F6E4;
-  --color-brand-ink: #134E4A;
+  /* Indigo/slate — D10 đè D1 (teal), khớp bản SPA đã duyệt */
+  --color-brand: #4F46E5;
+  --color-brand-hover: #4338CA;
+  --color-brand-subtle: #EEF2FF;
+  --color-brand-border: #C7D2FE;
+  --color-brand-ink: #3730A3;
 
   /* Mực và nền */
   --color-ink: #0F172A;
@@ -42,13 +42,13 @@
   --color-danger-subtle: #FEF2F2;
 
   /* Bo góc — đúng ba mức, đừng thêm mức thứ tư */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 
   /* Bóng — đúng hai mức: thẻ nổi và lớp phủ */
-  --shadow-sm: 0 1px 2px rgb(15 23 42 / 6%), 0 1px 3px rgb(15 23 42 / 8%);
-  --shadow-md: 0 4px 12px rgb(15 23 42 / 8%), 0 12px 32px rgb(15 23 42 / 10%);
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 5%);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / 8%), 0 12px 32px rgb(15 23 42 / 8%);
 }
 
 /*
@@ -67,6 +67,69 @@ body {
   background-color: var(--color-canvas);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+}
+
+/* FRONTEND_NEW base geometry: all authenticated pages share this canvas. */
+.reference-app-shell {
+  min-height: calc(100vh - 64px);
+}
+
+.reference-sidebar nav {
+  height: calc(100vh - 64px);
+}
+
+.reference-page > main,
+.frontend-new-page {
+  width: min(100%, 1280px);
+  max-width: none;
+  margin-inline: auto;
+  padding: 32px 40px 40px;
+}
+
+.frontend-new-page .reference-page-hero {
+  border: 1px solid #1E293B;
+  border-radius: 16px;
+  background: linear-gradient(110deg, #0F172A, #1E1B4B 52%, #0F172A);
+  color: white;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 8%);
+}
+
+.frontend-new-page .reference-page-hero h1 {
+  color: white;
+  letter-spacing: -0.02em;
+}
+
+.frontend-new-page .reference-page-hero p {
+  color: #CBD5E1;
+}
+
+.frontend-new-page .reference-surface {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+}
+
+.frontend-new-page .reference-eyebrow {
+  color: #A5B4FC;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1279px) {
+  .reference-page > main,
+  .frontend-new-page {
+    padding-inline: 32px;
+  }
+}
+
+@media (max-width: 767px) {
+  .reference-page > main,
+  .frontend-new-page {
+    padding: 24px 16px 32px;
+  }
 }
 
 /* /print nằm trong RootLayout chung của Next, nhưng bản PDF chỉ được chứa CV.
@@ -132,6 +195,913 @@ body:has(> .print-document) > .print-document {
 .chat-theme .chat-rich-text h2,
 .chat-theme .chat-rich-text h3 { color: var(--chat-accent); }
 .chat-theme .chat-mermaid { border-color: color-mix(in srgb, var(--chat-accent) 30%, var(--color-border)); }
+
+/*
+ * AI builder workspace — concept "chat trước, CV sau".
+ *
+ * Trạng thái idle giữ người dùng trong một canvas tập trung vào câu hỏi đầu
+ * tiên. Ngay khi store nhận user message, CV không bị thay trang mà trượt vào
+ * cùng workspace; nhờ vậy ngữ cảnh chat và mọi thao tác inline vẫn còn nguyên.
+ */
+.builder-workspace {
+  display: flex;
+  overflow: hidden;
+  background: var(--color-canvas);
+}
+
+.builder-cv-stage,
+.builder-chat-dock,
+.builder-outline {
+  transition: flex-basis 420ms cubic-bezier(.22, 1, .36, 1),
+    width 420ms cubic-bezier(.22, 1, .36, 1),
+    opacity 260ms ease,
+    transform 420ms cubic-bezier(.22, 1, .36, 1),
+    padding 420ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.builder-workspace.is-idle .builder-outline {
+  flex-basis: 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-width: 0;
+}
+
+.builder-workspace.is-idle .builder-cv-stage {
+  flex: 0 0 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  padding-left: 0;
+  padding-right: 0;
+  transform: translateX(28px) scale(.985);
+}
+
+.builder-workspace.is-idle .builder-chat-dock {
+  width: min(720px, calc(100% - 48px));
+  min-height: 0;
+  height: min(720px, calc(100% - 48px));
+  margin: auto;
+  border: 1px solid var(--color-brand-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  transform: translateX(0);
+}
+
+.builder-workspace.is-idle .builder-chat-header {
+  border-bottom-color: var(--color-brand-border);
+  background: linear-gradient(135deg, var(--color-brand-subtle), var(--color-surface));
+}
+
+.builder-ai-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--color-brand);
+  color: white;
+  box-shadow: 0 4px 10px rgb(13 148 136 / 20%);
+}
+
+/* Visual port from hr-agent---ai-cv-builder-&-job-matcher. The visual layer is
+ * scoped to the new builder so dashboard/report screens keep their tokenized
+ * product UI while the editor gets the bold, tactile CV-making surface. */
+.builder-neo {
+  --neo-black: #000000;
+  --neo-yellow: #fef08a;
+  --neo-yellow-strong: #fde047;
+  --neo-pink: #f472b6;
+  --neo-pink-strong: #ec4899;
+  --neo-blue: #93c5fd;
+  --neo-green: #86efac;
+  background: var(--neo-yellow);
+}
+
+/* Builder is a standalone editor surface. Do not stack the legacy global nav
+ * above the reference editor header: at 1920×1080 that would steal 49px and
+ * create the hybrid composition we explicitly avoid. */
+body:has(.builder-neo) > header {
+  display: none;
+}
+
+body:has(.builder-neo) {
+  overflow: hidden;
+}
+
+@media (min-width: 1280px) {
+  .builder-neo .builder-workspace.is-active .builder-outline {
+    flex-basis: 320px;
+  }
+
+  .builder-neo .builder-workspace.is-active .builder-chat-dock {
+    flex-basis: 320px;
+  }
+}
+
+.builder-neo .builder-topbar {
+  min-height: 58px;
+  border-bottom: 4px solid var(--neo-black);
+  background: var(--neo-yellow-strong);
+  color: var(--neo-black);
+}
+
+.builder-neo .builder-topbar h1 {
+  font-weight: 900;
+  letter-spacing: -.02em;
+}
+
+.builder-neo .builder-control {
+  border: 2px solid var(--neo-black);
+  border-radius: 10px;
+  background: white;
+  color: var(--neo-black);
+  font-weight: 900;
+  box-shadow: 3px 3px 0 var(--neo-black);
+  transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease;
+}
+
+.builder-neo .builder-control:hover {
+  background: var(--neo-blue);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--neo-black);
+}
+
+.builder-neo .builder-control-ai {
+  background: var(--neo-pink);
+}
+
+.builder-neo .builder-control-ai:hover {
+  background: var(--neo-pink-strong);
+}
+
+.builder-neo .builder-outline {
+  border-right: 4px solid var(--neo-black);
+  background: white;
+  box-shadow: 4px 0 0 var(--neo-black);
+}
+
+.builder-neo .builder-section-outline h2,
+.builder-neo .builder-theme-picker h2 {
+  color: var(--neo-black);
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.builder-neo .builder-section-outline > div {
+  border: 2px solid var(--neo-black);
+  border-radius: 10px;
+  font-weight: 800;
+  transition: transform 100ms ease, background 100ms ease, box-shadow 100ms ease;
+}
+
+.builder-neo .builder-section-outline > div:hover,
+.builder-neo .builder-section-outline > div:focus-within {
+  background: var(--neo-blue);
+  box-shadow: 3px 3px 0 var(--neo-black);
+  transform: translate(-1px, -1px);
+}
+
+.builder-neo .builder-section-outline button,
+.builder-neo .builder-theme-picker button,
+.builder-neo .builder-theme-picker select,
+.builder-neo .builder-theme-picker input[type='range'] {
+  accent-color: var(--neo-black);
+}
+
+.builder-neo .builder-theme-picker select {
+  border: 2px solid var(--neo-black);
+  border-radius: 10px;
+  background: var(--neo-blue);
+  font-weight: 800;
+}
+
+.builder-neo .builder-cv-stage {
+  background: var(--neo-yellow);
+}
+
+.builder-neo .builder-cv-stage #a4-cv-paper,
+.builder-neo .builder-cv-stage .cv-page {
+  border: 4px solid var(--neo-black);
+  box-shadow: 12px 12px 0 var(--neo-black);
+}
+
+.builder-neo .builder-chat-dock {
+  border-color: var(--neo-black);
+  background: white;
+  box-shadow: -4px 0 0 var(--neo-black);
+}
+
+.builder-neo .builder-chat-header {
+  border-bottom: 4px solid var(--neo-black);
+  background: var(--neo-pink);
+}
+
+.builder-neo .builder-chat-header h2,
+.builder-neo .builder-chat-kicker {
+  color: var(--neo-black);
+  font-weight: 900;
+}
+
+.builder-neo .builder-chat-header button {
+  border: 2px solid var(--neo-black);
+  color: var(--neo-black);
+  font-weight: 900;
+}
+
+.builder-neo .builder-chat-header button:hover {
+  background: var(--neo-black);
+  color: white;
+}
+
+.builder-neo .builder-chat-body {
+  background: var(--neo-yellow);
+}
+
+.builder-neo .builder-chat-intro {
+  padding: 14px;
+  border: 3px solid var(--neo-black);
+  border-radius: 14px;
+  background: var(--neo-yellow-strong);
+  box-shadow: 5px 5px 0 var(--neo-black);
+}
+
+.builder-neo .builder-chat-intro h3,
+.builder-neo .builder-chat-intro p {
+  color: var(--neo-black);
+}
+
+.builder-neo .builder-chat-model {
+  padding: 10px;
+  border: 2px solid var(--neo-black);
+  border-radius: 10px;
+  background: var(--neo-blue);
+  color: var(--neo-black);
+  font-weight: 900;
+}
+
+.builder-neo .builder-chat-model select {
+  border: 2px solid var(--neo-black);
+  border-radius: 8px;
+  background: white;
+  color: var(--neo-black);
+  font-weight: 900;
+}
+
+.builder-neo .builder-chat-messages {
+  border: 3px solid var(--neo-black);
+  border-radius: 14px;
+  background: #f9fafb;
+  box-shadow: 4px 4px 0 var(--neo-black);
+}
+
+.builder-neo .builder-chat-message {
+  border: 2px solid var(--neo-black);
+  border-radius: 14px;
+  box-shadow: 3px 3px 0 var(--neo-black);
+  font-weight: 700;
+}
+
+.builder-neo .builder-chat-user {
+  background: var(--neo-blue) !important;
+  color: var(--neo-black) !important;
+}
+
+.builder-neo .builder-chat-assistant {
+  background: var(--neo-green) !important;
+  color: var(--neo-black) !important;
+}
+
+.builder-neo .builder-chat-suggestion,
+.builder-neo .builder-chat-next {
+  color: var(--neo-black);
+  font-weight: 900;
+}
+
+.builder-neo .builder-chat-loading {
+  border: 2px solid var(--neo-black);
+  background: var(--neo-yellow-strong);
+  color: var(--neo-black);
+  font-weight: 900;
+  box-shadow: 3px 3px 0 var(--neo-black);
+}
+
+.builder-neo .builder-chat-form {
+  padding: 10px;
+  border: 3px solid var(--neo-black);
+  border-radius: 12px;
+  background: var(--neo-yellow-strong);
+}
+
+.builder-neo .builder-chat-input {
+  border: 2px solid var(--neo-black);
+  border-radius: 10px;
+  background: white;
+  color: var(--neo-black);
+  font-weight: 700;
+}
+
+.builder-neo .builder-chat-send,
+.builder-neo .builder-chat-stop {
+  border: 2px solid var(--neo-black);
+  border-radius: 9px;
+  box-shadow: 2px 2px 0 var(--neo-black);
+  font-weight: 900;
+}
+
+.builder-neo .builder-chat-send {
+  background: var(--neo-pink-strong) !important;
+  color: var(--neo-black) !important;
+}
+
+.builder-neo .builder-chat-send:hover {
+  background: var(--neo-pink) !important;
+}
+
+.builder-neo .builder-chat-empty {
+  color: var(--neo-black);
+  font-weight: 700;
+}
+
+/* Shared shell port for dashboard, CV list, matching and settings routes. */
+.reference-topnav {
+  border-bottom: 3px solid #000;
+  background: #fde047;
+  color: #000;
+}
+
+.reference-topnav > nav {
+  min-height: 64px;
+  padding: 0 32px;
+}
+
+.reference-topnav .reference-brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 2px solid #000;
+  border-radius: 10px;
+  background: #4f46e5;
+  color: #fff;
+  font-weight: 900;
+  box-shadow: 3px 3px 0 #000;
+}
+
+.reference-topnav .reference-brand-accent {
+  color: #4f46e5;
+}
+
+.reference-topnav .reference-nav-link,
+.reference-topnav .reference-user-link {
+  color: #000;
+  font-weight: 800;
+}
+
+.reference-topnav .reference-nav-link:hover,
+.reference-topnav .reference-user-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.reference-topnav .reference-ai-link {
+  border: 2px solid #000;
+  border-radius: 10px;
+  background: #f472b6;
+  color: #000;
+  font-weight: 900;
+  box-shadow: 3px 3px 0 #000;
+}
+
+.reference-app-shell {
+  background: #fef08a;
+}
+
+.reference-sidebar {
+  border-right: 4px solid #000;
+  background: #fff;
+  box-shadow: 4px 0 0 #000;
+}
+
+.reference-sidebar > nav {
+  padding: 16px;
+}
+
+.reference-sidebar .reference-rail-link {
+  border: 2px solid transparent;
+  border-radius: 10px;
+  color: #000;
+  font-weight: 800;
+}
+
+.reference-sidebar .reference-rail-link[aria-current='page'] {
+  border-color: #000;
+  background: #4f46e5;
+  color: #fff;
+  box-shadow: 3px 3px 0 #000;
+}
+
+.reference-sidebar .reference-rail-link:hover:not([aria-current='page']) {
+  border-color: #000;
+  background: #93c5fd;
+}
+
+.reference-sidebar .mt-auto {
+  border: 3px solid #000;
+  border-radius: 14px;
+  background: #86efac;
+  color: #000;
+  box-shadow: 4px 4px 0 #000;
+}
+
+.reference-sidebar .mt-auto a {
+  border: 2px solid #000;
+  border-radius: 9px;
+  background: #f472b6;
+  color: #000;
+  font-weight: 900;
+  box-shadow: 2px 2px 0 #000;
+}
+
+.reference-page {
+  min-height: calc(100vh - 49px);
+  background: #fef08a;
+}
+
+.reference-page [data-variant='default'],
+.reference-page [data-variant='raised'] {
+  border: 3px solid #000;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 5px 5px 0 #000;
+}
+
+.reference-page [data-variant='ai'] {
+  border: 3px solid #000;
+  border-radius: 14px;
+  background: #86efac;
+  color: #000;
+  box-shadow: 5px 5px 0 #000;
+}
+
+.reference-page button:not([aria-label='Ẩn thông báo']),
+.reference-page a[href] {
+  transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease;
+}
+
+.reference-page button:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+}
+
+/* FRONTEND_NEW theme: clean minimalist / corporate tech. These rules are the
+ * final visual layer for the redesign and intentionally supersede the earlier
+ * neo-brutalist experiment above. Runtime behavior and API contracts are
+ * unchanged; only color, surface, spacing and layout presentation change. */
+:root {
+  --new-indigo: #4f46e5;
+  --new-indigo-hover: #4338ca;
+  --new-indigo-subtle: #eef2ff;
+  --new-slate-50: #f8fafc;
+  --new-slate-100: #f1f5f9;
+  --new-slate-200: #e2e8f0;
+  --new-slate-500: #64748b;
+  --new-slate-700: #334155;
+  --new-slate-900: #0f172a;
+}
+
+body:has(.frontend-new),
+body:has(.reference-app-shell),
+body:has(.reference-page) {
+  background: var(--new-slate-100);
+  color: var(--new-slate-900);
+}
+
+.reference-topnav {
+  min-height: 64px;
+  border-bottom: 1px solid var(--new-slate-200);
+  background: rgb(255 255 255 / 92%);
+  color: var(--new-slate-900);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.reference-topnav .reference-brand-mark {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--new-indigo);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 12%);
+}
+
+.reference-topnav .reference-brand-accent {
+  color: var(--new-indigo);
+}
+
+.reference-topnav .reference-nav-link,
+.reference-topnav .reference-user-link {
+  color: var(--new-slate-500);
+  font-weight: 600;
+}
+
+.reference-topnav .reference-nav-link:hover,
+.reference-topnav .reference-user-link:hover {
+  color: var(--new-slate-900);
+  text-decoration: none;
+}
+
+.reference-topnav .reference-ai-link {
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: var(--new-indigo-subtle);
+  color: #3730a3;
+  box-shadow: none;
+  font-weight: 700;
+}
+
+.reference-app-shell,
+.reference-page {
+  background: var(--new-slate-100);
+}
+
+.reference-sidebar {
+  border-right: 1px solid var(--new-slate-200);
+  background: var(--new-slate-50);
+  box-shadow: none;
+}
+
+.reference-sidebar .reference-rail-link {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--new-slate-500);
+  font-weight: 600;
+}
+
+.reference-sidebar .reference-rail-link[aria-current='page'] {
+  border-color: #c7d2fe;
+  background: var(--new-indigo-subtle);
+  color: #3730a3;
+  box-shadow: none;
+}
+
+.reference-sidebar .reference-rail-link:hover:not([aria-current='page']) {
+  border-color: transparent;
+  background: var(--new-slate-200);
+  color: var(--new-slate-900);
+}
+
+.reference-sidebar .mt-auto {
+  border: 1px solid #c7d2fe;
+  border-radius: 14px;
+  background: var(--new-indigo-subtle);
+  color: #3730a3;
+  box-shadow: none;
+}
+
+.reference-sidebar .mt-auto a {
+  border: 0;
+  border-radius: 9px;
+  background: var(--new-indigo);
+  color: white;
+  box-shadow: none;
+}
+
+.frontend-new {
+  --neo-black: transparent;
+  --neo-yellow: var(--new-slate-100);
+  --neo-yellow-strong: var(--new-indigo-subtle);
+  --neo-pink: var(--new-indigo);
+  --neo-pink-strong: var(--new-indigo-hover);
+  --neo-blue: var(--new-slate-50);
+  --neo-green: #ecfdf5;
+  background: var(--new-slate-100);
+  color: var(--new-slate-900);
+}
+
+.frontend-new .builder-topbar {
+  min-height: 64px;
+  border-bottom: 1px solid var(--new-slate-200);
+  background: rgb(255 255 255 / 94%);
+  color: var(--new-slate-900);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.frontend-new .builder-topbar h1 {
+  font-weight: 700;
+}
+
+.frontend-new .builder-control {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 10px;
+  background: white;
+  color: var(--new-slate-700);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+  font-weight: 600;
+}
+
+.frontend-new .builder-control:hover {
+  border-color: #c7d2fe;
+  background: var(--new-indigo-subtle);
+  color: #3730a3;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+  transform: none;
+}
+
+.frontend-new .builder-control-ai {
+  border-color: #c7d2fe;
+  background: var(--new-indigo-subtle);
+  color: #3730a3;
+}
+
+.frontend-new .builder-outline {
+  border-right: 1px solid var(--new-slate-200);
+  background: white;
+  box-shadow: none;
+}
+
+.frontend-new .builder-section-outline h2,
+.frontend-new .builder-theme-picker h2 {
+  color: var(--new-slate-500);
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.frontend-new .builder-section-outline > div {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 10px;
+  background: white;
+  color: var(--new-slate-700);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.frontend-new .builder-section-outline > div:hover,
+.frontend-new .builder-section-outline > div:focus-within {
+  border-color: #c7d2fe;
+  background: var(--new-indigo-subtle);
+  box-shadow: none;
+  transform: none;
+}
+
+.frontend-new .builder-theme-picker select {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 10px;
+  background: var(--new-slate-50);
+  color: var(--new-slate-700);
+  font-weight: 600;
+}
+
+.frontend-new .builder-cv-stage {
+  background: var(--new-slate-100);
+}
+
+.frontend-new .builder-cv-stage .cv-page,
+.frontend-new .builder-cv-stage #a4-cv-paper {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 2px;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 10%), 0 12px 32px rgb(15 23 42 / 8%);
+}
+
+.frontend-new .builder-chat-dock {
+  border-color: var(--new-slate-200);
+  background: white;
+  box-shadow: none;
+}
+
+.frontend-new .builder-chat-header {
+  border-bottom: 1px solid var(--new-slate-200);
+  background: white;
+}
+
+.frontend-new .builder-chat-header h2,
+.frontend-new .builder-chat-kicker {
+  color: var(--new-slate-900);
+  font-weight: 700;
+}
+
+.frontend-new .builder-ai-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--new-indigo);
+  box-shadow: none;
+}
+
+.frontend-new .builder-chat-body {
+  background: white;
+}
+
+.frontend-new .builder-chat-intro {
+  border: 1px solid #c7d2fe;
+  border-radius: 14px;
+  background: var(--new-indigo-subtle);
+  box-shadow: none;
+}
+
+.frontend-new .builder-chat-intro h3,
+.frontend-new .builder-chat-intro p {
+  color: var(--new-slate-900);
+}
+
+.frontend-new .builder-chat-model {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 10px;
+  background: var(--new-slate-50);
+  color: var(--new-slate-500);
+  font-weight: 600;
+}
+
+.frontend-new .builder-chat-model select {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 8px;
+  background: white;
+  color: var(--new-slate-700);
+  font-weight: 600;
+}
+
+.frontend-new .builder-chat-messages {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+}
+
+.frontend-new .builder-chat-message {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 14px;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+.frontend-new .builder-chat-user {
+  background: var(--new-indigo) !important;
+  color: white !important;
+}
+
+.frontend-new .builder-chat-assistant {
+  background: var(--new-slate-50) !important;
+  color: var(--new-slate-700) !important;
+}
+
+.frontend-new .builder-chat-suggestion,
+.frontend-new .builder-chat-next {
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.frontend-new .builder-chat-loading {
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: var(--new-indigo-subtle);
+  color: #3730a3;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.frontend-new .builder-chat-form {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 12px;
+  background: var(--new-slate-50);
+}
+
+.frontend-new .builder-chat-input {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 10px;
+  color: var(--new-slate-700);
+  font-weight: 500;
+}
+
+.frontend-new .builder-chat-send,
+.frontend-new .builder-chat-stop {
+  border: 0;
+  border-radius: 9px;
+  box-shadow: none;
+  font-weight: 700;
+}
+
+.frontend-new .builder-chat-send {
+  background: var(--new-indigo) !important;
+  color: white !important;
+}
+
+.frontend-new .builder-chat-send:hover {
+  background: var(--new-indigo-hover) !important;
+}
+
+.frontend-new .builder-clarify-form {
+  border: 1px solid #c7d2fe;
+  border-radius: 14px;
+  background: var(--new-indigo-subtle);
+  color: var(--new-slate-900);
+  box-shadow: none;
+}
+
+.frontend-new [role='dialog'] {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 8%), 0 12px 32px rgb(15 23 42 / 10%);
+}
+
+.frontend-new [role='dialog'] > div:first-of-type {
+  border-bottom: 1px solid var(--new-slate-200);
+  background: white;
+}
+
+.frontend-new [role='dialog'] button {
+  border: 1px solid var(--new-slate-200);
+  border-radius: 9px;
+  font-weight: 600;
+}
+
+.builder-neo .builder-clarify-form {
+  border: 3px solid var(--neo-black);
+  border-radius: 14px;
+  background: var(--neo-yellow-strong);
+  color: var(--neo-black);
+  box-shadow: 4px 4px 0 var(--neo-black);
+}
+
+.builder-neo .builder-clarify-form input {
+  border: 2px solid var(--neo-black);
+  border-radius: 9px;
+  background: white;
+}
+
+.builder-neo [role='dialog'] {
+  border: 4px solid var(--neo-black);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 12px 12px 0 var(--neo-black);
+}
+
+.builder-neo [role='dialog'] > div:first-of-type {
+  border-bottom: 4px solid var(--neo-black);
+  background: var(--neo-pink);
+}
+
+.builder-neo [role='dialog'] button {
+  border: 2px solid var(--neo-black);
+  border-radius: 9px;
+  font-weight: 900;
+}
+
+.builder-neo [role='dialog'] li {
+  border: 2px solid var(--neo-black);
+  border-radius: 10px;
+}
+
+.builder-workspace.is-active .builder-cv-stage {
+  flex: 1 1 auto;
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+.builder-workspace.is-active .builder-chat-dock {
+  transform: translateX(0);
+}
+
+.builder-workspace.is-active .builder-chat-intro {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .builder-cv-stage,
+  .builder-chat-dock,
+  .builder-outline {
+    transition: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .builder-workspace.is-idle .builder-chat-dock {
+    width: min(720px, calc(100% - 32px));
+    height: min(720px, calc(100% - 32px));
+  }
+}
+
+@media (max-width: 767px) {
+  .builder-workspace {
+    overflow-y: auto;
+  }
+
+  .builder-workspace.is-idle .builder-chat-dock {
+    width: calc(100% - 24px);
+    height: calc(100% - 24px);
+    margin: 12px auto;
+  }
+
+  .builder-workspace.is-active .builder-cv-stage {
+    min-height: 65vh;
+    flex: 1 0 65vh;
+  }
+
+  .builder-workspace.is-active .builder-chat-dock {
+    min-height: 480px;
+  }
+}
 
 /* ── Sửa inline (FRONTEND.md §9.4) ───────────────────────────────────────── */
 [data-editable] {

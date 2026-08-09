@@ -14,11 +14,13 @@ beforeAll(() => {
 })
 
 const REQUIRED = [
-  ['--color-brand', '#0D9488'],
-  ['--color-brand-hover', '#0F766E'],
-  ['--color-brand-subtle', '#F0FDFA'],
-  ['--color-brand-border', '#99F6E4'],
-  ['--color-brand-ink', '#134E4A'],
+  // Indigo chứ không teal: D10 (spec 2026-08-07 §2) đè D1 để apps/web khớp
+  // bản SPA đã duyệt. Đổi ở đây thì phải đổi cả globals.css và spec.
+  ['--color-brand', '#4F46E5'],
+  ['--color-brand-hover', '#4338CA'],
+  ['--color-brand-subtle', '#EEF2FF'],
+  ['--color-brand-border', '#C7D2FE'],
+  ['--color-brand-ink', '#3730A3'],
   ['--color-ink', '#0F172A'],
   ['--color-ink-muted', '#475569'],
   ['--color-ink-subtle', '#94A3B8'],
