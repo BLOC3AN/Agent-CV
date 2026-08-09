@@ -40,7 +40,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function signOut() {
-    await logout();
+    try {
+      await logout();
+    } catch {
+      // `logout()` ném ApiError khi mất mạng, phiên đã hết hạn, hay backend
+      // trục trặc. Dù backend không xác nhận được, người dùng vẫn phải rời
+      // được khỏi màn hình đã đăng nhập — kẹt lại đó còn tệ hơn một lần đăng
+      // xuất không trọn vẹn phía server. Cookie hr_session (nếu backend chưa
+      // kịp xoá) sẽ tự bị từ chối ở lần gọi API kế tiếp.
+    }
     setStatus('anonymous');
     setEmail(undefined);
     // Tải lại thay vì chỉ đổi state: mọi dữ liệu đã nạp của người dùng cũ phải

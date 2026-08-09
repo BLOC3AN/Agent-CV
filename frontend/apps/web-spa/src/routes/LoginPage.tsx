@@ -44,10 +44,7 @@ export function LoginPage() {
           </p>
         </div>
 
-        {/* noValidate: lỗi định dạng do backend báo, không phải bong bóng
-            xác thực HTML5 mặc định của trình duyệt — nhất quán với cách các
-            màn hình khác trong SPA hiển thị lỗi. */}
-        <form onSubmit={submit} noValidate className="space-y-3">
+        <form onSubmit={submit} className="space-y-3">
           <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700">
             Email
           </label>
