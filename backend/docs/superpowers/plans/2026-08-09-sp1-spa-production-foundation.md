@@ -1237,6 +1237,17 @@ export const appRoutes: RouteObject[] = [
           </div>
         ),
       },
+      // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
+      // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
+      // chỉ là dạng chọn sẵn khi tới từ một CV cụ thể.
+      {
+        path: 'analyze',
+        element: (
+          <div data-testid="view-job-match">
+            <JobMatchView cvs={initialCVs} />
+          </div>
+        ),
+      },
       {
         path: 'analyze/:cvId',
         element: (
@@ -1282,14 +1293,26 @@ Thay khối `navItems`/`secondaryItems` và hai vòng lặp render. Bỏ hai pro
 import React from 'react'
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, FileText, GitCompare, Sparkles, Layout, Settings,
+  LayoutDashboard, FileText, GitCompare, Layout, Settings,
 } from 'lucide-react'
 
+/*
+ * Sidebar còn 5 mục, không phải 6.
+ *
+ * Bản SPA gốc có mục "Trợ lý AI" trỏ tới một màn hình chat đứng riêng. Spec
+ * §5.1 gộp trợ lý thành panel của `/builder/:cvId`, vì trợ lý tách khỏi CV thì
+ * không sinh được đề xuất có ngữ cảnh — nên mục sidebar đó không còn đích đến
+ * và bị bỏ. Quyết định của chủ sản phẩm ngày 2026-08-09.
+ *
+ * `/analyze` KHÔNG kèm id là một màn hình thật: `JobMatchView` vốn đã nhận cả
+ * danh sách CV và tự cho người dùng chọn. `/analyze/:cvId` chỉ là dạng chọn
+ * sẵn. Trỏ một mục sidebar vào route chỉ tồn tại ở dạng có tham số thì nó rơi
+ * thẳng vào màn hình 404.
+ */
 const primary = [
   { to: '/', end: true, id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
   { to: '/cv', end: false, id: 'cv', label: 'CV của tôi', icon: FileText },
   { to: '/analyze', end: false, id: 'analyze', label: 'Đối chiếu việc làm', icon: GitCompare },
-  { to: '/builder', end: false, id: 'builder', label: 'Trợ lý AI', icon: Sparkles },
 ]
 
 const secondary = [
