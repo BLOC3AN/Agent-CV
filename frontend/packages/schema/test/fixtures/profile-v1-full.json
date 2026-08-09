@@ -54,7 +54,9 @@
       "/basics/email": true,
       "/work/0/highlights/0": true,
       "/education/0": true,
-      "/skills/2": true
+      "/skills/2": true,
+      "/skills": true,
+      "/basics": true
     },
     "source": "pdf_import"
   }

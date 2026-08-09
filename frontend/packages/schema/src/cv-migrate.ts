@@ -45,14 +45,26 @@ function translateVerifiedPointer(
   }
   const parts = pointer.split('/').filter(Boolean)
 
-  // v1 `/skills/N` hoặc `/skills/N/<field>` — dùng bảng tra cứu từ grouping
-  if (parts[0] === 'skills' && /^\d+$/.test(parts[1]!)) {
-    const v1SkillIndex = parseInt(parts[1]!, 10)
-    if (v1SkillIndex < skillPointerByV1Index.length) {
-      const basePointer = skillPointerByV1Index[v1SkillIndex]!
-      if (parts.length === 2) return basePointer
-      // `/skills/N/name` hoặc field khác → không dịch, những field này được cất vào
-      // droppedFields, không có chỗ ở v2
+  // v1 `/skills` trơn (nguyên mục), `/skills/N`, hoặc `/skills/N/<field>`.
+  //
+  // Bug thật đã xảy ra trên dữ liệu thật: review.ts phát `/skills` trơn khi
+  // người dùng xác nhận nguyên mục kỹ năng (UC-22). Trước bản vá này, pointer
+  // trơn có `parts[1] === undefined`, `/^\d+$/.test(undefined)` cho ra false,
+  // và pointer rơi xuống nhánh `section[parts[0]]` ở cuối hàm — nhưng `skills`
+  // CỐ TÌNH không có trong bảng `section` đó (nó cần bảng tra riêng cho từng
+  // phần tử), nên trả về null và dấu xác nhận của người dùng biến mất trong im
+  // lặng. Ba hồ sơ thật đã mất `/skills` theo đúng cách này.
+  if (parts[0] === 'skills') {
+    if (parts.length === 1) return '/sections/skills'
+    if (/^\d+$/.test(parts[1]!)) {
+      const v1SkillIndex = parseInt(parts[1]!, 10)
+      if (v1SkillIndex < skillPointerByV1Index.length) {
+        const basePointer = skillPointerByV1Index[v1SkillIndex]!
+        if (parts.length === 2) return basePointer
+        // `/skills/N/name` hoặc field khác → không dịch, những field này được cất vào
+        // droppedFields, không có chỗ ở v2
+        return null
+      }
       return null
     }
     return null
@@ -113,15 +125,27 @@ export function profileToCV(
   // dùng để dịch đúng /projects/N/highlights/M ở translateVerifiedPointer().
   const projectHasTech = profile.projects.map((p) => p.tech.length > 0)
 
-  const verified: Record<string, boolean> = {}
-  for (const [pointer, value] of Object.entries(profile._meta.verified)) {
-    const translated = translateVerifiedPointer(pointer, skillPointerByV1Index, projectHasTech)
-    if (translated) verified[translated] = value
-  }
-
   // Khoá là JSON Pointer của v1, nên cvToProfile() đặt lại đúng chỗ mà không
   // phải nhớ một bảng tên riêng.
   const droppedFields: Record<string, string> = {}
+
+  // Con trỏ nào translateVerifiedPointer() không dịch được KHÔNG được vứt
+  // trong im lặng — chính cơ chế "không dịch được thì biến mất" này là
+  // nguyên nhân của bug `/skills` (đã vá ở trên): pointer lạ tiếp theo mà
+  // hàm dịch chưa từng gặp sẽ rơi vào đúng cái bẫy này nếu không có lưới cuối.
+  // Cất nguyên pointer gốc + giá trị vào droppedFields dưới khoá
+  // `/_meta/verified<pointer gốc>` — cvToProfile() quét đúng namespace này để
+  // đặt lại, không cần hiểu ý nghĩa của pointer.
+  const verified: Record<string, boolean> = {}
+  for (const [pointer, value] of Object.entries(profile._meta.verified)) {
+    const translated = translateVerifiedPointer(pointer, skillPointerByV1Index, projectHasTech)
+    if (translated) {
+      verified[translated] = value
+    } else {
+      droppedFields[`/_meta/verified${pointer}`] = String(value)
+    }
+  }
+
   profile.work.forEach((w, i) => {
     if (w.type) droppedFields[`/work/${i}/type`] = w.type
   })
@@ -327,6 +351,11 @@ function untranslateVerifiedPointer(
     const mapped = introField[parts[2]!]
     return mapped ? `/basics/${mapped}` : null
   }
+  // `/sections/skills` trơn — nghịch đảo của nhánh tương ứng ở
+  // translateVerifiedPointer(). `skills` cố tình không có trong bảng `section`
+  // dưới đây (nó cần bảng tra riêng cho từng phần tử), nên phải bắt trước khi
+  // pointer rơi xuống đó và trả về null.
+  if (parts[1] === 'skills' && parts.length === 2) return '/skills'
   if (
     parts[1] === 'projects' &&
     parts.length === 5 &&
@@ -455,6 +484,16 @@ export function cvToProfile(input: CV): Profile {
   for (const [pointer, value] of Object.entries(cv._meta.verified)) {
     const back = untranslateVerifiedPointer(pointer, order, projectHasTech)
     if (back) verified[back] = value
+  }
+  // Nghịch đảo của nhánh "không dịch được" ở profileToCV(): pointer verified
+  // nào chiều đi không hiểu được vẫn được cất (không vứt trong im lặng) dưới
+  // khoá `/_meta/verified<pointer gốc>` trong droppedFields — quét đúng
+  // namespace đó và đặt lại nguyên pointer gốc, tách biệt khỏi các khoá
+  // droppedFields khác (dob, tech, skills/_order, ...).
+  for (const [key, value] of Object.entries(dropped)) {
+    if (key.startsWith('/_meta/verified/')) {
+      verified[key.slice('/_meta/verified'.length)] = value === 'true'
+    }
   }
 
   return ProfileSchema.parse({

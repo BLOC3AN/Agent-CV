@@ -369,3 +369,83 @@ describe('_meta.verified trên bullet dự án không được đáp nhầm vào
     expect(cv._meta.verified['/sections/projects/0/highlights/0']).toBe(true)
   })
 })
+
+describe('con trỏ nguyên mục (bare pointer) trong _meta.verified — Finding 5', () => {
+  // Bug thật, gây mất dữ liệu trên 3 hồ sơ thật: review.ts phát `/skills` trơn
+  // khi người dùng xác nhận nguyên mục kỹ năng (UC-22). Trước bản vá,
+  // `/skills` không được dịch ở CẢ HAI CHIỀU theo cùng kiểu lệch nhau, nên một
+  // test chỉ nhìn kết quả khứ hồi (v1→v2→v1) sẽ không lộ ra — giống hệt lỗi
+  // lệch chỉ số "Công nghệ: …" ở review trước. Phải assert trên tài liệu v2
+  // trung gian, không chỉ khứ hồi.
+  it('/skills trơn dịch sang /sections/skills ở tài liệu v2 trung gian', () => {
+    const v1Skills = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      skills: [{ name: 'Python', group: 'Ngôn ngữ' }],
+      _meta: { verified: { '/skills': true } },
+    })
+    const cv = profileToCV(v1Skills, META)
+    expect(cv._meta.verified['/sections/skills']).toBe(true)
+
+    const restored = cvToProfile(cv)
+    expect(restored._meta.verified['/skills']).toBe(true)
+  })
+
+  // Audit toàn bộ mục: `basics` đã có nhánh riêng từ trước (luôn đúng);
+  // `education/work/projects/activities/certifications/languages` đi qua bảng
+  // `section` dùng chung nên con trỏ trơn tự nhiên đúng qua nhánh đó; chỉ
+  // `skills` bị loại khỏi bảng `section` (cần bảng tra riêng cho từng phần
+  // tử) nên là mục DUY NHẤT cần vá riêng — vá ở trên. Test này chứng minh cả
+  // tám mục đều khứ hồi đúng con trỏ trơn, không chỉ khẳng định bằng lời.
+  const SECTIONS = [
+    'basics', 'education', 'work', 'projects',
+    'skills', 'activities', 'certifications', 'languages',
+  ] as const
+
+  it.each(SECTIONS)('con trỏ nguyên mục /%s khứ hồi đúng', (section) => {
+    const v1Bare = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      _meta: { verified: { [`/${section}`]: true } },
+    })
+    const restored = cvToProfile(profileToCV(v1Bare, META))
+    expect(restored._meta.verified[`/${section}`]).toBe(true)
+  })
+})
+
+describe('_meta.verified: pointer không dịch được không được vứt trong im lặng — Finding 6', () => {
+  // Cơ chế "không dịch được thì biến mất trong im lặng" chính là nguyên nhân
+  // của bug /skills ở Finding 5. Vá riêng /skills không chặn được pointer lạ
+  // TIẾP THEO mà translateVerifiedPointer() chưa từng gặp — phải chặn ở gốc:
+  // giữ lại pointer không dịch được, không vứt.
+  it('pointer lạ (/nonexistent/0) không bị vứt trong im lặng — sống sót qua khứ hồi', () => {
+    const v1Unknown = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      _meta: { verified: { '/nonexistent/0': true } },
+    })
+    const cv = profileToCV(v1Unknown, META)
+
+    // Không có v2 pointer hợp lệ cho nó (đúng — không nên có), nhưng nó phải
+    // để lại DẤU VẾT có thể đọc lại được, không phải biến mất hoàn toàn.
+    expect(cv._meta.verified['/nonexistent/0']).toBeUndefined()
+    expect(cv._meta.droppedFields['/_meta/verified/nonexistent/0']).toBe('true')
+
+    const restored = cvToProfile(cv)
+    expect(restored._meta.verified['/nonexistent/0']).toBe(true)
+  })
+
+  it('giá trị false của pointer lạ cũng khứ hồi đúng, không mặc định thành true', () => {
+    const v1UnknownFalse = ProfileSchema.parse({
+      schemaVersion: 1,
+      language: 'vi',
+      basics: { name: 'A' },
+      _meta: { verified: { '/nonexistent/1': false } },
+    })
+    const restored = cvToProfile(profileToCV(v1UnknownFalse, META))
+    expect(restored._meta.verified['/nonexistent/1']).toBe(false)
+  })
+})
