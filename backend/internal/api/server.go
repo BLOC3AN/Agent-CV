@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -311,11 +312,9 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	cv["id"] = cvID
-	var snapshot, theme, layout any
-	_ = json.Unmarshal(profileRaw, &snapshot)
+	var theme, layout any
 	_ = json.Unmarshal(themeRaw, &theme)
 	_ = json.Unmarshal(layoutRaw, &layout)
-	cv["profileSnapshot"] = snapshot
 	cv["templateId"] = templateID
 	cv["theme"] = theme
 	cv["layout"] = layout
@@ -323,14 +322,24 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 	cv["title"] = title
 	cv["updatedAt"] = updated
 
-	if wantsV2(r) {
+	wantV2 := wantsV2(r)
+	var v2Raw []byte
+	if wantV2 {
 		// Nguồn v2 là profiles.data_v2 qua cv_documents.profile_id — KHÔNG phải
 		// cv_documents.snapshot_v2, cột đó SP-2 cố tình để trống chưa backfill.
-		var v2 []byte
-		err := s.db.QueryRowContext(r.Context(),
+		// Lỗi truy vấn (kể cả không tìm thấy hàng) coi như "chưa có v2" và để
+		// cvSnapshotForResponse quyết định — hàm đó là nơi duy nhất biết cách
+		// dịch "rỗng" thành lỗi phân biệt được.
+		if err := s.db.QueryRowContext(r.Context(),
 			`SELECT p.data_v2 FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
-			 WHERE c.id = $1 AND c.user_id = $2`, id, userID).Scan(&v2)
-		if err != nil || len(v2) == 0 {
+			 WHERE c.id = $1 AND c.user_id = $2`, id, userID).Scan(&v2Raw); err != nil {
+			v2Raw = nil
+		}
+	}
+
+	snapshot, schemaVersion, err := cvSnapshotForResponse(profileRaw, v2Raw, wantV2)
+	if err != nil {
+		if errors.Is(err, errV2NotBackfilled) {
 			// Không im lặng rơi về v1: client đã nói rõ nó chỉ đọc được v2.
 			// Trả v1 cho nó là đẩy lỗi sang tầng giao diện, xa nguyên nhân.
 			writeJSON(w, http.StatusConflict, map[string]string{
@@ -339,10 +348,14 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 			})
 			return
 		}
-		var snapshotV2 any
-		_ = json.Unmarshal(v2, &snapshotV2)
-		cv["profileSnapshot"] = snapshotV2
-		cv["schemaVersion"] = 2
+		// data_v2 có mặt nhưng hỏng JSON: lỗi dữ liệu, không phải lỗi client —
+		// nhưng vẫn không được trả response nửa vời.
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được dữ liệu CV"})
+		return
+	}
+	cv["profileSnapshot"] = snapshot
+	if wantV2 {
+		cv["schemaVersion"] = schemaVersion
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"cv": cv})
