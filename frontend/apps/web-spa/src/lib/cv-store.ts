@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CV, CVLayout, LayoutNode } from '../types'
-import { ApiError, commitCV, getCV } from './api'
+import { ApiError, commitCV, getCV, restoreCVRevision } from './api'
 import { validateCVFieldPlacement } from './cv-fields'
 
 export type CVStoreStatus = 'loading' | 'ready' | 'dirty' | 'saving' | 'saved' | 'error'
@@ -267,6 +267,36 @@ export function useCVStore(id: string) {
     return pending
   }, [id, replaceDocuments])
 
+  const restoreRevision = useCallback((revisionId: string): Promise<void> => {
+    if (pendingSaveRef.current) return Promise.reject(new ApiError(409, 'Đang lưu thay đổi, chưa thể khôi phục phiên bản'))
+    setSavePending(true)
+    setStatus('saving')
+    setError(undefined)
+
+    const pending = (async () => {
+      try {
+        const result = await restoreCVRevision(id, revisionId)
+        const restored = cloneDocument({
+          cv: result.cv.profileSnapshot as CV,
+          layout: result.cv.layout as CVLayout,
+        })
+        documentVersionRef.current += 1
+        replaceDocuments({ committed: restored, draft: cloneDocument(restored) })
+        setStatus('saved')
+      } catch (err) {
+        const current = documentsRef.current
+        setStatus(documentsEqual(current.committed, current.draft) ? 'ready' : 'dirty')
+        setError(err instanceof ApiError ? err.message : 'Không thể khôi phục phiên bản')
+        throw err
+      } finally {
+        if (pendingSaveRef.current === pending) pendingSaveRef.current = undefined
+        setSavePending(false)
+      }
+    })()
+    pendingSaveRef.current = pending
+    return pending
+  }, [id, replaceDocuments])
+
   const dirty = !documentsEqual(documents.committed, documents.draft)
 
   return {
@@ -281,6 +311,7 @@ export function useCVStore(id: string) {
     getDraft: () => documentsRef.current.draft,
     updateDraft,
     saveDraft,
+    restoreRevision,
     discardDraft,
     reload,
     // Compatibility for existing preview and assistant consumers while Task 3

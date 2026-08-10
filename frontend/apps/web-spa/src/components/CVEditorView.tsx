@@ -11,6 +11,7 @@ import { CVBlockRenderer } from './CVBlockRenderer';
 import { hasDefaultNodeOrder, materializeItemOrder, moveItem, moveNode, normalizeLayout, resetDefaultLayout, setNodeVisible } from '../lib/layout-draft';
 import { CV_FIELDS } from '../lib/cv-fields';
 import { InlineCVEditor } from './InlineCVEditor';
+import { VersionHistoryPanel } from './VersionHistoryPanel';
 
 interface CVEditorViewProps {
   cv: CV;
@@ -24,6 +25,8 @@ interface CVEditorViewProps {
   onOpenPreview: () => void;
   onOpenShare: () => void;
   onDownloadPDF: () => void | Promise<void>;
+  cvId?: string;
+  onRestoreVersion?: (revisionId: string) => Promise<void>;
 }
 
 /**
@@ -67,6 +70,8 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   onOpenPreview,
   onOpenShare,
   onDownloadPDF,
+  cvId,
+  onRestoreVersion,
 }) => {
   // Navigation & Edit state
   const [activeTab, setActiveTab] = useState<'SECTIONS' | 'DESIGN'>('SECTIONS');
@@ -75,6 +80,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const layout = normalizeLayout(providedLayout ?? cv.layout);
 
   const editNode = (nodeId: string) => {
@@ -193,6 +199,16 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 className="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? 'Đang lưu…' : 'Lưu thay đổi'}
+              </button>
+            )}
+            {cvId && onRestoreVersion && (
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                disabled={saving}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Lịch sử phiên bản
               </button>
             )}
             <button
@@ -610,6 +626,8 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
           <CVBlockRenderer cv={cv} layout={layout} variant="editor" onSelect={setSelectedNodeId} onEdit={openInlineEditor} />
         </PaginatedA4Document>
       </div>
+
+      {historyOpen && cvId && onRestoreVersion && <VersionHistoryPanel cvId={cvId} onClose={() => setHistoryOpen(false)} onRestore={onRestoreVersion} />}
 
     </div>
   );

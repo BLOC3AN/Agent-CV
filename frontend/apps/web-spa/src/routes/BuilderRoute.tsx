@@ -42,6 +42,11 @@ export function BuilderRoute() {
     store.discardDraft()
   }, [store.discardDraft])
 
+  const restoreVersion = useCallback(async (revisionId: string) => {
+    await store.restoreRevision(revisionId)
+    setPendingAIProvenance([])
+  }, [store.restoreRevision])
+
   const downloadPDF = useCallback(async () => {
     await save()
     window.location.assign(`/print/${encodeURIComponent(cvId)}?variant=presentation`)
@@ -122,6 +127,8 @@ export function BuilderRoute() {
         onOpenPreview={() => navigate(`/builder/${cvId}/preview`)}
         onOpenShare={() => {}}
         onDownloadPDF={downloadPDF}
+        cvId={cvId}
+        onRestoreVersion={restoreVersion}
       />
       {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} layout={store.draft.layout} draftVersion={store.draftVersion} onApplyAIProposal={(ops) => { const current = store.getDraft(); if (!current) throw new Error('Không còn bản nháp hiện tại'); store.updateDraft(applyChatOpsToDraft(current, ops)) }} onProposalApplied={(summary) => setPendingAIProvenance((previous) => [...previous, summary])} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
