@@ -541,4 +541,75 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
     expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ techStack: ['React', 'Go'] })] }) }), expect.anything(), 'ai', 'Mixed add', 0)
   })
+
+  it.each([
+    ['leading', ['React', 'Vue']],
+    ['middle', ['Go', 'Vue']],
+  ])('clears primitive reorder provenance when %s removal is restored', async (_label, proposedStack) => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['Go', 'React', 'Vue'] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'replace', path: '/sections/experience/0/techStack', value: proposedStack, rationale: 'Remove stack entry', grounding: { type: 'user_message', ref: 'Remove' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Remove stack entry'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, title: 'Manual restore', sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, techStack: ['Go', 'React', 'Vue'] }] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'user', undefined, 0)
+  })
+
+  it('keeps independent add/remove provenance for mixed primitive-array net growth', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['Go', 'React', 'Vue'] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'replace', path: '/sections/experience/0/techStack', value: ['React', 'Rust', 'TypeScript', 'Python'], rationale: 'Refresh stack', grounding: { type: 'user_message', ref: 'Stack' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Refresh stack'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, title: 'Manual follow-up', sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, techStack: ['React'] }] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'ai', 'Refresh stack', 0)
+  })
+
+  it('keeps independent add/remove provenance for mixed primitive-array net shrink', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['Go', 'React', 'Vue'] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'replace', path: '/sections/experience/0/techStack', value: ['Rust', 'React'], rationale: 'Refresh stack', grounding: { type: 'user_message', ref: 'Stack' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Refresh stack'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, title: 'Manual follow-up', sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, techStack: ['Go', 'React', 'Vue', 'Rust'] }] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'ai', 'Refresh stack', 0)
+  })
+
+  it('keeps mixed reorder provenance after only the replacement is removed', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['Go', 'React', 'Vue'] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'replace', path: '/sections/experience/0/techStack', value: ['React', 'Go', 'Rust'], rationale: 'Reorder and replace stack', grounding: { type: 'user_message', ref: 'Mixed stack' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Mixed stack'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, title: 'Manual follow-up', sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, techStack: ['React', 'Go'] }] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ techStack: ['React', 'Go'] })] }) }), expect.anything(), 'ai', 'Mixed stack', 0)
+  })
 })

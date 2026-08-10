@@ -59,3 +59,11 @@ Non-code verification issues observed:
 - `cv_revisions.parent_revision_id` remains a database-level foreign key to any revision row rather than a composite same-CV constraint. Application code always supplies a same-CV parent.
 - The integration smoke default port and ESLint configuration/runtime mismatch are repository tooling issues outside findings 1–11.
 
+## Round 10 follow-up
+
+The two findings in `FINAL-MERGE-REVIEW-CURRENT.md` are resolved in the provenance collector/reconciler:
+
+- Primitive reorder detection now compares the relative order of matched baseline tokens. Leading or middle removals that are later restored no longer look like a reorder.
+- Primitive-array add and remove deltas are collected independently of net length, while order is tracked independently as well. Order markers retain the post-AI values they represent, so removing an AI replacement can clear only that value contribution while preserving a surviving reorder contribution.
+
+Added regressions cover leading and middle removal restoration, mixed remove/add net growth and shrink, and mixed reorder/replacement after only the replacement is removed. The focused store suite passes 34/34; the full frontend suite passes 218/218; frontend typecheck, `go test ./...`, and real Playwright print integration (2/2) pass. `git diff --check` passes.

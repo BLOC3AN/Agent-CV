@@ -123,6 +123,7 @@ interface ProvenanceChange {
   arrayValue?: unknown
   arrayBaselineCount?: number
   arrayOrder?: unknown[]
+  arrayOrderValues?: unknown[]
   arrayBaselineValues?: unknown[]
   arrayItemId?: string
   arrayItemCollectionPath?: string
@@ -142,15 +143,33 @@ function cloneValue(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value))
 }
 
-function primitiveOrderTokens(before: unknown[], after: unknown[]): number[] {
+function primitiveOrderMatches(before: unknown[], after: unknown[]): { tokens: number[]; values: unknown[] } {
   const remaining = before.map((_, index) => index)
   const tokens: number[] = []
+  const values: unknown[] = []
   for (const value of after) {
     let match = remaining.findIndex((index) => deepEqual(before[index], value))
     if (match < 0 && before.length === after.length && remaining.length) match = 0
-    if (match >= 0) tokens.push(remaining.splice(match, 1)[0]!)
+    if (match >= 0) {
+      tokens.push(remaining.splice(match, 1)[0]!)
+      values.push(value)
+    }
   }
-  return tokens
+  return { tokens, values }
+}
+
+function primitiveOrderTokens(before: unknown[], after: unknown[]): number[] {
+  return primitiveOrderMatches(before, after).tokens
+}
+
+function multisetDifference(source: unknown[], target: unknown[]): unknown[] {
+  const remaining = [...target]
+  return source.filter((value) => {
+    const match = remaining.findIndex((candidate) => deepEqual(candidate, value))
+    if (match < 0) return true
+    remaining.splice(match, 1)
+    return false
+  })
 }
 
 function collectChanges(before: unknown, after: unknown, path = '', arrayParentPath?: string, arrayItemId?: string, arrayItemRootPath?: string, arrayItemCollectionPath?: string): ProvenanceChange[] {
@@ -192,48 +211,19 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
       }
       return changes
     }
-    const orderTokens = primitiveOrderTokens(beforeArray, afterArray)
-    const orderChanged = orderTokens.length > 1 && orderTokens.some((token, index) => token !== index)
+    const orderMatch = primitiveOrderMatches(beforeArray, afterArray)
+    const orderTokens = orderMatch.tokens
+    const sortedOrderTokens = [...orderTokens].sort((left, right) => left - right)
+    const orderChanged = orderTokens.length > 1 && orderTokens.some((token, index) => token !== sortedOrderTokens[index])
     const orderChange: ProvenanceChange | undefined = orderChanged ? {
-      path, exists: true, arrayParentPath: path, arrayKind: 'reorder', arrayOrder: orderTokens,
+      path, exists: true, arrayParentPath: path, arrayKind: 'reorder', arrayOrder: orderTokens, arrayOrderValues: cloneValue(orderMatch.values) as unknown[],
       arrayBaselineValues: cloneValue(beforeArray) as unknown[], arrayItemId, arrayItemCollectionPath,
       arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined,
     } : undefined
-    if (beforeArray.length === afterArray.length) {
-      const replacements = afterArray.flatMap((value, index) => deepEqual(beforeArray[index], value) ? [] : [{
-        path: `${path}/${index}`, before: cloneValue(beforeArray[index]), after: cloneValue(value), exists: true,
-        arrayParentPath: path, arrayKind: 'replace' as const, arrayValue: cloneValue(value),
-        arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length,
-        arrayItemId, arrayItemCollectionPath,
-        arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined,
-      }])
-      if (orderChange || replacements.length) return orderChange ? [orderChange, ...replacements] : replacements
-    }
-    if (afterArray.length > beforeArray.length) {
-      const remaining = [...beforeArray]
-      const added = afterArray.flatMap((value, index) => {
-        const existing = remaining.findIndex((candidate) => deepEqual(candidate, value))
-        if (existing < 0) return [{ value, index }]
-        remaining.splice(existing, 1)
-        return []
-      })
-      const additions = added.map(({ value, index }) => ({ path: `${path}/${index}`, after: cloneValue(value), exists: true, arrayParentPath: path, arrayKind: 'add' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
-      return orderChange ? [orderChange, ...additions] : additions
-    }
-    if (beforeArray.length > afterArray.length) {
-      const remaining = [...afterArray]
-      const removed = beforeArray.filter((value) => {
-        const index = remaining.findIndex((candidate) => deepEqual(candidate, value))
-        if (index < 0) return true
-        remaining.splice(index, 1)
-        return false
-      })
-      const removals = removed.map((value) => ({ path, exists: false, arrayParentPath: path, arrayKind: 'remove' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
-      return orderChange ? [orderChange, ...removals] : removals
-    }
-    return after.flatMap((value, index) => index < before.length
-      ? collectChanges(before[index], value, `${path}/${index}`, path, arrayItemId, arrayItemRootPath, arrayItemCollectionPath)
-      : collectChanges(undefined, value, `${path}/${index}`, path, arrayItemId, arrayItemRootPath, arrayItemCollectionPath))
+    const additions = multisetDifference(afterArray, beforeArray).map((value) => ({ path, after: cloneValue(value), exists: true, arrayParentPath: path, arrayKind: 'add' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
+    const removals = multisetDifference(beforeArray, afterArray).map((value) => ({ path, before: cloneValue(value), exists: false, arrayParentPath: path, arrayKind: 'remove' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
+    if (orderChange || additions.length || removals.length) return [...(orderChange ? [orderChange] : []), ...additions, ...removals]
+    return []
   }
   if (before && after && typeof before === 'object' && typeof after === 'object' && !Array.isArray(before) && !Array.isArray(after)) {
     const beforeRecord = before as Record<string, unknown>
@@ -282,9 +272,13 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
       if (change.arrayKind === 'reorder') {
         if (change.arrayBaselineValues) {
           const tokens = primitiveOrderTokens(change.arrayBaselineValues, target)
+          const expectedOrder = (change.arrayOrder ?? []).filter((_, index) => {
+            const orderValue = change.arrayOrderValues?.[index]
+            return orderValue === undefined || target.some((value) => deepEqual(value, orderValue))
+          })
           let orderIndex = 0
-          for (const token of tokens) if (token === change.arrayOrder?.[orderIndex]) orderIndex += 1
-          return orderIndex === change.arrayOrder?.length
+          for (const token of tokens) if (token === expectedOrder[orderIndex]) orderIndex += 1
+          return orderIndex === expectedOrder.length
         }
         let orderIndex = 0
         return target.every((value) => {
