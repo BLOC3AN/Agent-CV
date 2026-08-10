@@ -67,3 +67,12 @@ The two findings in `FINAL-MERGE-REVIEW-CURRENT.md` are resolved in the provenan
 - Primitive-array add and remove deltas are collected independently of net length, while order is tracked independently as well. Order markers retain the post-AI values they represent, so removing an AI replacement can clear only that value contribution while preserving a surviving reorder contribution.
 
 Added regressions cover leading and middle removal restoration, mixed remove/add net growth and shrink, and mixed reorder/replacement after only the replacement is removed. The focused store suite passes 34/34; the full frontend suite passes 218/218; frontend typecheck, `go test ./...`, and real Playwright print integration (2/2) pass. `git diff --check` passes.
+
+## Round 11 follow-up
+
+The findings in `FINAL-MERGE-REVIEW-6.md` are resolved:
+
+- Primitive reorder provenance now stores AI-authored pairwise relations derived from multiplicity-aware baseline token matching. Exact baseline restoration, baseline-ordered surviving subsets, and single-marker remnants clear attribution; duplicate-valued arrays retain attribution only when an AI-inverted relation remains.
+- Consecutive AI proposals are reconciled against the committed-to-draft net change before a new provenance entry is recorded. A later AI proposal that restores the committed scalar or array state therefore contributes no AI metadata, while surviving newer work and the existing in-flight save snapshot behavior remain intact.
+
+Round-11 regressions cover all five order probes plus scalar and primitive-array AI cancellation. Verification passed: focused store 41/41, full frontend 26 files / 225 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.

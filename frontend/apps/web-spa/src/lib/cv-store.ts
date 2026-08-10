@@ -124,6 +124,7 @@ interface ProvenanceChange {
   arrayBaselineCount?: number
   arrayOrder?: unknown[]
   arrayOrderValues?: unknown[]
+  arrayOrderRelations?: Array<{ before: unknown; after: unknown }>
   arrayBaselineValues?: unknown[]
   arrayItemId?: string
   arrayItemCollectionPath?: string
@@ -160,6 +161,26 @@ function primitiveOrderMatches(before: unknown[], after: unknown[]): { tokens: n
 
 function primitiveOrderTokens(before: unknown[], after: unknown[]): number[] {
   return primitiveOrderMatches(before, after).tokens
+}
+
+function primitiveOrderRelations(baseline: unknown[], match: { tokens: number[]; values: unknown[] }): Array<{ before: unknown; after: unknown }> {
+  const mappedValues = match.tokens.map((token) => baseline[token])
+  const firstBaselineIndex = (value: unknown) => baseline.findIndex((candidate) => deepEqual(candidate, value))
+  const relations: Array<{ before: unknown; after: unknown }> = []
+  for (let left = 0; left < mappedValues.length; left += 1) {
+    for (let right = left + 1; right < mappedValues.length; right += 1) {
+      if (deepEqual(mappedValues[left], mappedValues[right])) continue
+      if (firstBaselineIndex(mappedValues[left]) < firstBaselineIndex(mappedValues[right])) continue
+      if (!relations.some((relation) => deepEqual(relation.before, mappedValues[left]) && deepEqual(relation.after, mappedValues[right]))) {
+        relations.push({ before: cloneValue(mappedValues[left]), after: cloneValue(mappedValues[right]) })
+      }
+    }
+  }
+  return relations
+}
+
+function hasPrimitiveOrderRelation(values: unknown[], relation: { before: unknown; after: unknown }): boolean {
+  return values.some((value, index) => deepEqual(value, relation.before) && values.slice(index + 1).some((after) => deepEqual(after, relation.after)))
 }
 
 function multisetDifference(source: unknown[], target: unknown[]): unknown[] {
@@ -217,6 +238,7 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
     const orderChanged = orderTokens.length > 1 && orderTokens.some((token, index) => token !== sortedOrderTokens[index])
     const orderChange: ProvenanceChange | undefined = orderChanged ? {
       path, exists: true, arrayParentPath: path, arrayKind: 'reorder', arrayOrder: orderTokens, arrayOrderValues: cloneValue(orderMatch.values) as unknown[],
+      arrayOrderRelations: primitiveOrderRelations(beforeArray, orderMatch),
       arrayBaselineValues: cloneValue(beforeArray) as unknown[], arrayItemId, arrayItemCollectionPath,
       arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined,
     } : undefined
@@ -270,6 +292,7 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
       }
       if (!target) return false
       if (change.arrayKind === 'reorder') {
+        if (change.arrayOrderRelations) return change.arrayOrderRelations.some((relation) => hasPrimitiveOrderRelation(target, relation))
         if (change.arrayBaselineValues) {
           const tokens = primitiveOrderTokens(change.arrayBaselineValues, target)
           const expectedOrder = (change.arrayOrder ?? []).filter((_, index) => {
@@ -314,6 +337,17 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
 function valueContributionSurvives(current: unknown, change: ProvenanceChange): boolean {
   if (deepEqual(current, change.after)) return true
   return typeof current === 'string' && typeof change.after === 'string' && change.after !== '' && !deepEqual(current, change.before) && current.includes(change.after)
+}
+
+function changeMatchesNetChange(change: ProvenanceChange, netChanges: ProvenanceChange[]): boolean {
+  return netChanges.some((net) => {
+    if (change.arrayKind && change.arrayParentPath) {
+      if (net.arrayParentPath !== change.arrayParentPath || net.arrayKind !== change.arrayKind) return false
+      if (change.arrayKind === 'reorder') return true
+      return deepEqual(net.arrayValue, change.arrayValue)
+    }
+    return net.path === change.path
+  })
 }
 
 function normalizeDocument(document: DraftDocument, legacyVisibility = false): DraftDocument {
@@ -413,8 +447,10 @@ export function useCVStore(id: string) {
     if (documentsEqual(current.draft, draft)) return
     documentVersionRef.current += 1
     const changes = current.draft ? collectChanges(current.draft, draft) : []
+    const netChanges = collectChanges(current.committed, draft)
     provenanceRef.current = reconcileProvenance(provenanceRef.current, draft)
-    if (changes.length) provenanceRef.current = [...provenanceRef.current, { id: ++provenanceIDRef.current, summary, changes }]
+    const survivingChanges = changes.filter((change) => changeMatchesNetChange(change, netChanges))
+    if (survivingChanges.length) provenanceRef.current = [...provenanceRef.current, { id: ++provenanceIDRef.current, summary, changes: survivingChanges }]
     setPendingAIProvenance(provenanceRef.current)
     replaceDocuments({ committed: current.committed, draft })
     setError(undefined)

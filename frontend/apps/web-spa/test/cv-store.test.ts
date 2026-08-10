@@ -612,4 +612,58 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
     expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ techStack: ['React', 'Go'] })] }) }), expect.anything(), 'ai', 'Mixed stack', 0)
   })
+
+  it.each([
+    ['exact mixed replacement restore', ['Go', 'React'], ['React', 'Rust'], ['Go', 'React'], 'user'],
+    ['exact restore with one common marker', ['Go', 'React', 'Vue'], ['React', 'Rust', 'Python'], ['Go', 'React', 'Vue'], 'user'],
+    ['baseline-ordered surviving subset', ['Go', 'React', 'Vue'], ['React', 'Go', 'Vue'], ['React', 'Vue'], 'user'],
+    ['single surviving marker', ['Go', 'React', 'Vue'], ['React', 'Go', 'Vue'], ['React'], 'user'],
+    ['duplicate reorder relation', ['Go', 'Go', 'React'], ['Go', 'React', 'Go'], ['React', 'Go'], 'ai'],
+  ])('reconciles primitive order provenance by multiplicity and relation: %s', async (_label, baseline, proposed, manualStack, expectedSource) => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: baseline }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'replace', path: '/sections/experience/0/techStack', value: proposed, rationale: 'Probe order', grounding: { type: 'user_message', ref: 'Order' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Probe order'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, title: 'Manual follow-up', sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, techStack: manualStack }] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), expectedSource, expectedSource === 'ai' ? 'Probe order' : undefined, 0)
+  })
+
+  it('cancels consecutive unsaved scalar AI provenance against the committed baseline', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...cv, title: 'Manual save' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: 'AI A' }, layout }, 'AI A'))
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: 'CV' }, layout }, 'AI restore'))
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Manual save' }, layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Manual save' }), layout, 'user', undefined, 0)
+  })
+
+  it('cancels consecutive unsaved primitive-array AI provenance against the committed baseline', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['Go'] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...source, title: 'Manual save' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const add = applyChatOpsToDraft(result.current.draft!, [{ op: 'add', path: '/sections/experience/0/techStack/-', value: 'Rust', rationale: 'AI add', grounding: { type: 'user_message', ref: 'Rust' } }])
+    act(() => result.current.applyAIDraft(add, 'AI add'))
+    const remove = applyChatOpsToDraft(result.current.draft!, [{ op: 'remove', path: '/sections/experience/0/techStack/1', rationale: 'AI restore', grounding: { type: 'user_message', ref: 'Rust' } }])
+    act(() => result.current.applyAIDraft(remove, 'AI restore'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, title: 'Manual save' }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'user', undefined, 0)
+  })
 })
