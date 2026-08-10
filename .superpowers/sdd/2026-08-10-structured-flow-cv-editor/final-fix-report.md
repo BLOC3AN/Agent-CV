@@ -76,3 +76,12 @@ The findings in `FINAL-MERGE-REVIEW-6.md` are resolved:
 - Consecutive AI proposals are reconciled against the committed-to-draft net change before a new provenance entry is recorded. A later AI proposal that restores the committed scalar or array state therefore contributes no AI metadata, while surviving newer work and the existing in-flight save snapshot behavior remain intact.
 
 Round-11 regressions cover all five order probes plus scalar and primitive-array AI cancellation. Verification passed: focused store 41/41, full frontend 26 files / 225 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.
+
+## Round 12 follow-up
+
+The findings in `FINAL-MERGE-REVIEW-7.md` are resolved:
+
+- Primitive order relations retain baseline occurrence tokens. Reconciliation first checks a multiplicity-aware token embedding and only uses the prior value fallback for a non-duplicated reordered source, so duplicate reorder survival, exact restoration, and duplicate-count reduction have distinct outcomes.
+- Same-path consecutive AI changes now require newly introduced scalar content beyond the immediate draft and committed value. A proposal that only removes an earlier AI fragment from a manual residual is not recorded as AI provenance; genuinely new AI text and in-flight save provenance remain supported.
+
+Added regressions cover duplicate reorder survival, exact restoration, count reduction, and same-path scalar cancellation. Verification passed: focused store 45/45, full frontend 26 files / 229 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.

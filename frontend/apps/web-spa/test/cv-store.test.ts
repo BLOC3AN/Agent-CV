@@ -666,4 +666,37 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
     expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'user', undefined, 0)
   })
+
+  it.each([
+    ['duplicate reorder survives', ['A', 'A', 'B'], 'ai'],
+    ['duplicate reorder exact restoration clears', ['A', 'B', 'A'], 'user'],
+    ['duplicate reorder count reduction clears', ['A', 'B'], 'user'],
+  ])('preserves duplicate occurrence order identity: %s', async (_label, manualStack, expectedSource) => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['A', 'B', 'A'] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'replace', path: '/sections/experience/0/techStack', value: ['A', 'A', 'B'], rationale: 'Reorder duplicate stack', grounding: { type: 'user_message', ref: 'Duplicate order' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Reorder duplicate'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, title: 'Manual follow-up', sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, techStack: manualStack }] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), expectedSource, expectedSource === 'ai' ? 'Reorder duplicate' : undefined, 0)
+  })
+
+  it('cancels same-path AI content removal while preserving the manual residual', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...cv, title: 'Manual' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: 'AI fragment' }, layout }, 'AI A'))
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'AI fragment Manual' }, layout }))
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: 'Manual' }, layout }, 'AI B'))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Manual' }), layout, 'user', undefined, 0)
+  })
 })
