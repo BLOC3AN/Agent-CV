@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../lib/api'
 import { useCVStore } from '../lib/cv-store'
@@ -9,6 +9,7 @@ export function BuilderRoute() {
   const { cvId } = useParams<{ cvId: string }>()
   const navigate = useNavigate()
   const store = useCVStore(cvId ?? '')
+  const [assistantOpen, setAssistantOpen] = useState(true)
 
   if (!cvId) return <div className="p-10 text-center text-sm text-rose-600">Mã CV không hợp lệ</div>
   if (store.status === 'loading') return <div data-testid="builder-loading" className="p-10 text-center text-sm text-slate-500">Đang tải CV…</div>
@@ -35,7 +36,8 @@ export function BuilderRoute() {
         onOpenShare={() => {}}
         onDownloadPDF={() => { window.location.assign(`/api/cv/${encodeURIComponent(cvId)}/export?variant=presentation`) }}
       />
-      {store.profileId && <div className="fixed bottom-4 right-4 z-50 h-[520px] w-[380px]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.cv} onApplied={() => void store.reload()} /></div>}
+      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.cv} onApplied={() => void store.reload()} onClose={() => setAssistantOpen(false)} /></div>}
+      {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
     </>
   )
 }
