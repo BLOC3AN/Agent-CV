@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CVLayoutSchema, DEFAULT_CV_LAYOUT } from './cv-layout.js'
 
 /**
  * CV v2 — spec 2026-08-09 §2.1.
@@ -173,6 +174,7 @@ export const CVSchema = z.object({
   sections: CVSectionsSchema,
   design: CVDesignSchema.default({}),
   activeSections: ActiveSectionsSchema.default({}),
+  layout: CVLayoutSchema.default(DEFAULT_CV_LAYOUT),
   _meta: CVMetaSchema.default({}),
 })
 

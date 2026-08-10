@@ -122,6 +122,40 @@ export interface CVDesign {
   spacing: 'condensed' | 'normal' | 'wide';
 }
 
+export type CVNodeType =
+  | 'header'
+  | 'summary'
+  | 'experience'
+  | 'projects'
+  | 'education'
+  | 'skills'
+  | 'certifications'
+  | 'languages'
+  | 'footer';
+
+export interface LayoutNode {
+  id: string;
+  type: CVNodeType;
+  visible: boolean;
+  itemOrder?: string[];
+}
+
+export interface CVLayout {
+  version: 1;
+  nodes: LayoutNode[];
+}
+
+export type CVFieldValueType = 'text' | 'multiline' | 'date' | 'tag-list';
+export type CVFieldPrintStyle = 'inline' | 'block' | 'date-range' | 'tags';
+
+export interface CVFieldDefinition {
+  key: string;
+  label: string;
+  valueType: CVFieldValueType;
+  allowedIn: CVNodeType[];
+  printStyle: CVFieldPrintStyle;
+}
+
 export interface CV {
   id: string;
   title: string;
@@ -138,6 +172,8 @@ export interface CV {
     certifications: boolean;
     languages: boolean;
   };
+  /** Legacy API snapshots may omit layout; normalized CVs always provide it. */
+  layout?: CVLayout;
 }
 
 export type ViewTab =

@@ -1,5 +1,6 @@
 export * from './common.js'
 export * from './cv.js'
+export * from './cv-layout.js'
 export * from './jd.js'
 export * from './kb.js'
 export * from './review-v2.js'
