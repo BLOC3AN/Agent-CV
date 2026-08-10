@@ -129,6 +129,12 @@ function cloneValue(value: unknown): unknown {
 
 function collectChanges(before: unknown, after: unknown, path = ''): ProvenanceChange[] {
   if (deepEqual(before, after)) return []
+  if (Array.isArray(before) && Array.isArray(after)) {
+    if (before.length > after.length) return [{ path, after: cloneValue(after), exists: true }]
+    return after.flatMap((value, index) => index < before.length
+      ? collectChanges(before[index], value, `${path}/${index}`)
+      : collectChanges(undefined, value, `${path}/${index}`))
+  }
   if (before && after && typeof before === 'object' && typeof after === 'object' && !Array.isArray(before) && !Array.isArray(after)) {
     const beforeRecord = before as Record<string, unknown>
     const afterRecord = after as Record<string, unknown>
