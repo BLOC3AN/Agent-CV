@@ -51,6 +51,8 @@ function display(value: unknown): string {
 export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAIProposal, onProposalApplied, onClose }: Props) {
   const effectiveLayout = layout ?? cv.layout ?? { version: 1 as const, nodes: [] }
   const effectiveDraftVersion = draftVersion ?? 0
+  const currentDraftRef = useRef({ cv, layout: effectiveLayout, draftVersion: effectiveDraftVersion })
+  currentDraftRef.current = { cv, layout: effectiveLayout, draftVersion: effectiveDraftVersion }
   const [modelRef, setModelRef] = useState<ModelRef>('local.reasoner')
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
   const [input, setInput] = useState('')
@@ -108,6 +110,10 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
       const result = proposal.settledOps
         ? { selectedOps: proposal.settledOps, applied: proposal.settledOps.length }
         : await settleChatProposal(proposal.id, profileId, { cvId, draftVersion: proposal.draftVersion }, accept)
+      if (!proposal.settledOps && currentDraftRef.current.draftVersion !== proposal.draftVersion) {
+        setProposal({ ...proposal, settledOps: result.selectedOps })
+        throw new Error('Bản nháp đã thay đổi trong lúc chờ settlement. Đề xuất được giữ lại để bạn thử lại.')
+      }
       if (result.selectedOps.length) {
         try {
           onApplyAIProposal(result.selectedOps)

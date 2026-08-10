@@ -139,6 +139,28 @@ describe('CV editor explicit save workflow', () => {
     await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', updated, layout, 'ai', 'Đề xuất AI'))
   })
 
+  it('keeps a newer manual edit when settlement resolves after that edit', async () => {
+    const settlement = deferred<Awaited<ReturnType<typeof api.settleChatProposal>>>()
+    vi.spyOn(api, 'sendChat').mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-deferred', summary: 'Đề xuất trễ',
+      ops: [{ op: 'replace', path: '/sections/intro/title', value: 'AI title', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }], rejected: [],
+    } as never)
+    vi.spyOn(api, 'settleChatProposal').mockReturnValue(settlement.promise)
+    renderBuilder()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('Đề xuất trễ')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+    await waitFor(() => expect(api.settleChatProposal).toHaveBeenCalledTimes(1))
+    await editName()
+
+    await act(async () => settlement.resolve({ applied: 1, status: 'accepted', accepted: [0], rejected: [], selectedOps: [{ op: 'replace', path: '/sections/intro/title', value: 'AI title', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }] }))
+
+    expect(screen.getByDisplayValue('B')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Áp dụng vào CV' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(/bản nháp đã thay đổi/i)
+  })
+
   it('clears AI provenance after discard so a later manual save is user-sourced', async () => {
     vi.spyOn(api, 'sendChat').mockResolvedValue({
       kind: 'patch', proposalId: 'proposal-1', summary: 'AI suggestion',

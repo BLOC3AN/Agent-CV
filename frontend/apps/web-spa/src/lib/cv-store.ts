@@ -278,6 +278,7 @@ export function useCVStore(id: string) {
     error,
     profileId,
     draftVersion: documentVersionRef.current,
+    getDraft: () => documentsRef.current.draft,
     updateDraft,
     saveDraft,
     discardDraft,
