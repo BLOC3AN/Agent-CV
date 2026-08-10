@@ -67,7 +67,21 @@ function sectionHeading(context: RenderContext, title: string) {
 
 function interactiveProps(context: RenderContext, itemId?: string): React.HTMLAttributes<HTMLElement> {
   const { node, onEdit, onSelect } = context
+  const hasNestedEditTargets = node.type === 'experience' || node.type === 'projects' || node.type === 'education'
   return {
+    ...(onEdit ? {
+      tabIndex: 0,
+      // Item surfaces are buttons; their containing block must remain a group
+      // to avoid nesting interactive buttons inside another button.
+      role: hasNestedEditTargets && !itemId ? 'group' : 'button',
+      ...(itemId ? { 'data-cv-item-id': itemId } : {}),
+      onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        if (itemId) event.stopPropagation()
+        onEdit(node.id, itemId)
+      },
+    } : {}),
     onClick: onSelect ? (event) => {
       if (itemId) event.stopPropagation()
       onSelect(node.id, itemId)

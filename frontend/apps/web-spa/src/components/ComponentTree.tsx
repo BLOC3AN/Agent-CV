@@ -35,6 +35,13 @@ function orderedNestedItems(cv: CV, node: LayoutNode) {
   return [...ordered, ...items.filter((item) => !ids.has(item.id))]
 }
 
+function activateEditFromKeyboard(event: React.KeyboardEvent<HTMLElement>, onEdit: ComponentTreeProps['onEdit'], nodeId: string, itemId?: string) {
+  if (event.target !== event.currentTarget) return
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  onEdit?.(nodeId, itemId)
+}
+
 export function ComponentTree({ cv, layout, selectedNodeId, onMoveNode, onMoveItem, onSetNodeVisible, onSelect, onEdit }: ComponentTreeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [dragged, setDragged] = useState<Dragged>(null)
@@ -55,11 +62,14 @@ export function ComponentTree({ cv, layout, selectedNodeId, onMoveNode, onMoveIt
           <div key={node.id}>
             <div
               role="treeitem"
+              tabIndex={0}
               aria-label={label}
               aria-selected={selectedNodeId === node.id}
+              aria-expanded={expandable ? isExpanded : undefined}
               className={`group flex items-center gap-1 rounded-lg border px-1.5 py-1.5 text-xs transition ${node.visible ? 'border-slate-200 bg-white text-slate-700' : 'border-slate-200 bg-slate-50 text-slate-400'} ${selectedNodeId === node.id ? 'ring-1 ring-indigo-400' : ''}`}
               onClick={() => onSelect?.(node.id)}
               onDoubleClick={() => onEdit?.(node.id)}
+              onKeyDown={(event) => activateEditFromKeyboard(event, onEdit, node.id)}
               onDragOver={(event) => { if (dragged?.kind === 'node' && dragged.nodeId !== node.id) event.preventDefault() }}
               onDrop={(event) => { event.preventDefault(); if (dragged?.kind === 'node' && dragged.nodeId !== node.id) onMoveNode(dragged.nodeId, node.id); setDragged(null) }}
             >
@@ -68,7 +78,7 @@ export function ComponentTree({ cv, layout, selectedNodeId, onMoveNode, onMoveIt
               <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
               <button type="button" aria-label={`${node.visible ? 'Ẩn' : 'Hiện'} ${label}`} className="rounded p-1 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); onSetNodeVisible(node.id, !node.visible) }}>{node.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}</button>
             </div>
-            {expandable && isExpanded && <div role="group" className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-2">{items.map((item) => <div key={item.id} role="treeitem" aria-label={item.label} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-600 hover:bg-slate-50" onClick={(event) => { event.stopPropagation(); onSelect?.(node.id, item.id) }} onDoubleClick={(event) => { event.stopPropagation(); onEdit?.(node.id, item.id) }} onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id && dragged.itemId !== item.id) { event.preventDefault(); event.stopPropagation() } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id && dragged.itemId !== item.id) onMoveItem(node.id, dragged.itemId, item.id); setDragged(null) }}><button type="button" draggable aria-label={`Kéo ${item.label}`} className="cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing" onClick={(event) => event.stopPropagation()} onDragStart={() => setDragged({ kind: 'item', nodeId: node.id, itemId: item.id })} onDragEnd={() => setDragged(null)}><GripVertical className="h-3 w-3" /></button><span className="truncate">{item.label}</span></div>)}<div aria-label={`Thả để chuyển ${label} xuống cuối`} className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id) { event.preventDefault(); event.stopPropagation() } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id) onMoveItem(node.id, dragged.itemId, null); setDragged(null) }} /></div>}
+            {expandable && isExpanded && <div role="group" className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-2">{items.map((item) => <div key={item.id} role="treeitem" tabIndex={0} aria-label={item.label} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-600 hover:bg-slate-50" onClick={(event) => { event.stopPropagation(); onSelect?.(node.id, item.id) }} onDoubleClick={(event) => { event.stopPropagation(); onEdit?.(node.id, item.id) }} onKeyDown={(event) => activateEditFromKeyboard(event, onEdit, node.id, item.id)} onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id && dragged.itemId !== item.id) { event.preventDefault(); event.stopPropagation() } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id && dragged.itemId !== item.id) onMoveItem(node.id, dragged.itemId, item.id); setDragged(null) }}><button type="button" draggable aria-label={`Kéo ${item.label}`} className="cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing" onClick={(event) => event.stopPropagation()} onDragStart={() => setDragged({ kind: 'item', nodeId: node.id, itemId: item.id })} onDragEnd={() => setDragged(null)}><GripVertical className="h-3 w-3" /></button><span className="truncate">{item.label}</span></div>)}<div aria-label={`Thả để chuyển ${label} xuống cuối`} className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id) { event.preventDefault(); event.stopPropagation() } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id) onMoveItem(node.id, dragged.itemId, null); setDragged(null) }} /></div>}
           </div>
         )
       })}

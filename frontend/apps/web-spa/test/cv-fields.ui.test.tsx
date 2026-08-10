@@ -44,6 +44,71 @@ function openProjectItem() {
 }
 
 describe('catalog-driven inline CV editing', () => {
+  it('opens a tree node from the keyboard and Escape cancels without dirtying the draft', () => {
+    render(<DraftEditor />)
+
+    const nodeTarget = screen.getByRole('treeitem', { name: 'Thông tin cá nhân' })
+    expect(nodeTarget).toHaveAttribute('tabindex', '0')
+    nodeTarget.focus()
+    fireEvent.keyDown(nodeTarget, { key: 'Enter' })
+
+    const editor = screen.getByRole('dialog', { name: 'Chỉnh sửa Thông tin cá nhân' })
+    expect(editor).toBeInTheDocument()
+    fireEvent.keyDown(editor, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog', { name: 'Chỉnh sửa Thông tin cá nhân' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Bản nháp chưa lưu')).not.toBeInTheDocument()
+  })
+
+  it('opens a canvas node from Space and preserves Escape cancellation', () => {
+    render(<DraftEditor />)
+
+    const canvasNode = screen.getByTestId('cv-block-header')
+    expect(canvasNode).toHaveAttribute('tabindex', '0')
+    canvasNode.focus()
+    fireEvent.keyDown(canvasNode, { key: ' ' })
+
+    expect(screen.getByRole('dialog', { name: 'Chỉnh sửa Thông tin cá nhân' })).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('opens a nested tree item from Space and applies its Enter edit to the draft', () => {
+    render(<DraftEditor />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mở rộng Kinh nghiệm làm việc' }))
+    const itemTarget = screen.getByRole('treeitem', { name: 'AI Engineer — IMESPRO' })
+    expect(itemTarget).toHaveAttribute('tabindex', '0')
+    itemTarget.focus()
+    fireEvent.keyDown(itemTarget, { key: ' ' })
+
+    const editor = screen.getByRole('dialog', { name: 'Chỉnh sửa Kinh nghiệm làm việc' })
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Principal AI Engineer' } })
+    fireEvent.keyDown(editor, { key: 'Enter' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('cv-block-experience')).toHaveTextContent('Principal AI Engineer')
+    expect(screen.getByText('Bản nháp chưa lưu')).toBeInTheDocument()
+  })
+
+  it('opens a nested canvas item from Enter and applies its Ctrl+Enter edit to the draft', () => {
+    render(<DraftEditor />)
+
+    const itemTarget = screen.getByTestId('cv-block-experience').querySelector<HTMLElement>('[data-cv-item-id="exp-1"]')
+    expect(itemTarget).not.toBeNull()
+    expect(itemTarget).toHaveAttribute('tabindex', '0')
+    itemTarget!.focus()
+    fireEvent.keyDown(itemTarget!, { key: 'Enter' })
+
+    const editor = screen.getByRole('dialog', { name: 'Chỉnh sửa Kinh nghiệm làm việc' })
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Lead AI Engineer' } })
+    fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('cv-block-experience')).toHaveTextContent('Lead AI Engineer')
+    expect(screen.getByText('Bản nháp chưa lưu')).toBeInTheDocument()
+  })
+
   it('opens from a double-click, applies a text field to the draft, and shows dirty state', () => {
     render(<DraftEditor />)
 
