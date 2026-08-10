@@ -128,4 +128,18 @@ describe('CV editor explicit save workflow', () => {
     expect(settle).toHaveBeenCalledWith('proposal-1', 'profile-1', [0])
     expect(legacySave).not.toHaveBeenCalled()
   })
+
+  it('saves the current draft before the actual Download button opens the shared SSR print route', async () => {
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({
+      cv: envelope({ ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'B' } } }),
+    } as never)
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined)
+    renderBuilder()
+    await editName()
+
+    fireEvent.click(screen.getByRole('button', { name: /tải pdf/i }))
+
+    await waitFor(() => expect(commit).toHaveBeenCalledTimes(1))
+    expect(assign).toHaveBeenCalledWith('/print/cv-1?variant=presentation')
+  })
 })

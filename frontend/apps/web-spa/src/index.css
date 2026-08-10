@@ -53,11 +53,15 @@
   body * {
     visibility: hidden;
   }
-  #a4-cv-paper,
-  #a4-cv-paper * {
+  #cv-print-surface,
+  #cv-print-surface * {
     visibility: visible;
   }
   #a4-cv-paper {
+    display: none !important;
+  }
+  #cv-print-surface {
+    display: block !important;
     position: static;
     width: 210mm !important;
     min-height: 0 !important;

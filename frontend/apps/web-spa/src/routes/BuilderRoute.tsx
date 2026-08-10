@@ -24,6 +24,11 @@ export function BuilderRoute() {
     await store.saveDraft()
   }, [store.saveDraft])
 
+  const downloadPDF = useCallback(async () => {
+    await save()
+    window.location.assign(`/print/${encodeURIComponent(cvId)}?variant=presentation`)
+  }, [cvId, save])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== 's' || (!event.ctrlKey && !event.metaKey)) return
@@ -98,7 +103,7 @@ export function BuilderRoute() {
         saving={store.status === 'saving'}
         onOpenPreview={() => navigate(`/builder/${cvId}/preview`)}
         onOpenShare={() => {}}
-        onDownloadPDF={() => { window.location.assign(`/api/cv/${encodeURIComponent(cvId)}/export?variant=presentation`) }}
+        onDownloadPDF={downloadPDF}
       />
       {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplied={(ops) => store.updateDraft({ cv: applyChatOps(store.draft!.cv, ops), layout: store.draft!.layout })} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
