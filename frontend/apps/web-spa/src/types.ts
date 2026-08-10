@@ -6,6 +6,8 @@ export interface IntroSection {
   location: string;
   website?: string;
   summary: string;
+  careerObjective?: string;
+  availability?: string;
   avatarUrl?: string;
 }
 
@@ -16,6 +18,8 @@ export interface ExperienceItem {
   startDate: string;
   endDate: string;
   current: boolean;
+  teamSize?: string;
+  techStack?: string[];
   /**
    * Từng gạch đầu dòng là một phần tử riêng, không phải một khối văn bản.
    *
@@ -34,6 +38,9 @@ export interface ProjectItem {
   startDate: string;
   endDate: string;
   link?: string;
+  teamSize?: string;
+  techStack?: string[];
+  contribution?: string;
   /**
    * Từng gạch đầu dòng là một phần tử riêng, không phải một khối văn bản.
    *
@@ -53,6 +60,7 @@ export interface EducationItem {
   startDate: string;
   endDate: string;
   gpa?: string;
+  highlights: string[];
 }
 
 export interface SkillItem {
@@ -129,6 +137,7 @@ export type CVNodeType =
   | 'projects'
   | 'education'
   | 'skills'
+  | 'activities'
   | 'certifications'
   | 'languages'
   | 'footer';

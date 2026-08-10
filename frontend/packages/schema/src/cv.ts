@@ -36,8 +36,10 @@ export const IntroSectionSchema = z.object({
   location: z.string().default(''),
   website: z.string().optional(),
   summary: z.string().default(''),
+  careerObjective: z.string().optional(),
+  availability: z.string().optional(),
   avatarUrl: z.string().optional(),
-})
+}).strict()
 
 /**
  * `.strict()` ở mọi mục có bullet, và bullet là `highlights: string[]`.
@@ -56,6 +58,8 @@ export const ExperienceItemSchema = z
     startDate: z.string().default(''),
     endDate: z.string().default(''),
     current: z.boolean().default(false),
+    teamSize: z.string().optional(),
+    techStack: z.array(z.string()).optional(),
     highlights: z.array(z.string()).default([]),
   })
   .strict()
@@ -68,6 +72,9 @@ export const ProjectItemSchema = z
     startDate: z.string().default(''),
     endDate: z.string().default(''),
     link: z.string().optional(),
+    teamSize: z.string().optional(),
+    techStack: z.array(z.string()).optional(),
+    contribution: z.string().optional(),
     highlights: z.array(z.string()).default([]),
   })
   .strict()
@@ -123,16 +130,29 @@ export const LanguageItemSchema = z
   })
   .strict()
 
+function uniqueIDs<T extends z.ZodTypeAny>(schema: T) {
+  return z.array(schema).default([]).superRefine((items, context) => {
+    const seen = new Set<string>()
+    items.forEach((item, index) => {
+      const id = (item as { id?: unknown }).id
+      if (typeof id === 'string' && seen.has(id)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: [index, 'id'], message: `Duplicate item id: ${id}` })
+      }
+      if (typeof id === 'string') seen.add(id)
+    })
+  })
+}
+
 export const CVSectionsSchema = z.object({
   intro: IntroSectionSchema,
-  experience: z.array(ExperienceItemSchema).default([]),
-  projects: z.array(ProjectItemSchema).default([]),
-  education: z.array(EducationItemSchema).default([]),
-  skills: z.array(SkillItemSchema).default([]),
-  activities: z.array(ActivityItemSchema).default([]),
-  certifications: z.array(CertificationItemSchema).default([]),
-  languages: z.array(LanguageItemSchema).default([]),
-})
+  experience: uniqueIDs(ExperienceItemSchema),
+  projects: uniqueIDs(ProjectItemSchema),
+  education: uniqueIDs(EducationItemSchema),
+  skills: uniqueIDs(SkillItemSchema),
+  activities: uniqueIDs(ActivityItemSchema),
+  certifications: uniqueIDs(CertificationItemSchema),
+  languages: uniqueIDs(LanguageItemSchema),
+}).strict()
 
 export const CVDesignSchema = z.object({
   template: z.enum(['modern', 'classic', 'professional']).default('modern'),
@@ -140,7 +160,7 @@ export const CVDesignSchema = z.object({
   font: z.enum(['Roboto', 'Open Sans', 'Lato']).default('Roboto'),
   fontSize: z.number().default(14),
   spacing: z.enum(['condensed', 'normal', 'wide']).default('normal'),
-})
+}).strict()
 
 export const ActiveSectionsSchema = z.object({
   intro: z.boolean().default(true),
@@ -151,7 +171,7 @@ export const ActiveSectionsSchema = z.object({
   activities: z.boolean().default(true),
   certifications: z.boolean().default(true),
   languages: z.boolean().default(true),
-})
+}).strict()
 
 /**
  * `verified` — xương sống chống bịa: mọi nội dung
@@ -163,7 +183,7 @@ export const CVMetaSchema = z.object({
   verified: z.record(z.boolean()).default({}),
   source: z.enum(['manual', 'pdf_import', 'ai_generated']).default('manual'),
   canonical: z.record(z.string()).default({}),
-})
+}).strict()
 
 export const CVSchema = z.object({
   schemaVersion: z.literal(2),
@@ -176,7 +196,7 @@ export const CVSchema = z.object({
   activeSections: ActiveSectionsSchema.default({}),
   layout: CVLayoutSchema.default(DEFAULT_CV_LAYOUT),
   _meta: CVMetaSchema.default({}),
-})
+}).strict()
 
 export type CV = z.infer<typeof CVSchema>
 export type CVSections = z.infer<typeof CVSectionsSchema>

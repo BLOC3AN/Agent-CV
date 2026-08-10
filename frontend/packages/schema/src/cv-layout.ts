@@ -7,6 +7,7 @@ export const CVNodeTypeSchema = z.enum([
   'projects',
   'education',
   'skills',
+  'activities',
   'certifications',
   'languages',
   'footer',
@@ -31,6 +32,7 @@ export const LayoutNodeSchema = z.discriminatedUnion('type', [
   itemNode('projects'),
   itemNode('education'),
   simpleNode('skills'),
+  simpleNode('activities'),
   simpleNode('certifications'),
   simpleNode('languages'),
   simpleNode('footer'),
@@ -42,6 +44,26 @@ export const CVLayoutSchema = z
     nodes: z.array(LayoutNodeSchema),
   })
   .strict()
+  .superRefine((layout, context) => {
+    const seen = new Set<string>()
+    for (const node of layout.nodes) {
+      if (node.id !== node.type) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['nodes'], message: `Node ${node.type} must use canonical id ${node.type}` })
+      }
+      if (seen.has(node.type)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['nodes'], message: `Duplicate node type: ${node.type}` })
+      }
+      seen.add(node.type)
+      if ('itemOrder' in node && node.itemOrder && new Set(node.itemOrder).size !== node.itemOrder.length) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['nodes'], message: `Duplicate item reference in ${node.type}` })
+      }
+    }
+    for (const type of CVNodeTypeSchema.options) {
+      if (!seen.has(type)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['nodes'], message: `Missing canonical node: ${type}` })
+      }
+    }
+  })
 
 export type CVNodeType = z.infer<typeof CVNodeTypeSchema>
 export type LayoutNode = z.infer<typeof LayoutNodeSchema>
@@ -112,6 +134,7 @@ export const DEFAULT_CV_LAYOUT: CVLayout = {
     { id: 'projects', type: 'projects', visible: true },
     { id: 'education', type: 'education', visible: true },
     { id: 'skills', type: 'skills', visible: true },
+    { id: 'activities', type: 'activities', visible: true },
     { id: 'certifications', type: 'certifications', visible: true },
     { id: 'languages', type: 'languages', visible: true },
     { id: 'footer', type: 'footer', visible: true },

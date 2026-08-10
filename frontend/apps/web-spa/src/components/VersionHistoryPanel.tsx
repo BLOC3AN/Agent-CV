@@ -8,6 +8,7 @@ import { CVBlockRenderer } from './CVBlockRenderer'
 
 interface VersionHistoryPanelProps {
   cvId: string
+  dirty: boolean
   onClose: () => void
   onRestore: (revisionId: string) => Promise<void>
   returnFocusRef: RefObject<HTMLElement | null>
@@ -48,7 +49,7 @@ function SnapshotPreview({ title, snapshot }: { title: string; snapshot?: CVRevi
   )
 }
 
-export function VersionHistoryPanel({ cvId, onClose, onRestore, returnFocusRef }: VersionHistoryPanelProps) {
+export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFocusRef }: VersionHistoryPanelProps) {
   const [revisions, setRevisions] = useState<CVRevisionSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
@@ -179,6 +180,7 @@ export function VersionHistoryPanel({ cvId, onClose, onRestore, returnFocusRef }
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-slate-200 overflow-auto md:grid-cols-[20rem_minmax(0,1fr)] md:divide-x md:divide-y-0">
           <div className="space-y-3 p-4">
+            {dirty && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Hãy lưu hoặc bỏ thay đổi trong bản nháp trước khi khôi phục phiên bản.</p>}
             {loading && <p className="text-sm text-slate-500">Đang tải lịch sử phiên bản…</p>}
             {!loading && !error && revisions.length === 0 && <p className="text-sm text-slate-500">Chưa có phiên bản đã lưu.</p>}
             {revisions.map((revision) => (
@@ -195,7 +197,7 @@ export function VersionHistoryPanel({ cvId, onClose, onRestore, returnFocusRef }
                   <button type="button" aria-pressed={selectedRevisionId === revision.id} onClick={() => void openPreview(revision.id)} disabled={previewingId === revision.id || restoring} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                     {previewingId === revision.id ? 'Đang tải…' : `Xem trước phiên bản ${revision.number}`}
                   </button>
-                  <button type="button" onClick={(event) => requestRestore(revision, event.currentTarget)} disabled={restoring} className="rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">
+                  <button type="button" onClick={(event) => requestRestore(revision, event.currentTarget)} disabled={restoring || dirty} className="rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">
                     Khôi phục phiên bản {revision.number}
                   </button>
                 </div>

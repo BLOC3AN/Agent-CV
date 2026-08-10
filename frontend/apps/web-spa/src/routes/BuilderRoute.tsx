@@ -11,7 +11,7 @@ export function BuilderRoute() {
   const store = useCVStore(cvId ?? '')
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
-  const [pendingAIProvenance, setPendingAIProvenance] = useState<string[]>([])
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false)
   const blocker = useBlocker(store.dirty)
   const dirtyRef = useRef(store.dirty)
   const savingRef = useRef(store.saving)
@@ -22,35 +22,45 @@ export function BuilderRoute() {
   }, [store.dirty, store.saving])
 
   const save = useCallback(async () => {
-    const message = pendingAIProvenance.length ? pendingAIProvenance.join('\n') : undefined
-    await store.saveDraft(message ? 'ai' : 'user', message)
-    setPendingAIProvenance([])
-  }, [pendingAIProvenance, store.saveDraft])
+    await store.saveDraft()
+  }, [store.saveDraft])
 
   const updateManualCV = useCallback((cv: Parameters<typeof store.updateDraft>[0]['cv']) => {
-    setPendingAIProvenance([])
     store.updateDraft({ cv, layout: store.draft!.layout })
   }, [store.updateDraft, store.draft])
 
   const updateManualLayout = useCallback((layout: Parameters<typeof store.updateDraft>[0]['layout']) => {
-    setPendingAIProvenance([])
     store.updateDraft({ cv: store.draft!.cv, layout })
   }, [store.updateDraft, store.draft])
 
   const discardDraft = useCallback(() => {
-    setPendingAIProvenance([])
     store.discardDraft()
   }, [store.discardDraft])
 
   const restoreVersion = useCallback(async (revisionId: string) => {
     await store.restoreRevision(revisionId)
-    setPendingAIProvenance([])
   }, [store.restoreRevision])
 
-  const downloadPDF = useCallback(async () => {
-    await save()
+  const openPrint = useCallback(() => {
     window.location.assign(`/print/${encodeURIComponent(cvId)}?variant=presentation`)
-  }, [cvId, save])
+  }, [cvId])
+
+  const downloadPDF = useCallback(() => {
+    if (store.dirty) { setDownloadDialogOpen(true); return }
+    openPrint()
+  }, [openPrint, store.dirty])
+
+  const saveAndDownload = async () => {
+    await save()
+    setDownloadDialogOpen(false)
+    openPrint()
+  }
+
+  const discardAndDownload = () => {
+    discardDraft()
+    setDownloadDialogOpen(false)
+    openPrint()
+  }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -130,7 +140,7 @@ export function BuilderRoute() {
         cvId={cvId}
         onRestoreVersion={restoreVersion}
       />
-      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} layout={store.draft.layout} draftVersion={store.draftVersion} onApplyAIProposal={(ops) => { const current = store.getDraft(); if (!current) throw new Error('Không còn bản nháp hiện tại'); store.updateDraft(applyChatOpsToDraft(current, ops)) }} onProposalApplied={(summary) => setPendingAIProvenance((previous) => [...previous, summary])} onClose={() => setAssistantOpen(false)} /></div>}
+      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} layout={store.draft.layout} draftVersion={store.draftVersion} onApplyAIProposal={(ops, summary) => { const current = store.getDraft(); if (!current) throw new Error('Không còn bản nháp hiện tại'); store.applyAIDraft(applyChatOpsToDraft(current, ops), summary) }} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
       {leaveDialogOpen && blocker.state === 'blocked' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">
@@ -141,6 +151,19 @@ export function BuilderRoute() {
               <button type="button" onClick={cancelLeave} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Hủy</button>
               <button type="button" onClick={discardAndLeave} disabled={store.saving} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Bỏ thay đổi</button>
               <button type="button" onClick={() => void saveAndLeave()} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Lưu và rời đi</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {downloadDialogOpen && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/35 p-4">
+          <div role="dialog" aria-modal="true" aria-label="Xuất PDF với thay đổi chưa lưu" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-base font-bold text-slate-900">CV có thay đổi chưa lưu</h2>
+            <p className="mt-2 text-sm text-slate-600">Chọn rõ phiên bản dùng để xuất PDF. Chỉ “Lưu và tải” mới tạo revision.</p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => setDownloadDialogOpen(false)} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Hủy</button>
+              <button type="button" onClick={discardAndDownload} disabled={store.saving} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Bỏ thay đổi và tải</button>
+              <button type="button" onClick={() => void saveAndDownload().catch(() => undefined)} disabled={store.saving} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Lưu và tải</button>
             </div>
           </div>
         </div>

@@ -63,4 +63,39 @@ describe('CV v2', () => {
       '/sections/intro/avatarUrl',
     ])
   })
+
+  it('stores registered fields in typed canonical properties', () => {
+    const cv = CVSchema.parse({
+      ...minimal,
+      sections: {
+        ...minimal.sections,
+        intro: { ...minimal.sections.intro, careerObjective: 'Build reliable systems', availability: 'Two weeks' },
+        experience: [{
+          id: 'e1', title: 'Engineer', company: 'FPT', startDate: '', endDate: '', current: false,
+          teamSize: '6 engineers', techStack: ['Go', 'React'], highlights: ['Team size: this is a real user bullet'],
+        }],
+        projects: [{
+          id: 'p1', name: 'Platform', role: 'Lead', startDate: '', endDate: '',
+          teamSize: '4 engineers', techStack: ['TypeScript'], contribution: 'Led delivery', highlights: [],
+        }],
+      },
+    })
+
+    expect(cv.sections.intro.availability).toBe('Two weeks')
+    expect(cv.sections.intro.title).toBe('Kỹ sư')
+    expect(cv.sections.experience[0]?.teamSize).toBe('6 engineers')
+    expect(cv.sections.experience[0]?.highlights).toEqual(['Team size: this is a real user bullet'])
+    expect(cv.sections.projects[0]?.contribution).toBe('Led delivery')
+  })
+
+  it.each([
+    ['top level', { customField: true }],
+    ['intro', { sections: { ...minimal.sections, intro: { ...minimal.sections.intro, customField: true } } }],
+    ['sections', { sections: { ...minimal.sections, customSection: [] } }],
+    ['design', { design: { ...minimal.design, padding: 24 } }],
+    ['active sections', { activeSections: { ...minimal.activeSections, customSection: true } }],
+    ['metadata', { _meta: { ...minimal._meta, customField: true } }],
+  ])('rejects unknown keys at the %s boundary', (_name, override) => {
+    expect(() => CVSchema.parse({ ...minimal, ...override })).toThrow()
+  })
 })

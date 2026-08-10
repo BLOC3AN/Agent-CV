@@ -136,6 +136,8 @@ export interface CVEnvelope {
   updatedAt: string
   profileSnapshot: CV
   schemaVersion: 2
+  /** Latest committed CV revision; zero means the legacy initialization state. */
+  revisionNumber: number
 }
 
 export interface ChatOp {
@@ -349,11 +351,12 @@ export async function commitCV(
   layout: CVLayout,
   source: Extract<CVRevisionSource, 'user' | 'ai'>,
   message?: string,
+  baseRevision = 0,
 ): Promise<CVCommitResult> {
   return request<CVCommitResult>(`/api/cv/${encodeURIComponent(id)}/commit`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ cv, layout, source, ...(message ? { message } : {}) }),
+    body: JSON.stringify({ cv, layout, source, ...(message ? { message } : {}), baseRevision }),
   })
 }
 
@@ -368,9 +371,11 @@ export async function getCVRevision(id: string, revisionId: string): Promise<{ r
   )
 }
 
-export async function restoreCVRevision(id: string, revisionId: string): Promise<CVCommitResult> {
+export async function restoreCVRevision(id: string, revisionId: string, baseRevision: number): Promise<CVCommitResult> {
   return request<CVCommitResult>(`/api/cv/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/restore`, {
     method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ baseRevision }),
   })
 }
 

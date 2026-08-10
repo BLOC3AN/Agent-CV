@@ -277,7 +277,7 @@ func (s *Server) exportCV(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	var title, language string
 	var snapshot []byte
-	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(c.title,'CV'), COALESCE(c.language, p.language, 'en'), p.data
+	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(c.title,'CV'), COALESCE(c.language, p.language, 'en'), c.profile_snapshot
 		FROM cv_documents c JOIN profiles p ON p.id=c.profile_id
 		WHERE c.id=$1 AND c.user_id=$2 AND p.user_id=$2`, id, userID).Scan(&title, &language, &snapshot); err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
@@ -361,17 +361,9 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
 		return
 	}
-	var normalizedLayout json.RawMessage
 	if len(body.Layout) > 0 {
-		var err error
-		// Legacy metadata PATCH is the only write path that accepts an empty
-		// stored layout. Normalize it before storage so a subsequent GET never
-		// has to recover from a value this handler just wrote.
-		normalizedLayout, err = normalizeCVLayout(body.Layout)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "layout không hợp lệ"})
-			return
-		}
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Thay đổi layout phải dùng Save để tạo revision", "code": "CV_REVISION_REQUIRED"})
+		return
 	}
 	sets, args := []string{}, []any{}
 	n := 1
@@ -388,11 +380,6 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 	if len(body.Theme) > 0 {
 		sets = append(sets, fmt.Sprintf("theme = $%d::jsonb", n))
 		args = append(args, string(body.Theme))
-		n++
-	}
-	if len(body.Layout) > 0 {
-		sets = append(sets, fmt.Sprintf("layout = $%d::jsonb", n))
-		args = append(args, string(normalizedLayout))
 		n++
 	}
 	if len(sets) == 0 {
@@ -436,21 +423,37 @@ func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, 
 	// biến ở tầng ứng dụng, KHÔNG có ràng buộc DB nào ép nó (xem 001_core.sql).
 	// Đây là đường GHI, nên còn quan trọng hơn đường đọc.
 	var profileID string
+	var layoutRaw []byte
+	var revisionCount int
 	if err := tx.QueryRowContext(r.Context(),
-		`SELECT c.profile_id FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
-		 WHERE c.id = $1 AND c.user_id = $2 AND p.user_id = $2`, id, userID).Scan(&profileID); err != nil {
+		`SELECT c.profile_id,c.layout,(SELECT COUNT(*) FROM cv_revisions r WHERE r.cv_id=c.id) FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
+			 WHERE c.id = $1 AND c.user_id = $2 AND p.user_id = $2 FOR UPDATE OF c`, id, userID).Scan(&profileID, &layoutRaw, &revisionCount); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		return
+	}
+	if revisionCount > 0 {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "CV đã có lịch sử. Hãy dùng Save để tạo revision.", "code": "CV_REVISION_REQUIRED"})
+		return
+	}
+	legacyLayout, err := normalizeCVLayout(layoutRaw)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "layout không hợp lệ"})
+		return
+	}
+	normalizedCV, normalizedLayout, err := normalizeCommittedCVPair(cvV2, legacyLayout)
+	if err != nil {
+		s.writeCVRevisionError(w, err)
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE profiles SET data=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3`,
-		profileID, string(cvV2), userID); err != nil {
+		profileID, string(normalizedCV), userID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không ghi được hồ sơ"})
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(),
-		`UPDATE cv_documents SET profile_snapshot=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3`,
-		id, string(cvV2), userID); err != nil {
+		`UPDATE cv_documents SET profile_snapshot=$2::jsonb,layout=$3::jsonb,updated_at=now() WHERE id=$1 AND user_id=$4`,
+		id, string(normalizedCV), string(normalizedLayout), userID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không ghi được CV"})
 		return
 	}
@@ -1961,10 +1964,14 @@ func validateChatProposalDocuments(profileRaw, layoutRaw []byte, ops []json.RawM
 	layoutOps := make([]json.RawMessage, 0, len(ops))
 	for _, raw := range ops {
 		var op struct {
+			Op   string `json:"op"`
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(raw, &op) != nil || op.Path == "" {
 			return fmt.Errorf("op không hợp lệ")
+		}
+		if !allowedChatPatchPath(op.Op, op.Path) {
+			return fmt.Errorf("path không được hỗ trợ: %s", op.Path)
 		}
 		if strings.HasPrefix(op.Path, "/layout/") {
 			var value map[string]any
@@ -2011,6 +2018,81 @@ func validateChatProposalDocuments(profileRaw, layoutRaw []byte, ops []json.RawM
 		return fmt.Errorf("layout sau patch không hợp lệ: %v", err)
 	}
 	return nil
+}
+
+func allowedChatPatchPath(op, path string) bool {
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(parts) == 3 && parts[0] == "sections" && parts[1] == "intro" {
+		return stringIn(parts[2], "fullName", "title", "email", "phone", "location", "website", "summary", "careerObjective", "availability", "avatarUrl")
+	}
+	sectionFields := map[string][]string{
+		"experience": {"id", "title", "company", "startDate", "endDate", "current", "teamSize", "techStack", "highlights"},
+		"projects":   {"id", "name", "role", "startDate", "endDate", "link", "teamSize", "techStack", "contribution", "highlights"},
+		"education":  {"id", "school", "degree", "fieldOfStudy", "startDate", "endDate", "gpa", "highlights"},
+		"skills":     {"id", "category", "skills"}, "activities": {"id", "organization", "role", "startDate", "endDate", "highlights"},
+		"certifications": {"id", "name", "issuer", "date", "link"}, "languages": {"id", "language", "proficiency"},
+	}
+	if len(parts) >= 3 && parts[0] == "sections" && sectionFields[parts[1]] != nil {
+		if parts[2] == "-" {
+			return len(parts) == 3 && op == "add"
+		}
+		if !decimalPathPart(parts[2]) {
+			return false
+		}
+		if len(parts) == 3 {
+			return true
+		}
+		if len(parts) == 4 {
+			return stringIn(parts[3], sectionFields[parts[1]]...)
+		}
+		if len(parts) == 5 && stringIn(parts[3], "highlights", "skills", "techStack") {
+			return decimalPathPart(parts[4]) || parts[4] == "-" && op == "add"
+		}
+	}
+	if len(parts) == 2 && parts[0] == "design" {
+		return stringIn(parts[1], "template", "accentColor", "font", "fontSize", "spacing")
+	}
+	if len(parts) >= 2 && parts[0] == "layout" && parts[1] == "nodes" {
+		if len(parts) == 2 {
+			return op == "replace"
+		}
+		if len(parts) < 4 || !decimalPathPart(parts[2]) {
+			return false
+		}
+		if len(parts) == 4 && parts[3] == "visible" {
+			return op == "replace"
+		}
+		if parts[3] == "itemOrder" {
+			if len(parts) == 4 {
+				return op == "add" || op == "replace"
+			}
+			if len(parts) == 5 {
+				return decimalPathPart(parts[4]) || parts[4] == "-" && op == "add"
+			}
+		}
+	}
+	return false
+}
+
+func decimalPathPart(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return value == "0" || value[0] != '0'
+}
+
+func stringIn(value string, options ...string) bool {
+	for _, option := range options {
+		if value == option {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) cacheChatMessages(ctx context.Context, userID, sessionID string, messages []map[string]string) {

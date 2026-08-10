@@ -2,12 +2,17 @@ package api
 
 import (
 	"bytes"
+	"compress/zlib"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"sort"
+	"sync"
 	"testing"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -43,7 +48,7 @@ func createCVRevisionFixture(t *testing.T, db *sql.DB) cvRevisionFixture {
 		token:      "cv-revision-" + t.Name(),
 		otherToken: "cv-revision-other-" + t.Name(),
 		profile:    validRevisionCV("Original", "Original User"),
-		layout:     json.RawMessage(`{"version":1,"nodes":[{"id":"header","type":"header","visible":true}]}`),
+		layout:     append(json.RawMessage(nil), defaultCVLayout...),
 	}
 	if err := db.QueryRow(`WITH u AS (INSERT INTO users(email) VALUES ($1) RETURNING id),
 		p AS (INSERT INTO profiles(user_id,data,language) SELECT id,$2::jsonb,'vi' FROM u RETURNING id,user_id),
@@ -63,6 +68,57 @@ func createCVRevisionFixture(t *testing.T, db *sql.DB) cvRevisionFixture {
 	}
 	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM users WHERE id IN ($1,$2)`, f.userID, f.otherUserID) })
 	return f
+}
+
+func orderedRevisionLayout(first ...string) json.RawMessage {
+	requested := append([]string(nil), first...)
+	seen := make(map[string]bool, len(requested))
+	for _, kind := range requested {
+		seen[kind] = true
+	}
+	for _, kind := range canonicalCVNodeTypes {
+		if !seen[kind] {
+			requested = append(requested, kind)
+		}
+	}
+	nodes := make([]map[string]any, 0, len(requested))
+	for _, kind := range requested {
+		nodes = append(nodes, map[string]any{"id": kind, "type": kind, "visible": true})
+	}
+	raw, _ := json.Marshal(map[string]any{"version": 1, "nodes": nodes})
+	return raw
+}
+
+func revisionLayoutWithItemOrder(kind string, itemOrder []string) json.RawMessage {
+	var layout map[string]any
+	if err := json.Unmarshal(orderedRevisionLayout(), &layout); err != nil {
+		panic(err)
+	}
+	for _, value := range layout["nodes"].([]any) {
+		node := value.(map[string]any)
+		if node["type"] == kind {
+			node["itemOrder"] = itemOrder
+		}
+	}
+	raw, _ := json.Marshal(layout)
+	return raw
+}
+
+func legacyRevisionLayoutWithoutActivities() json.RawMessage {
+	var layout map[string]any
+	if err := json.Unmarshal(orderedRevisionLayout(), &layout); err != nil {
+		panic(err)
+	}
+	nodes := layout["nodes"].([]any)
+	filtered := make([]any, 0, len(nodes)-1)
+	for _, value := range nodes {
+		if value.(map[string]any)["type"] != "activities" {
+			filtered = append(filtered, value)
+		}
+	}
+	layout["nodes"] = filtered
+	raw, _ := json.Marshal(layout)
+	return raw
 }
 
 func validRevisionCV(title, fullName string) json.RawMessage {
@@ -114,16 +170,131 @@ func cvMetadataPatchRequest(t *testing.T, handler http.Handler, path, token stri
 	return w
 }
 
+func decompressedPDFStreams(raw []byte) []byte {
+	var content bytes.Buffer
+	for len(raw) > 0 {
+		marker := []byte("stream\n")
+		start := bytes.Index(raw, marker)
+		if start < 0 {
+			marker = []byte("stream\r\n")
+			start = bytes.Index(raw, marker)
+		}
+		if start < 0 {
+			break
+		}
+		start += len(marker)
+		end := bytes.Index(raw[start:], []byte("endstream"))
+		if end < 0 {
+			break
+		}
+		stream := bytes.TrimSpace(raw[start : start+end])
+		if reader, err := zlib.NewReader(bytes.NewReader(stream)); err == nil {
+			decoded, _ := io.ReadAll(reader)
+			_ = reader.Close()
+			content.Write(decoded)
+		}
+		raw = raw[start+end+len("endstream"):]
+	}
+	return content.Bytes()
+}
+
 func revisionCommitBody(cv json.RawMessage, layout json.RawMessage, source, message string) map[string]any {
-	return map[string]any{"cv": cv, "layout": layout, "source": source, "message": message}
+	return revisionCommitBodyAt(cv, layout, source, message, 0)
+}
+
+func revisionCommitBodyAt(cv json.RawMessage, layout json.RawMessage, source, message string, baseRevision int) map[string]any {
+	return map[string]any{"cv": cv, "layout": layout, "source": source, "message": message, "baseRevision": baseRevision}
+}
+
+func TestCVGetAndExportUseCVLocalSnapshotWhenProfileDiverges(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	diverged := validRevisionCV("Profile only", "Wrong profile content")
+	if _, err := db.Exec(`UPDATE profiles SET data=$2::jsonb WHERE id=$1`, f.profileID, string(diverged)); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewServerWithDB(db, "").Routes()
+	w := cvRevisionRequest(t, handler, http.MethodGet, "/api/cv/"+f.cvID, f.token, nil)
+	if w.Code != http.StatusOK || !bytes.Contains(w.Body.Bytes(), []byte(`"Original User"`)) || bytes.Contains(w.Body.Bytes(), []byte(`"Wrong profile content"`)) {
+		t.Fatalf("GET did not use CV-local snapshot: status=%d body=%s", w.Code, w.Body)
+	}
+	w = cvRevisionRequest(t, handler, http.MethodGet, "/api/cv/"+f.cvID+"/export", f.token, nil)
+	pdfText := decompressedPDFStreams(w.Body.Bytes())
+	if w.Code != http.StatusOK || !bytes.Contains(pdfText, []byte("Original User")) || bytes.Contains(pdfText, []byte("Wrong profile content")) {
+		t.Fatalf("export did not use CV-local snapshot: status=%d body-prefix=%q", w.Code, w.Body.Bytes()[:min(w.Body.Len(), 200)])
+	}
+}
+
+func TestCVCommitRejectsStaleBaseRevisionAndOnlyOneConcurrentWriterWins(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	handler := NewServerWithDB(db, "").Routes()
+	responses := make([]*httptest.ResponseRecorder, 2)
+	var wait sync.WaitGroup
+	for i := range responses {
+		wait.Add(1)
+		go func(index int) {
+			defer wait.Done()
+			responses[index] = cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBodyAt(validRevisionCV(fmt.Sprintf("Writer %d", index), fmt.Sprintf("Writer %d", index)), f.layout, "user", "race", 0))
+		}(i)
+	}
+	wait.Wait()
+	statuses := []int{responses[0].Code, responses[1].Code}
+	sort.Ints(statuses)
+	if !reflect.DeepEqual(statuses, []int{http.StatusOK, http.StatusConflict}) {
+		t.Fatalf("concurrent statuses=%v bodies=%q / %q", statuses, responses[0].Body, responses[1].Body)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cv_revisions WHERE cv_id=$1`, f.cvID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("revision count=%d err=%v", count, err)
+	}
+}
+
+func TestLegacyCVPatchCannotBypassExistingRevisionHistory(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	handler := NewServerWithDB(db, "").Routes()
+	w := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(f.profile, f.layout, "user", "first"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("commit status=%d body=%s", w.Code, w.Body)
+	}
+	legacy := validRevisionCV("Bypass", "Bypass")
+	w = cvRevisionRequest(t, handler, http.MethodPatch, "/api/cv/"+f.cvID, f.token, map[string]any{"cv": legacy})
+	if w.Code != http.StatusConflict {
+		t.Fatalf("legacy PATCH status=%d body=%s", w.Code, w.Body)
+	}
+	var stored []byte
+	if err := db.QueryRow(`SELECT profile_snapshot FROM cv_documents WHERE id=$1`, f.cvID).Scan(&stored); err != nil || bytes.Contains(stored, []byte(`"Bypass"`)) {
+		t.Fatalf("legacy PATCH changed revisioned snapshot: %s err=%v", stored, err)
+	}
+}
+
+func TestCVCommitRejectsNoncanonicalLayoutAndUnknownItemReferences(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	handler := NewServerWithDB(db, "").Routes()
+	cases := map[string]json.RawMessage{
+		"missing nodes":    json.RawMessage(`{"version":1,"nodes":[{"id":"header","type":"header","visible":true}]}`),
+		"duplicate nodes":  json.RawMessage(`{"version":1,"nodes":[{"id":"header","type":"header","visible":true},{"id":"header","type":"header","visible":true}]}`),
+		"mismatched id":    json.RawMessage(`{"version":1,"nodes":[{"id":"hero","type":"header","visible":true}]}`),
+		"unknown item ref": revisionLayoutWithItemOrder("experience", []string{"missing-experience"}),
+	}
+	for name, layout := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(f.profile, layout, "user", name))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body)
+			}
+		})
+	}
 }
 
 func TestCVCommitCreatesRevisionAndUpdatesContentAndLayoutTogether(t *testing.T) {
 	db := cvRevisionDB(t)
 	f := createCVRevisionFixture(t, db)
 	updatedCV := validRevisionCV("Committed", "Committed User")
-	updatedLayout := json.RawMessage(`{"version":1,"nodes":[{"id":"summary","type":"summary","visible":true},{"id":"header","type":"header","visible":true}]}`)
-	normalizedUpdatedCV, err := normalizeCommittedCV(updatedCV, updatedLayout)
+	updatedLayout := orderedRevisionLayout("summary", "header")
+	normalizedUpdatedCV, normalizedUpdatedLayout, err := normalizeCommittedCVPair(updatedCV, updatedLayout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +304,11 @@ func TestCVCommitCreatesRevisionAndUpdatesContentAndLayoutTogether(t *testing.T)
 		t.Fatalf("commit status=%d body=%s", w.Code, w.Body)
 	}
 	var response struct {
-		CV       map[string]any `json:"cv"`
+		CV struct {
+			ProfileSnapshot map[string]any `json:"profileSnapshot"`
+			Layout          map[string]any `json:"layout"`
+			RevisionNumber  int            `json:"revisionNumber"`
+		} `json:"cv"`
 		Revision struct {
 			ID              string         `json:"id"`
 			Number          int            `json:"number"`
@@ -149,7 +324,7 @@ func TestCVCommitCreatesRevisionAndUpdatesContentAndLayoutTogether(t *testing.T)
 	if response.Revision.ID == "" || response.Revision.Number != 1 || response.Revision.Source != "user" || response.Revision.Message != "Save draft" {
 		t.Fatalf("revision=%+v", response.Revision)
 	}
-	if response.CV["layout"] == nil || response.Revision.ProfileSnapshot["title"] != "Committed" || response.Revision.Layout["version"] != float64(1) {
+	if response.CV.Layout == nil || response.CV.RevisionNumber != response.Revision.Number || response.Revision.ProfileSnapshot["title"] != "Committed" || response.Revision.Layout["version"] != float64(1) || !reflect.DeepEqual(response.CV.ProfileSnapshot, response.Revision.ProfileSnapshot) || !reflect.DeepEqual(response.CV.Layout, response.Revision.Layout) {
 		t.Fatalf("response does not contain committed CV and layout: %s", w.Body)
 	}
 	var currentProfile, currentCV, currentLayout []byte
@@ -159,7 +334,7 @@ func TestCVCommitCreatesRevisionAndUpdatesContentAndLayoutTogether(t *testing.T)
 	if err := db.QueryRow(`SELECT profile_snapshot, layout FROM cv_documents WHERE id=$1`, f.cvID).Scan(&currentCV, &currentLayout); err != nil {
 		t.Fatal(err)
 	}
-	if !jsonEqual(currentProfile, normalizedUpdatedCV) || !jsonEqual(currentCV, normalizedUpdatedCV) || !jsonEqual(currentLayout, updatedLayout) {
+	if !jsonEqual(currentProfile, f.profile) || !jsonEqual(currentCV, normalizedUpdatedCV) || !jsonEqual(currentLayout, normalizedUpdatedLayout) {
 		t.Fatalf("current state was not updated together: profile=%s snapshot=%s layout=%s", currentProfile, currentCV, currentLayout)
 	}
 	w = cvRevisionRequest(t, handler, http.MethodGet, "/api/cv/"+f.cvID+"/revisions", f.token, nil)
@@ -178,6 +353,98 @@ func TestCVCommitCreatesRevisionAndUpdatesContentAndLayoutTogether(t *testing.T)
 	}
 	if len(list.Revisions) != 1 || list.Revisions[0].ID != response.Revision.ID || list.Revisions[0].Number != 1 || list.Revisions[0].Source != "user" {
 		t.Fatalf("revision summaries=%s", w.Body)
+	}
+}
+
+func TestCVRestoreRejectsStaleBaseWithoutChangingHistory(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	handler := NewServerWithDB(db, "").Routes()
+	committed := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(validRevisionCV("First", "First User"), f.layout, "user", "first"))
+	if committed.Code != http.StatusOK {
+		t.Fatalf("commit status=%d body=%s", committed.Code, committed.Body)
+	}
+	var response struct {
+		Revision struct {
+			ID string `json:"id"`
+		} `json:"revision"`
+	}
+	if err := json.Unmarshal(committed.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	restored := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/revisions/"+response.Revision.ID+"/restore", f.token, map[string]any{"baseRevision": 0})
+	if restored.Code != http.StatusConflict || !bytes.Contains(restored.Body.Bytes(), []byte(`CV_REVISION_CONFLICT`)) {
+		t.Fatalf("stale restore status=%d body=%s", restored.Code, restored.Body)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cv_revisions WHERE cv_id=$1`, f.cvID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("stale restore changed history count=%d err=%v", count, err)
+	}
+}
+
+func TestCVRestoreNormalizesLegacyRevisionSnapshotAndLayout(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	handler := NewServerWithDB(db, "").Routes()
+	committed := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(validRevisionCV("Legacy", "Legacy User"), f.layout, "user", "legacy"))
+	if committed.Code != http.StatusOK {
+		t.Fatalf("commit status=%d body=%s", committed.Code, committed.Body)
+	}
+	var committedResponse struct {
+		Revision struct {
+			ID string `json:"id"`
+		} `json:"revision"`
+	}
+	if err := json.Unmarshal(committed.Body.Bytes(), &committedResponse); err != nil {
+		t.Fatal(err)
+	}
+	legacyLayout := legacyRevisionLayoutWithoutActivities()
+	if _, err := db.Exec(`UPDATE cv_revisions SET layout=$2::jsonb,profile_snapshot=jsonb_set(profile_snapshot,'{layout}',$2::jsonb) WHERE id=$1`, committedResponse.Revision.ID, string(legacyLayout)); err != nil {
+		t.Fatal(err)
+	}
+	preview := cvRevisionRequest(t, handler, http.MethodGet, "/api/cv/"+f.cvID+"/revisions/"+committedResponse.Revision.ID, f.token, nil)
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body)
+	}
+	var previewResponse struct {
+		Revision struct {
+			Layout struct {
+				Nodes []any `json:"nodes"`
+			} `json:"layout"`
+			ProfileSnapshot struct {
+				Layout struct {
+					Nodes []any `json:"nodes"`
+				} `json:"layout"`
+			} `json:"profileSnapshot"`
+		} `json:"revision"`
+	}
+	if err := json.Unmarshal(preview.Body.Bytes(), &previewResponse); err != nil {
+		t.Fatal(err)
+	}
+	if len(previewResponse.Revision.Layout.Nodes) != len(canonicalCVNodeTypes) || len(previewResponse.Revision.ProfileSnapshot.Layout.Nodes) != len(canonicalCVNodeTypes) {
+		t.Fatalf("legacy preview was not canonicalized: %s", preview.Body)
+	}
+	restored := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/revisions/"+committedResponse.Revision.ID+"/restore", f.token, map[string]any{"baseRevision": 1})
+	if restored.Code != http.StatusOK {
+		t.Fatalf("restore status=%d body=%s", restored.Code, restored.Body)
+	}
+	var response struct {
+		CV struct {
+			Layout struct {
+				Nodes []any `json:"nodes"`
+			} `json:"layout"`
+			ProfileSnapshot struct {
+				Layout struct {
+					Nodes []any `json:"nodes"`
+				} `json:"layout"`
+			} `json:"profileSnapshot"`
+		} `json:"cv"`
+	}
+	if err := json.Unmarshal(restored.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.CV.Layout.Nodes) != len(canonicalCVNodeTypes) || len(response.CV.ProfileSnapshot.Layout.Nodes) != len(canonicalCVNodeTypes) {
+		t.Fatalf("legacy restore was not canonicalized: %s", restored.Body)
 	}
 }
 
@@ -270,11 +537,11 @@ func TestCVCommitNormalizesPublicCVDefaultsIntoRevisionSnapshot(t *testing.T) {
 	}
 }
 
-func TestCVMetadataPatchRejectsInvalidLayoutWithoutCorruptingCurrentCV(t *testing.T) {
+func TestCVMetadataPatchRejectsLayoutWithoutCorruptingCurrentCV(t *testing.T) {
 	db := cvRevisionDB(t)
 	f := createCVRevisionFixture(t, db)
 	w := cvMetadataPatchRequest(t, NewServerWithDB(db, "").Routes(), "/api/cv/"+f.cvID, f.token, `{"layout":{"version":1,"nodes":[{"id":"header","type":"header"}]}}`)
-	if w.Code != http.StatusBadRequest {
+	if w.Code != http.StatusConflict {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body)
 	}
 	var stored []byte
@@ -286,20 +553,19 @@ func TestCVMetadataPatchRejectsInvalidLayoutWithoutCorruptingCurrentCV(t *testin
 	}
 }
 
-func TestCVMetadataPatchNormalizesLegacyEmptyLayoutBeforeWriting(t *testing.T) {
+func TestCVMetadataPatchCannotInitializeOrRewriteLayout(t *testing.T) {
 	db := cvRevisionDB(t)
 	f := createCVRevisionFixture(t, db)
 	w := cvMetadataPatchRequest(t, NewServerWithDB(db, "").Routes(), "/api/cv/"+f.cvID, f.token, `{"layout":{}}`)
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusConflict {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body)
 	}
 	var stored []byte
 	if err := db.QueryRow(`SELECT layout FROM cv_documents WHERE id=$1`, f.cvID).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
-	normalized, err := normalizeCVLayout(json.RawMessage(`{}`))
-	if err != nil || !jsonEqual(stored, normalized) {
-		t.Fatalf("legacy empty layout was not normalized before write: %s", stored)
+	if !jsonEqual(stored, f.layout) {
+		t.Fatalf("metadata patch changed stored layout: %s", stored)
 	}
 }
 
@@ -343,13 +609,54 @@ func TestCVGetNormalizesLegacyEmptyLayout(t *testing.T) {
 				Version int   `json:"version"`
 				Nodes   []any `json:"nodes"`
 			} `json:"layout"`
+			ProfileSnapshot struct {
+				Layout struct {
+					Version int   `json:"version"`
+					Nodes   []any `json:"nodes"`
+				} `json:"layout"`
+			} `json:"profileSnapshot"`
 		} `json:"cv"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if response.CV.Layout.Version != 1 || len(response.CV.Layout.Nodes) != 9 {
+	if response.CV.Layout.Version != 1 || len(response.CV.Layout.Nodes) != len(canonicalCVNodeTypes) || response.CV.ProfileSnapshot.Layout.Version != 1 || len(response.CV.ProfileSnapshot.Layout.Nodes) != len(canonicalCVNodeTypes) {
 		t.Fatalf("legacy layout was not normalized: %s", w.Body)
+	}
+}
+
+func TestCVGetDoesNotHideLegacyLayoutWhenActiveSectionsAreAbsent(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	var profile map[string]any
+	if err := json.Unmarshal(f.profile, &profile); err != nil {
+		t.Fatal(err)
+	}
+	delete(profile, "activeSections")
+	raw, _ := json.Marshal(profile)
+	if _, err := db.Exec(`UPDATE cv_documents SET profile_snapshot=$2::jsonb,layout='{}'::jsonb WHERE id=$1`, f.cvID, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	w := cvRevisionRequest(t, NewServerWithDB(db, "").Routes(), http.MethodGet, "/api/cv/"+f.cvID, f.token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body)
+	}
+	var response struct {
+		CV struct {
+			Layout struct {
+				Nodes []struct {
+					Visible bool `json:"visible"`
+				} `json:"nodes"`
+			} `json:"layout"`
+		} `json:"cv"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	for index, node := range response.CV.Layout.Nodes {
+		if !node.Visible {
+			t.Fatalf("node %d was hidden by an absent compatibility flag: %s", index, w.Body)
+		}
 	}
 }
 
@@ -358,13 +665,13 @@ func TestCVRevisionPreviewAndRestorePreserveHistory(t *testing.T) {
 	f := createCVRevisionFixture(t, db)
 	handler := NewServerWithDB(db, "").Routes()
 	firstCV := validRevisionCV("First", "First User")
-	firstLayout := json.RawMessage(`{"version":1,"nodes":[{"id":"header","type":"header","visible":true}]}`)
-	normalizedFirstCV, err := normalizeCommittedCV(firstCV, firstLayout)
+	firstLayout := orderedRevisionLayout("header")
+	normalizedFirstCV, normalizedFirstLayout, err := normalizeCommittedCVPair(firstCV, firstLayout)
 	if err != nil {
 		t.Fatal(err)
 	}
 	secondCV := validRevisionCV("Second", "Second User")
-	secondLayout := json.RawMessage(`{"version":1,"nodes":[{"id":"summary","type":"summary","visible":true}]}`)
+	secondLayout := orderedRevisionLayout("summary")
 	first := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(firstCV, firstLayout, "user", "first"))
 	if first.Code != http.StatusOK {
 		t.Fatalf("first commit status=%d body=%s", first.Code, first.Body)
@@ -377,7 +684,7 @@ func TestCVRevisionPreviewAndRestorePreserveHistory(t *testing.T) {
 	if err := json.Unmarshal(first.Body.Bytes(), &firstResponse); err != nil {
 		t.Fatal(err)
 	}
-	second := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(secondCV, secondLayout, "ai", "second"))
+	second := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBodyAt(secondCV, secondLayout, "ai", "second", 1))
 	if second.Code != http.StatusOK {
 		t.Fatalf("second commit status=%d body=%s", second.Code, second.Body)
 	}
@@ -393,28 +700,35 @@ func TestCVRevisionPreviewAndRestorePreserveHistory(t *testing.T) {
 	if preview.Code != http.StatusOK || !bytes.Contains(preview.Body.Bytes(), []byte(`"First"`)) || !bytes.Contains(preview.Body.Bytes(), []byte(`"Second"`)) {
 		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body)
 	}
-	restored := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/revisions/"+firstResponse.Revision.ID+"/restore", f.token, nil)
+	restored := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/revisions/"+firstResponse.Revision.ID+"/restore", f.token, map[string]any{"baseRevision": 2})
 	if restored.Code != http.StatusOK {
 		t.Fatalf("restore status=%d body=%s", restored.Code, restored.Body)
 	}
 	var restoredResponse struct {
+		CV struct {
+			ProfileSnapshot map[string]any `json:"profileSnapshot"`
+			Layout          map[string]any `json:"layout"`
+			RevisionNumber  int            `json:"revisionNumber"`
+		} `json:"cv"`
 		Revision struct {
-			Number           int    `json:"number"`
-			Source           string `json:"source"`
-			ParentRevisionID string `json:"parentRevisionId"`
+			Number           int            `json:"number"`
+			Source           string         `json:"source"`
+			ParentRevisionID string         `json:"parentRevisionId"`
+			ProfileSnapshot  map[string]any `json:"profileSnapshot"`
+			Layout           map[string]any `json:"layout"`
 		} `json:"revision"`
 	}
 	if err := json.Unmarshal(restored.Body.Bytes(), &restoredResponse); err != nil {
 		t.Fatal(err)
 	}
-	if restoredResponse.Revision.Number != 3 || restoredResponse.Revision.Source != "restore" || restoredResponse.Revision.ParentRevisionID != firstResponse.Revision.ID {
+	if restoredResponse.Revision.Number != 3 || restoredResponse.CV.RevisionNumber != 3 || restoredResponse.Revision.Source != "restore" || restoredResponse.Revision.ParentRevisionID != firstResponse.Revision.ID || !reflect.DeepEqual(restoredResponse.CV.ProfileSnapshot, restoredResponse.Revision.ProfileSnapshot) || !reflect.DeepEqual(restoredResponse.CV.Layout, restoredResponse.Revision.Layout) {
 		t.Fatalf("restore revision=%+v", restoredResponse.Revision)
 	}
 	var currentCV, currentLayout []byte
 	if err := db.QueryRow(`SELECT profile_snapshot, layout FROM cv_documents WHERE id=$1`, f.cvID).Scan(&currentCV, &currentLayout); err != nil {
 		t.Fatal(err)
 	}
-	if !jsonEqual(currentCV, normalizedFirstCV) || !jsonEqual(currentLayout, firstLayout) {
+	if !jsonEqual(currentCV, normalizedFirstCV) || !jsonEqual(currentLayout, normalizedFirstLayout) {
 		t.Fatalf("restore current profile=%s layout=%s", currentCV, currentLayout)
 	}
 	var count int
@@ -440,7 +754,7 @@ func TestCVCommitRollsBackCurrentStateAndHistoryOnLayoutWriteFailure(t *testing.
 		_, _ = db.Exec(`DROP FUNCTION IF EXISTS test_fail_revision_layout_write()`)
 	})
 	updatedCV := validRevisionCV("Broken", "Broken User")
-	updatedLayout := json.RawMessage(`{"version":1,"nodes":[{"id":"footer","type":"footer","visible":true}]}`)
+	updatedLayout := orderedRevisionLayout("footer")
 	w := cvRevisionRequest(t, NewServerWithDB(db, "").Routes(), http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(updatedCV, updatedLayout, "user", "must roll back"))
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body)

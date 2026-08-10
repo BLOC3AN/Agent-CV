@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { useCVStore } from '../src/lib/cv-store.js'
 import * as api from '../src/lib/api.js'
 import type { CV, CVLayout } from '../src/types.js'
+import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 
 const cv = {
   id: 'cv-1',
@@ -14,10 +15,14 @@ const cv = {
   activeSections: { intro: true, experience: true, projects: true, education: true, skills: true, activities: true, certifications: true, languages: true },
 } as CV
 
-const layout: CVLayout = { version: 1, nodes: [{ id: 'header', type: 'header', visible: true }] }
+const layout = structuredClone(DEFAULT_CV_LAYOUT) as CVLayout
 
-function envelope(profileSnapshot = cv, savedLayout = layout) {
-  return { id: 'cv-1', profileId: 'profile-1', layout: savedLayout, profileSnapshot } as never
+function envelope(profileSnapshot = cv, savedLayout = layout, revisionNumber = 0) {
+  return { id: 'cv-1', profileId: 'profile-1', layout: savedLayout, profileSnapshot, revisionNumber } as never
+}
+
+function commitResult(profileSnapshot: CV, revisionNumber: number, savedLayout = layout) {
+  return { cv: envelope(profileSnapshot, savedLayout, revisionNumber), revision: { number: revisionNumber } } as never
 }
 
 function deferred<T>() {
@@ -52,7 +57,7 @@ describe('useCVStore', () => {
   it('commits the draft once and makes the committed copy current', async () => {
     vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
     const updated = { ...cv, title: 'Đã lưu' }
-    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({ cv: envelope(updated) } as never)
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(updated, 1))
     const { result } = renderHook(() => useCVStore('cv-1'))
     await waitFor(() => expect(result.current.draft?.cv).toEqual(cv))
     act(() => result.current.updateDraft({ cv: updated, layout }))
@@ -60,7 +65,7 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
 
     expect(commit).toHaveBeenCalledTimes(1)
-    expect(commit).toHaveBeenCalledWith('cv-1', updated, layout, 'user', undefined)
+    expect(commit).toHaveBeenCalledWith('cv-1', updated, layout, 'user', undefined, 0)
     expect(result.current.committed).toEqual({ cv: updated, layout })
     expect(result.current.draft).toEqual({ cv: updated, layout })
     expect(result.current.dirty).toBe(false)
@@ -110,7 +115,7 @@ describe('useCVStore', () => {
     expect(first).toBe(second)
     expect(commit).toHaveBeenCalledTimes(1)
 
-    pending.resolve({ cv: envelope({ ...cv, title: 'Một lần' }) })
+    pending.resolve(commitResult({ ...cv, title: 'Một lần' }, 1))
     await act(async () => { await first })
   })
 
@@ -127,7 +132,7 @@ describe('useCVStore', () => {
       save = result.current.saveDraft()
       result.current.updateDraft({ cv: { ...cv, title: 'Bản mới hơn' }, layout })
     })
-    pending.resolve({ cv: envelope({ ...cv, title: 'Bản đầu' }) })
+    pending.resolve(commitResult({ ...cv, title: 'Bản đầu' }, 1))
     await act(async () => { await save })
 
     expect(result.current.committed?.cv.title).toBe('Bản đầu')
@@ -151,8 +156,68 @@ describe('useCVStore', () => {
 
     expect(result.current.saving).toBe(true)
     expect(result.current.draft?.cv.title).toBe('Không được bỏ')
-    pending.resolve({ cv: envelope({ ...cv, title: 'Không được bỏ' }) })
+    pending.resolve(commitResult({ ...cv, title: 'Không được bỏ' }, 1))
     await act(async () => { await save })
     expect(result.current.dirty).toBe(false)
+  })
+
+  it('keeps a stale-conflict draft dirty and does not advance its base revision', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(cv, layout, 3))
+    const commit = vi.spyOn(api, 'commitCV').mockRejectedValue(new api.ApiError(409, 'CV đã có phiên bản mới hơn'))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Stale draft' }, layout }))
+
+    await act(async () => { await expect(result.current.saveDraft()).rejects.toThrow(/phiên bản mới hơn/i) })
+
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), layout, 'user', undefined, 3)
+    expect(result.current.dirty).toBe(true)
+    expect(result.current.baseRevision).toBe(3)
+  })
+
+  it('refuses restore while dirty before issuing a network request', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(cv, layout, 2))
+    const restore = vi.spyOn(api, 'restoreCVRevision')
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Unsaved' }, layout }))
+
+    await act(async () => { await expect(result.current.restoreRevision('revision-1')).rejects.toThrow(/chưa lưu/i) })
+    expect(restore).not.toHaveBeenCalled()
+    expect(result.current.draft?.cv.title).toBe('Unsaved')
+  })
+
+  it('keeps AI provenance through mixed manual edits and versions it across an in-flight save', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const first = deferred<api.CVCommitResult>()
+    const commit = vi.spyOn(api, 'commitCV').mockReturnValueOnce(first.promise).mockResolvedValueOnce(commitResult({ ...cv, title: 'AI B plus manual' }, 2))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: 'AI A' }, layout }, 'AI A'))
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'AI A plus manual' }, layout }))
+
+    let saving!: Promise<void>
+    act(() => { saving = result.current.saveDraft() })
+    expect(commit).toHaveBeenLastCalledWith('cv-1', expect.objectContaining({ title: 'AI A plus manual' }), layout, 'ai', 'AI A', 0)
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: 'AI B plus manual' }, layout }, 'AI B'))
+    await act(async () => { first.resolve(commitResult({ ...cv, title: 'AI A plus manual' }, 1)); await saving })
+
+    expect(result.current.pendingAIProvenance).toEqual(['AI B'])
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenLastCalledWith('cv-1', expect.objectContaining({ title: 'AI B plus manual' }), layout, 'ai', 'AI B', 1)
+  })
+
+  it('does not attribute a later manual save to an AI proposal that changed nothing', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...cv, title: 'Manual change' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+
+    act(() => result.current.applyAIDraft({ cv, layout }, 'No-op AI'))
+    expect(result.current.pendingAIProvenance).toEqual([])
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Manual change' }, layout }))
+    await act(async () => result.current.saveDraft())
+
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Manual change' }), layout, 'user', undefined, 0)
   })
 })

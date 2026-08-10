@@ -25,7 +25,7 @@ function initialValues(draft: CV, node: LayoutNode, itemId: string | undefined, 
 }
 
 const nodeLabels: Record<LayoutNode['type'], string> = {
-  header: 'Thông tin cá nhân', summary: 'Giới thiệu bản thân', experience: 'Kinh nghiệm làm việc', projects: 'Dự án nổi bật', education: 'Học vấn & Bằng cấp', skills: 'Kỹ năng & Công nghệ', certifications: 'Chứng chỉ', languages: 'Ngoại ngữ', footer: 'Footer',
+  header: 'Thông tin cá nhân', summary: 'Giới thiệu bản thân', experience: 'Kinh nghiệm làm việc', projects: 'Dự án nổi bật', education: 'Học vấn & Bằng cấp', skills: 'Kỹ năng & Công nghệ', activities: 'Hoạt động & Ngoại khóa', certifications: 'Chứng chỉ', languages: 'Ngoại ngữ', footer: 'Footer',
 }
 
 export function InlineCVEditor({ node, item, fieldDefinitions, draft, onDraftChange, onClose }: InlineCVEditorProps) {

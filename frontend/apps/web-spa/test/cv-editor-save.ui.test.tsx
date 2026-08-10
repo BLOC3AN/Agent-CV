@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { BuilderRoute } from '../src/routes/BuilderRoute'
 import * as api from '../src/lib/api'
 import type { CV, CVLayout } from '../src/types'
+import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 
 const cv = {
   schemaVersion: 2, id: 'cv-1', language: 'vi',
@@ -14,8 +15,8 @@ const cv = {
   activeSections: { intro: true, experience: true, projects: true, education: true, skills: true, activities: true, certifications: true, languages: true },
   _meta: { verified: {}, source: 'manual', canonical: {} },
 } as CV
-const layout: CVLayout = { version: 1, nodes: [{ id: 'header', type: 'header', visible: true }] }
-const envelope = (profileSnapshot = cv) => ({ id: 'cv-1', profileId: 'profile-1', layout, profileSnapshot } as never)
+const layout = structuredClone(DEFAULT_CV_LAYOUT) as CVLayout
+const envelope = (profileSnapshot = cv, revisionNumber = 0) => ({ id: 'cv-1', profileId: 'profile-1', layout, profileSnapshot, revisionNumber } as never)
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -136,7 +137,7 @@ describe('CV editor explicit save workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
 
-    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', updated, layout, 'ai', 'Đề xuất AI'))
+    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ intro: expect.objectContaining({ fullName: 'AI draft' }) }) }), layout, 'ai', 'Đề xuất AI', 0))
   })
 
   it('keeps a newer manual edit when settlement resolves after that edit', async () => {
@@ -177,7 +178,7 @@ describe('CV editor explicit save workflow', () => {
     await waitFor(() => expect(screen.queryByText('AI draft')).not.toBeInTheDocument())
     await editName()
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
-    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ intro: expect.objectContaining({ fullName: 'B' }) }) }), layout, 'user', undefined))
+    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ intro: expect.objectContaining({ fullName: 'B' }) }) }), layout, 'user', undefined, 0))
   })
 
   it('combines provenance for multiple accepted AI changes in one explicit save', async () => {
@@ -198,10 +199,10 @@ describe('CV editor explicit save workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
     await waitFor(() => expect(screen.getAllByText('AI B').length).toBeGreaterThan(0))
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
-    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), layout, 'ai', 'AI A\nAI B'))
+    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), layout, 'ai', 'AI A\nAI B', 0))
   })
 
-  it('saves the current draft before the actual Download button opens the shared SSR print route', async () => {
+  it('requires an explicit Save, Discard, or Cancel decision before downloading a dirty draft', async () => {
     const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({
       cv: envelope({ ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'B' } } }),
     } as never)
@@ -209,9 +210,45 @@ describe('CV editor explicit save workflow', () => {
     renderBuilder()
     await editName()
 
-    fireEvent.click(screen.getByRole('button', { name: /tải pdf/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /tải pdf/i }))
 
+    const dialog = screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })
+    expect(commit).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: /lưu và tải/i }))
     await waitFor(() => expect(commit).toHaveBeenCalledTimes(1))
     expect(assign).toHaveBeenCalledWith('/print/cv-1?variant=presentation')
+  })
+
+  it('can cancel download without changing the draft or discard it without committing', async () => {
+    const commit = vi.spyOn(api, 'commitCV')
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined)
+    renderBuilder()
+    await editName()
+
+    fireEvent.click(screen.getByRole('button', { name: /tải pdf/i }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })).getByRole('button', { name: 'Hủy' }))
+    expect(screen.getByDisplayValue('B')).toBeInTheDocument()
+    expect(assign).not.toHaveBeenCalled()
+
+    fireEvent.click(await screen.findByRole('button', { name: /tải pdf/i }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })).getByRole('button', { name: /bỏ thay đổi và tải/i }))
+    expect(commit).not.toHaveBeenCalled()
+    expect(assign).toHaveBeenCalledWith('/print/cv-1?variant=presentation')
+    await waitFor(() => expect(screen.getByDisplayValue('A')).toBeInTheDocument())
+  })
+
+  it('keeps AI provenance when a manual edit is mixed into the same draft', async () => {
+    vi.spyOn(api, 'sendChat').mockResolvedValue({ kind: 'patch', proposalId: 'proposal-mixed', summary: 'AI mixed', ops: [{ op: 'replace', path: '/sections/intro/title', value: 'AI title', rationale: 'A', grounding: { type: 'profile', ref: 'cv-1' } }], rejected: [] } as never)
+    vi.spyOn(api, 'settleChatProposal').mockResolvedValue({ applied: 1, status: 'accepted', accepted: [0], rejected: [], selectedOps: [{ op: 'replace', path: '/sections/intro/title', value: 'AI title', rationale: 'A', grounding: { type: 'profile', ref: 'cv-1' } }] })
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({ cv: envelope(cv, 1), revision: { number: 1 } } as never)
+    renderBuilder()
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('AI mixed')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+    await waitFor(() => expect(screen.getByText('AI title')).toBeInTheDocument())
+    await editName()
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), layout, 'ai', 'AI mixed', 0))
   })
 })

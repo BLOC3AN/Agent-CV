@@ -247,11 +247,18 @@ func TestValidateChatProposalUsesV2SkillShape(t *testing.T) {
 
 func TestValidateChatProposalDocumentsValidatesProfileAndLayoutSeparately(t *testing.T) {
 	profile := validRevisionCV("Draft", "User")
-	layout := json.RawMessage(`{"version":1,"nodes":[{"id":"header","type":"header","visible":true},{"id":"summary","type":"summary","visible":true}]}`)
+	layout := orderedRevisionLayout()
+	var layoutValue map[string]any
+	if err := json.Unmarshal(layout, &layoutValue); err != nil {
+		t.Fatal(err)
+	}
+	nodes := layoutValue["nodes"].([]any)
+	nodes[0], nodes[1] = nodes[1], nodes[0]
+	reorder, _ := json.Marshal(map[string]any{"op": "replace", "path": "/layout/nodes", "value": nodes, "rationale": "Reorder sections", "grounding": map[string]any{"type": "user_message", "ref": "request"}})
 	valid := []json.RawMessage{
 		json.RawMessage(`{"op":"replace","path":"/sections/intro/summary","value":"Updated","rationale":"Clarify summary","grounding":{"type":"user_message","ref":"request"}}`),
 		json.RawMessage(`{"op":"replace","path":"/layout/nodes/0/visible","value":false,"rationale":"Hide header","grounding":{"type":"user_message","ref":"request"}}`),
-		json.RawMessage(`{"op":"replace","path":"/layout/nodes","value":[{"id":"summary","type":"summary","visible":true},{"id":"header","type":"header","visible":false}],"rationale":"Reorder sections","grounding":{"type":"user_message","ref":"request"}}`),
+		reorder,
 	}
 	if err := validateChatProposalDocuments(profile, layout, valid); err != nil {
 		t.Fatal(err)

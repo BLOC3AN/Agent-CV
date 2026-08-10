@@ -75,7 +75,7 @@ describe('ChatPanel — giao diện trợ lý AI', () => {
     await screen.findAllByText('Đề xuất AI')
     fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
 
-    await waitFor(() => expect(onApplyAIProposal).toHaveBeenCalledWith(expect.any(Array)))
+    await waitFor(() => expect(onApplyAIProposal).toHaveBeenCalledWith(expect.any(Array), 'Đề xuất AI'))
     expect(screen.getByText(/đã đưa 1 thay đổi vào bản nháp.*lưu/i)).toBeInTheDocument()
   })
 
@@ -109,7 +109,7 @@ describe('ChatPanel — giao diện trợ lý AI', () => {
     await screen.findAllByText('Đề xuất trên bản cũ')
     fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/không tồn tại/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/không được phép/i)
     expect(settleChatProposal).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Áp dụng vào CV' })).toBeInTheDocument()
   })

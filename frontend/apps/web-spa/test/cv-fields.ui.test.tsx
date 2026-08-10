@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { CVEditorView } from '../src/components/CVEditorView'
 import { initialCVs } from '../src/mockData'
+import { getCVFieldDraftValue, updateCVFieldDraft } from '../src/lib/cv-store'
 import type { CV, CVLayout } from '../src/types'
 
 const layout: CVLayout = {
@@ -44,6 +45,21 @@ function openProjectItem() {
 }
 
 describe('catalog-driven inline CV editing', () => {
+  it('round-trips canonical fields without aliasing the headline or marker-like user bullets', () => {
+    const source = structuredClone(initialCVs[0]!) as CV
+    source.sections.experience[0]!.highlights = ['Team size: this is a genuine achievement']
+    const header = { id: 'header', type: 'header', visible: true } as const
+    const experience = { id: 'experience', type: 'experience', visible: true } as const
+
+    const withAvailability = updateCVFieldDraft(source, header, undefined, 'availability', 'Two weeks')
+    const updated = updateCVFieldDraft(withAvailability, experience, source.sections.experience[0]!.id, 'teamSize', '8 engineers')
+
+    expect(withAvailability.sections.intro.title).toBe(source.sections.intro.title)
+    expect(getCVFieldDraftValue(updated, header, undefined, 'availability')).toBe('Two weeks')
+    expect(getCVFieldDraftValue(updated, experience, source.sections.experience[0]!.id, 'teamSize')).toBe('8 engineers')
+    expect(updated.sections.experience[0]!.highlights).toEqual(['Team size: this is a genuine achievement'])
+  })
+
   it('opens a tree node from the keyboard and Escape cancels without dirtying the draft', () => {
     render(<DraftEditor />)
 

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import { CVBlockRenderer } from '../src/components/CVBlockRenderer'
-import { materializeItemOrder, moveItem, moveNode, resetDefaultLayout, setNodeVisible } from '../src/lib/layout-draft'
+import { materializeItemOrder, moveItem, moveNode, normalizeLayout, resetDefaultLayout, setNodeVisible, synchronizeCVActiveSections } from '../src/lib/layout-draft'
 import { initialCVs } from '../src/mockData'
 import type { CVLayout } from '../src/types'
+import { CV_FIELD_CATALOG } from '@hr/schema'
 
 const cv = initialCVs[0]!
 
@@ -16,6 +17,7 @@ const layout: CVLayout = {
     { id: 'projects', type: 'projects', visible: true },
     { id: 'education', type: 'education', visible: true },
     { id: 'skills', type: 'skills', visible: true },
+    { id: 'activities', type: 'activities', visible: true },
     { id: 'certifications', type: 'certifications', visible: true },
     { id: 'languages', type: 'languages', visible: true },
     { id: 'footer', type: 'footer', visible: true },
@@ -27,10 +29,10 @@ describe('layout draft operations', () => {
     const moved = moveNode(layout, 'skills', 'experience')
 
     expect(moved.nodes.map((node) => node.id)).toEqual([
-      'header', 'summary', 'skills', 'experience', 'projects', 'education', 'certifications', 'languages', 'footer',
+      'header', 'summary', 'skills', 'experience', 'projects', 'education', 'activities', 'certifications', 'languages', 'footer',
     ])
     expect(layout.nodes.map((node) => node.id)).toEqual([
-      'header', 'summary', 'experience', 'projects', 'education', 'skills', 'certifications', 'languages', 'footer',
+      'header', 'summary', 'experience', 'projects', 'education', 'skills', 'activities', 'certifications', 'languages', 'footer',
     ])
   })
 
@@ -68,9 +70,21 @@ describe('layout draft operations', () => {
     const reset = resetDefaultLayout(moveNode(layout, 'footer', 'header'))
 
     expect(reset.nodes.map((node) => node.id)).toEqual([
-      'header', 'summary', 'experience', 'projects', 'education', 'skills', 'certifications', 'languages', 'footer',
+      'header', 'summary', 'experience', 'projects', 'education', 'skills', 'activities', 'certifications', 'languages', 'footer',
     ])
     expect(reset.nodes.every((node) => node.visible)).toBe(true)
+  })
+
+  it('normalizes legacy visibility into the canonical layout and lets layout visibility recover it', () => {
+    const legacy = { ...cv, activeSections: { ...cv.activeSections, experience: false } }
+    const normalized = normalizeLayout({ version: 1, nodes: layout.nodes.filter((node) => node.type !== 'activities') }, legacy.activeSections)
+
+    expect(normalized.nodes).toHaveLength(10)
+    expect(normalized.nodes.find((node) => node.type === 'experience')?.visible).toBe(false)
+    expect(normalized.nodes.find((node) => node.type === 'activities')).toMatchObject({ id: 'activities', visible: true })
+
+    const visible = setNodeVisible(normalized, 'experience', true)
+    expect(synchronizeCVActiveSections(legacy, visible).activeSections.experience).toBe(true)
   })
 
   it('leaves unknown or incompatible identifiers unchanged', () => {
@@ -100,5 +114,31 @@ describe('CVBlockRenderer', () => {
       'experience', 'header', 'footer', 'skills',
     ])
     expect(container.querySelector('[data-cv-node="experience"]')?.textContent).toMatch(/bTaskee[\s\S]*IMESPRO/)
+  })
+
+  it.each(['editor', 'preview', 'print'] as const)('renders activities and canonical registered fields in %s', (variant) => {
+    const richCV = structuredClone(cv)
+    richCV.sections.intro.careerObjective = 'Build dependable products'
+    richCV.sections.intro.availability = 'Available in two weeks'
+    Object.assign(richCV.sections.experience[0]!, { teamSize: '8 people', techStack: ['Go', 'React'] })
+    Object.assign(richCV.sections.projects[0]!, { teamSize: '4 people', techStack: ['TypeScript'], contribution: 'Led the launch' })
+    richCV.sections.education[0]!.gpa = '3.9'
+    richCV.sections.education[0]!.highlights = ['Dean list']
+    richCV.sections.activities = [{ id: 'activity-1', organization: 'Open Source Club', role: 'Mentor', startDate: '2024', endDate: '2025', highlights: ['Coached contributors'] }]
+    richCV.sections.certifications[0] = { ...richCV.sections.certifications[0]!, date: '2025', link: 'https://cert.example' }
+    const canonical = normalizeLayout(undefined)
+
+    const { container } = render(<CVBlockRenderer cv={richCV} layout={canonical} variant={variant} />)
+    const content = container.textContent ?? ''
+    for (const expected of [
+      'Build dependable products', 'Available in two weeks', '8 people', 'Go', 'React',
+      '4 people', 'TypeScript', 'Led the launch', '3.9', 'Dean list', 'Open Source Club',
+      'Mentor', 'Coached contributors', '2025', 'https://cert.example',
+    ]) expect(content).toContain(expected)
+    expect(container.querySelector('[data-cv-node="activities"]')).not.toBeNull()
+    for (const field of CV_FIELD_CATALOG) {
+      expect(container.querySelector(`[data-cv-field="${field.key}"]`), `missing registered field ${field.key}`).not.toBeNull()
+    }
+    expect(container.querySelector('[data-cv-field="techStack"]')).toHaveAttribute('data-print-style', 'tags')
   })
 })

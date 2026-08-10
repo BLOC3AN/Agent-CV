@@ -97,6 +97,7 @@ export const initialCVs: CV[] = [
           startDate: '2021',
           endDate: '2025',
           gpa: '3.6/4.0',
+          highlights: [],
         },
       ],
       skills: [

@@ -10,8 +10,7 @@ interface Props {
   cv: CV
   layout?: CVLayout
   draftVersion?: number
-  onApplyAIProposal: (ops: ChatOp[]) => void
-  onProposalApplied?: (summary: string) => void
+  onApplyAIProposal: (ops: ChatOp[], summary: string) => void
   onClose?: () => void
 }
 
@@ -48,7 +47,7 @@ function display(value: unknown): string {
   return JSON.stringify(value)
 }
 
-export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAIProposal, onProposalApplied, onClose }: Props) {
+export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAIProposal, onClose }: Props) {
   const effectiveLayout = layout ?? cv.layout ?? { version: 1 as const, nodes: [] }
   const effectiveDraftVersion = draftVersion ?? 0
   const currentDraftRef = useRef({ cv, layout: effectiveLayout, draftVersion: effectiveDraftVersion })
@@ -116,12 +115,11 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
       }
       if (result.selectedOps.length) {
         try {
-          onApplyAIProposal(result.selectedOps)
+          onApplyAIProposal(result.selectedOps, proposal.summary)
         } catch (err) {
           setProposal({ ...proposal, settledOps: result.selectedOps })
           throw err
         }
-        onProposalApplied?.(proposal.summary)
       }
       setProposal(undefined)
       setMessages((m) => [...m, { role: 'assistant', text: result.selectedOps.length ? `Đã đưa ${result.applied} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.` : 'Đã bỏ qua đề xuất.' }])

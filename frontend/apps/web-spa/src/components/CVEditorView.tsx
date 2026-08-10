@@ -119,13 +119,9 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
   // Toggle active sections in CV
   const toggleSectionActive = (sectionKey: keyof typeof cv.activeSections) => {
-    onUpdateCV({
-      ...cv,
-      activeSections: {
-        ...cv.activeSections,
-        [sectionKey]: !cv.activeSections[sectionKey],
-      },
-    });
+    const nextVisible = !cv.activeSections[sectionKey];
+    const nodeTypes = sectionKey === 'intro' ? ['header', 'summary'] : [sectionKey];
+    updateLayout({ ...layout, nodes: layout.nodes.map((node) => nodeTypes.includes(node.type) ? { ...node, visible: nextVisible } : node) });
   };
 
   // Update Design props
@@ -629,7 +625,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
         </PaginatedA4Document>
       </div>
 
-      {historyOpen && cvId && onRestoreVersion && <VersionHistoryPanel cvId={cvId} returnFocusRef={historyInvokerRef} onClose={() => setHistoryOpen(false)} onRestore={onRestoreVersion} />}
+      {historyOpen && cvId && onRestoreVersion && <VersionHistoryPanel cvId={cvId} dirty={dirty} returnFocusRef={historyInvokerRef} onClose={() => setHistoryOpen(false)} onRestore={onRestoreVersion} />}
 
     </div>
   );

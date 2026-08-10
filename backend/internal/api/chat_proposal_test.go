@@ -129,6 +129,43 @@ func TestChatProposalSettlementRejectsMalformedStoredOperationVisibly(t *testing
 	}
 }
 
+func TestValidateChatProposalDocumentsRejectsUnregisteredAndDestructivePaths(t *testing.T) {
+	profile := validRevisionCV("CV", "Candidate")
+	layout := append(json.RawMessage(nil), defaultCVLayout...)
+	cases := map[string]json.RawMessage{
+		"unknown intro field":      json.RawMessage(`[{"op":"add","path":"/sections/intro/customField","value":"hidden","rationale":"Không được hỗ trợ","grounding":{"type":"user_message","ref":"x"}}]`),
+		"forbidden design padding": json.RawMessage(`[{"op":"add","path":"/design/padding","value":24,"rationale":"Không được hỗ trợ","grounding":{"type":"user_message","ref":"x"}}]`),
+		"legacy visibility flag":   json.RawMessage(`[{"op":"replace","path":"/activeSections/experience","value":false,"rationale":"Dùng layout visibility","grounding":{"type":"user_message","ref":"x"}}]`),
+		"remove registered node":   json.RawMessage(`[{"op":"remove","path":"/layout/nodes/2","rationale":"Không được xóa node","grounding":{"type":"user_message","ref":"x"}}]`),
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			var ops []json.RawMessage
+			if err := json.Unmarshal(raw, &ops); err != nil {
+				t.Fatal(err)
+			}
+			if err := validateChatProposalDocuments(profile, layout, ops); err == nil {
+				t.Fatalf("path unexpectedly accepted: %s", raw)
+			}
+		})
+	}
+}
+
+func TestValidateChatProposalDocumentsAcceptsCanonicalTypedFieldAndHide(t *testing.T) {
+	profile := validRevisionCV("CV", "Candidate")
+	layout := append(json.RawMessage(nil), defaultCVLayout...)
+	var ops []json.RawMessage
+	if err := json.Unmarshal([]byte(`[
+		{"op":"add","path":"/sections/intro/availability","value":"Two weeks","rationale":"Thêm thông tin sẵn sàng","grounding":{"type":"user_message","ref":"x"}},
+		{"op":"replace","path":"/layout/nodes/2/visible","value":false,"rationale":"Ẩn thay vì xóa","grounding":{"type":"user_message","ref":"x"}}
+	]`), &ops); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateChatProposalDocuments(profile, layout, ops); err != nil {
+		t.Fatalf("canonical proposal rejected: %v", err)
+	}
+}
+
 func equalIntSlices(left, right []int) bool {
 	if len(left) != len(right) {
 		return false

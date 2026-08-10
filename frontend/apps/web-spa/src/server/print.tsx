@@ -1,21 +1,20 @@
 import type { RequestHandler } from 'express'
 import type { CSSProperties } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { type CV } from '@hr/schema'
+import { CVLayoutSchema, CVSchema } from '@hr/schema'
 import { CVBlockRenderer } from '../components/CVBlockRenderer'
 import type { CV as WebCV, CVLayout as WebCVLayout } from '../types'
-import { normalizeLayout } from '../lib/layout-draft'
+import type { CVEnvelope } from '../lib/api'
 import { PRINT_CSS } from '../lib/print-css'
 
 interface Envelope {
-  cv: CV & { templateId?: string; theme?: unknown; layout?: unknown; title?: string }
+  cv?: Partial<CVEnvelope>
 }
 
-function PrintDocument({ cv, variant }: { cv: Envelope['cv']; variant: 'presentation' | 'ats' | 'thumbnail' }) {
-  const layout = normalizeLayout(cv.layout as unknown as WebCVLayout | undefined)
+function PrintDocument({ cv, layout, variant }: { cv: WebCV; layout: WebCVLayout; variant: 'presentation' | 'ats' | 'thumbnail' }) {
   return <main className="cv-root" data-variant={variant} style={{ '--cv-accent': cv.design.accentColor } as CSSProperties}>
     <article className="cv-page">
-      <CVBlockRenderer cv={cv as unknown as WebCV} layout={layout as unknown as WebCVLayout} variant="print" />
+      <CVBlockRenderer cv={cv} layout={layout} variant="print" />
     </article>
   </main>
 }
@@ -38,10 +37,21 @@ export function createPrintHandler(backendURL: string): RequestHandler {
       res.status(502).send('Không kết nối được backend'); return
     }
     if (!upstream.ok) { res.status(upstream.status).send(await upstream.text()); return }
-    const body = await upstream.json() as Envelope
-    const cv = body.cv
-    const title = escapeTitle(cv.title ?? 'CV')
-    const html = `<!doctype html><html lang="${cv.language === 'en' ? 'en' : 'vi'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${PRINT_CSS}</style></head><body>${renderToStaticMarkup(<PrintDocument cv={cv} variant={variant} />)}</body></html>`
+    let body: Envelope
+    try {
+      body = await upstream.json() as Envelope
+    } catch {
+      res.status(502).send('Dữ liệu CV không hợp lệ'); return
+    }
+    const cvResult = CVSchema.safeParse(body.cv?.profileSnapshot)
+    const layoutResult = CVLayoutSchema.safeParse(body.cv?.layout)
+    if (!cvResult.success || !layoutResult.success) {
+      res.status(502).send('Dữ liệu CV không hợp lệ'); return
+    }
+    const cv = cvResult.data as unknown as WebCV
+    const layout = layoutResult.data as unknown as WebCVLayout
+    const title = escapeTitle(typeof body.cv?.title === 'string' ? body.cv.title : cv.title)
+    const html = `<!doctype html><html lang="${cv.language === 'en' ? 'en' : 'vi'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${PRINT_CSS}</style></head><body>${renderToStaticMarkup(<PrintDocument cv={cv} layout={layout} variant={variant} />)}</body></html>`
     res.type('html').send(html)
   }
 }

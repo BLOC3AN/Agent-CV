@@ -28,14 +28,34 @@ describe('CV layout contract', () => {
     expect(cv.layout).toEqual(DEFAULT_CV_LAYOUT)
   })
 
-  it('accepts nested item order on supported nodes', () => {
+  it('accepts a complete canonical layout with nested item order on supported nodes', () => {
     expect(CVLayoutSchema).toBeDefined()
     const layout = CVLayoutSchema.parse({
       version: 1,
-      nodes: [{ id: 'experience', type: 'experience', visible: true, itemOrder: ['job-2', 'job-1'] }],
+      nodes: DEFAULT_CV_LAYOUT.nodes.map((node) => node.type === 'experience'
+        ? { ...node, itemOrder: ['job-2', 'job-1'] }
+        : node),
     })
 
-    expect(layout.nodes[0] && 'itemOrder' in layout.nodes[0] ? layout.nodes[0].itemOrder : undefined).toEqual(['job-2', 'job-1'])
+    const experience = layout.nodes.find((node) => node.type === 'experience')
+    expect(experience && 'itemOrder' in experience ? experience.itemOrder : undefined).toEqual(['job-2', 'job-1'])
+  })
+
+  it('contains one canonical node for every supported CV section including activities', () => {
+    expect(DEFAULT_CV_LAYOUT.nodes.map((node) => node.type)).toEqual([
+      'header', 'summary', 'experience', 'projects', 'education', 'skills',
+      'activities', 'certifications', 'languages', 'footer',
+    ])
+    expect(CVLayoutSchema.parse(DEFAULT_CV_LAYOUT)).toEqual(DEFAULT_CV_LAYOUT)
+  })
+
+  it.each([
+    ['missing node', { version: 1, nodes: DEFAULT_CV_LAYOUT.nodes.slice(0, -1) }],
+    ['duplicate node', { version: 1, nodes: [...DEFAULT_CV_LAYOUT.nodes.slice(0, -1), DEFAULT_CV_LAYOUT.nodes[0]] }],
+    ['noncanonical id', { version: 1, nodes: DEFAULT_CV_LAYOUT.nodes.map((node) => node.type === 'header' ? { ...node, id: 'hero' } : node) }],
+    ['duplicate item reference', { version: 1, nodes: DEFAULT_CV_LAYOUT.nodes.map((node) => node.type === 'experience' ? { ...node, itemOrder: ['job-1', 'job-1'] } : node) }],
+  ])('rejects %s so rendering has one stable registered flow', (_name, candidate) => {
+    expect(() => CVLayoutSchema.parse(candidate)).toThrow()
   })
 
   it('rejects unknown node types', () => {

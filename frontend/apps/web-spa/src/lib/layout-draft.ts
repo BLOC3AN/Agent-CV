@@ -1,5 +1,5 @@
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
-import type { CVLayout, LayoutNode } from '../types'
+import type { CV, CVLayout, CVNodeType, LayoutNode } from '../types'
 
 type ItemOrderNode = LayoutNode & { type: 'experience' | 'projects' | 'education' }
 
@@ -70,11 +70,60 @@ export function resetDefaultLayout(_layout: CVLayout): CVLayout {
 }
 
 /** Accept legacy untyped API fixtures without letting malformed state reach a renderer. */
-export function normalizeLayout(layout: CVLayout | undefined): CVLayout {
-  if (!layout || layout.version !== 1 || !Array.isArray(layout.nodes)) return cloneDefaultLayout()
-  const validTypes = new Set(['header', 'summary', 'experience', 'projects', 'education', 'skills', 'certifications', 'languages', 'footer'])
-  if (!layout.nodes.every((node) => node && typeof node.id === 'string' && typeof node.visible === 'boolean' && validTypes.has(node.type))) return cloneDefaultLayout()
-  return layout
+export function normalizeLayout(layout: CVLayout | undefined, activeSections?: CV['activeSections']): CVLayout {
+  const defaults = cloneDefaultLayout()
+  if (!layout || layout.version !== 1 || !Array.isArray(layout.nodes)) {
+    return applyCompatibilityVisibility(defaults, activeSections)
+  }
+  const defaultByType = new Map(defaults.nodes.map((node) => [node.type, node]))
+  const seen = new Set<CVNodeType>()
+  const nodes: LayoutNode[] = []
+  for (const candidate of layout.nodes) {
+    const canonical = defaultByType.get(candidate?.type)
+    if (!canonical || candidate.id !== candidate.type || typeof candidate.visible !== 'boolean' || seen.has(candidate.type)) {
+      return applyCompatibilityVisibility(defaults, activeSections)
+    }
+    if ('itemOrder' in candidate && candidate.itemOrder && new Set(candidate.itemOrder).size !== candidate.itemOrder.length) {
+      return applyCompatibilityVisibility(defaults, activeSections)
+    }
+    seen.add(candidate.type)
+    nodes.push({ ...candidate, ...('itemOrder' in candidate && candidate.itemOrder ? { itemOrder: [...candidate.itemOrder] } : {}) } as LayoutNode)
+  }
+  for (const missing of defaults.nodes.filter((node) => !seen.has(node.type))) {
+    const defaultIndex = defaults.nodes.findIndex((node) => node.type === missing.type)
+    const before = nodes.findIndex((node) => defaults.nodes.findIndex((entry) => entry.type === node.type) > defaultIndex)
+    nodes.splice(before < 0 ? nodes.length : before, 0, { ...missing } as LayoutNode)
+  }
+  return applyCompatibilityVisibility({ version: 1, nodes }, activeSections)
+}
+
+function applyCompatibilityVisibility(layout: CVLayout, activeSections?: CV['activeSections']): CVLayout {
+  if (!activeSections) return layout
+  return {
+    ...layout,
+    nodes: layout.nodes.map((node) => {
+      const key = node.type === 'header' || node.type === 'summary' ? 'intro' : node.type === 'footer' ? undefined : node.type
+      return key && activeSections[key] === false ? { ...node, visible: false } : node
+    }),
+  }
+}
+
+/** Keep compatibility flags readable while layout remains presentation authority. */
+export function synchronizeCVActiveSections(cv: CV, layout: CVLayout): CV {
+  const visible = (type: CVNodeType) => layout.nodes.find((node) => node.type === type)?.visible ?? true
+  return {
+    ...cv,
+    activeSections: {
+      intro: visible('header') || visible('summary'),
+      experience: visible('experience'),
+      projects: visible('projects'),
+      education: visible('education'),
+      skills: visible('skills'),
+      activities: visible('activities'),
+      certifications: visible('certifications'),
+      languages: visible('languages'),
+    },
+  }
 }
 
 /**

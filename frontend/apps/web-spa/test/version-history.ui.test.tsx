@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BuilderRoute } from '../src/routes/BuilderRoute'
 import * as api from '../src/lib/api'
 import type { CV, CVLayout } from '../src/types'
+import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 
 const cv = {
   schemaVersion: 2, id: 'cv-1', language: 'vi', title: 'CV', lastModified: '',
@@ -12,8 +13,8 @@ const cv = {
   activeSections: { intro: true, experience: true, projects: true, education: true, skills: true, activities: true, certifications: true, languages: true },
   _meta: { verified: {}, source: 'manual', canonical: {} },
 } as CV
-const layout: CVLayout = { version: 1, nodes: [{ id: 'header', type: 'header', visible: true }] }
-const envelope = (profileSnapshot = cv) => ({ id: 'cv-1', profileId: 'profile-1', layout, profileSnapshot } as never)
+const layout = structuredClone(DEFAULT_CV_LAYOUT) as CVLayout
+const envelope = (profileSnapshot = cv, revisionNumber = 0) => ({ id: 'cv-1', profileId: 'profile-1', layout, profileSnapshot, revisionNumber } as never)
 const revision = (id: string, number: number, source: api.CVRevisionSource, message?: string) => ({
   id, number, cvId: 'cv-1', source, message, createdAt: '2026-08-10T09:15:00.000Z',
 })
@@ -169,7 +170,7 @@ describe('CV version history', () => {
     expect(confirmation).toHaveTextContent(/tạo một phiên bản mới/i)
     expect(confirmation).toHaveTextContent(/giữ lại lịch sử/i)
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Tạo phiên bản khôi phục' }))
-    expect(restore).toHaveBeenCalledWith('cv-1', 'revision-4')
+    expect(restore).toHaveBeenCalledWith('cv-1', 'revision-4', 0)
     expect(screen.getByText('Current name')).toBeInTheDocument()
 
     await act(async () => restoring.resolve({
@@ -190,6 +191,8 @@ describe('CV version history', () => {
 
     expect(screen.getByDisplayValue('Unsaved name')).toBeInTheDocument()
     expect(screen.getByText('Bản nháp chưa lưu')).toBeInTheDocument()
+    expect(screen.getByText(/lưu hoặc bỏ thay đổi.*trước khi khôi phục/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Khôi phục phiên bản 4' })).toBeDisabled()
   })
 
   it('keeps the current document when the server rejects a restore', async () => {

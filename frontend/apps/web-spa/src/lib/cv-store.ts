@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CV, CVLayout, LayoutNode } from '../types'
 import { ApiError, commitCV, getCV, restoreCVRevision } from './api'
 import { validateCVFieldPlacement } from './cv-fields'
+import { normalizeLayout, synchronizeCVActiveSections } from './layout-draft'
 
 export type CVStoreStatus = 'loading' | 'ready' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -12,45 +13,18 @@ export interface DraftDocument {
 
 export type CVFieldDraftValue = string | string[] | { start: string; end: string }
 
-const highlightMarkers = {
-  teamSize: 'Team size: ',
-  techStack: 'Tech stack: ',
-  contribution: 'Contribution: ',
-} as const
-
 function updateItem<T extends { id: string }>(items: T[], itemId: string | undefined, update: (item: T) => T): T[] | undefined {
   if (!itemId || !items.some((item) => item.id === itemId)) return undefined
   return items.map((item) => item.id === itemId ? update(item) : item)
 }
 
-function markedHighlight(highlights: string[], key: keyof typeof highlightMarkers): string {
-  const marker = highlightMarkers[key]
-  return highlights.find((highlight) => highlight.startsWith(marker))?.slice(marker.length) ?? ''
-}
-
-function replaceMarkedHighlight(highlights: string[], key: keyof typeof highlightMarkers, value: string): string[] {
-  const marker = highlightMarkers[key]
-  const withoutMarker = highlights.filter((highlight) => !highlight.startsWith(marker))
-  return value.trim() ? [...withoutMarker, `${marker}${value.trim()}`] : withoutMarker
-}
-
-function replaceUnmarkedHighlights(highlights: string[], value: string): string[] {
-  const markers = highlights.filter((highlight) => Object.values(highlightMarkers).some((marker) => highlight.startsWith(marker)))
-  const unmarked = value.split('\n').map((line) => line.trim()).filter(Boolean)
-  return [...unmarked, ...markers]
-}
-
-/**
- * Resolve a registered field to the existing CV shape. Marker-backed fields
- * deliberately stay in `highlights`, keeping the strict v2 schema valid while
- * retaining existing bullet content unchanged.
- */
+/** Resolve a registered field from its canonical typed CV property. */
 export function getCVFieldDraftValue(draft: CV, node: LayoutNode, itemId: string | undefined, key: string): CVFieldDraftValue {
   validateCVFieldPlacement(key, node.type)
   const intro = draft.sections.intro
   if (node.type === 'header' || node.type === 'summary') {
-    if (key === 'careerObjective') return intro.summary
-    if (key === 'availability') return intro.title
+    if (key === 'careerObjective') return intro.careerObjective ?? ''
+    if (key === 'availability') return intro.availability ?? ''
     if (key === 'location') return intro.location
   }
   if (node.type === 'experience') {
@@ -59,9 +33,9 @@ export function getCVFieldDraftValue(draft: CV, node: LayoutNode, itemId: string
     if (key === 'role') return item.title
     if (key === 'company') return item.company
     if (key === 'time') return { start: item.startDate, end: item.endDate }
-    if (key === 'highlights') return item.highlights.filter((highlight) => !Object.values(highlightMarkers).some((marker) => highlight.startsWith(marker))).join('\n')
-    if (key === 'teamSize') return markedHighlight(item.highlights, 'teamSize')
-    if (key === 'techStack') return markedHighlight(item.highlights, 'techStack').split(',').map((tag) => tag.trim()).filter(Boolean)
+    if (key === 'highlights') return item.highlights.join('\n')
+    if (key === 'teamSize') return item.teamSize ?? ''
+    if (key === 'techStack') return item.techStack ?? []
   }
   if (node.type === 'projects') {
     const item = draft.sections.projects.find((candidate) => candidate.id === itemId)
@@ -69,10 +43,10 @@ export function getCVFieldDraftValue(draft: CV, node: LayoutNode, itemId: string
     if (key === 'name') return item.name
     if (key === 'role') return item.role
     if (key === 'time') return { start: item.startDate, end: item.endDate }
-    if (key === 'highlights') return item.highlights.filter((highlight) => !Object.values(highlightMarkers).some((marker) => highlight.startsWith(marker))).join('\n')
-    if (key === 'teamSize') return markedHighlight(item.highlights, 'teamSize')
-    if (key === 'techStack') return markedHighlight(item.highlights, 'techStack').split(',').map((tag) => tag.trim()).filter(Boolean)
-    if (key === 'contribution') return markedHighlight(item.highlights, 'contribution')
+    if (key === 'highlights') return item.highlights.join('\n')
+    if (key === 'teamSize') return item.teamSize ?? ''
+    if (key === 'techStack') return item.techStack ?? []
+    if (key === 'contribution') return item.contribution ?? ''
   }
   if (node.type === 'education') {
     const item = draft.sections.education.find((candidate) => candidate.id === itemId)
@@ -91,7 +65,7 @@ export function updateCVFieldDraft(draft: CV, node: LayoutNode, itemId: string |
   validateCVFieldPlacement(key, node.type)
   const text = typeof value === 'string' ? value : ''
   if (node.type === 'header' || node.type === 'summary') {
-    const field = key === 'careerObjective' ? 'summary' : key === 'availability' ? 'title' : key === 'location' ? 'location' : undefined
+    const field = key === 'careerObjective' ? 'careerObjective' : key === 'availability' ? 'availability' : key === 'location' ? 'location' : undefined
     if (!field) return draft
     return { ...draft, sections: { ...draft.sections, intro: { ...draft.sections.intro, [field]: text } } }
   }
@@ -100,9 +74,9 @@ export function updateCVFieldDraft(draft: CV, node: LayoutNode, itemId: string |
       if (key === 'role') return { ...item, title: text }
       if (key === 'company') return { ...item, company: text }
       if (key === 'time' && typeof value !== 'string' && !Array.isArray(value)) return { ...item, startDate: value.start, endDate: value.end }
-      if (key === 'highlights') return { ...item, highlights: replaceUnmarkedHighlights(item.highlights, text) }
-      if (key === 'teamSize') return { ...item, highlights: replaceMarkedHighlight(item.highlights, 'teamSize', text) }
-      if (key === 'techStack') return { ...item, highlights: replaceMarkedHighlight(item.highlights, 'techStack', Array.isArray(value) ? value.join(', ') : '') }
+      if (key === 'highlights') return { ...item, highlights: text.split('\n').map((line) => line.trim()).filter(Boolean) }
+      if (key === 'teamSize') return { ...item, teamSize: text || undefined }
+      if (key === 'techStack') return { ...item, techStack: Array.isArray(value) && value.length ? value : undefined }
       return item
     })
     return experience ? { ...draft, sections: { ...draft.sections, experience } } : draft
@@ -112,10 +86,10 @@ export function updateCVFieldDraft(draft: CV, node: LayoutNode, itemId: string |
       if (key === 'name') return { ...item, name: text }
       if (key === 'role') return { ...item, role: text }
       if (key === 'time' && typeof value !== 'string' && !Array.isArray(value)) return { ...item, startDate: value.start, endDate: value.end }
-      if (key === 'highlights') return { ...item, highlights: replaceUnmarkedHighlights(item.highlights, text) }
-      if (key === 'teamSize') return { ...item, highlights: replaceMarkedHighlight(item.highlights, 'teamSize', text) }
-      if (key === 'techStack') return { ...item, highlights: replaceMarkedHighlight(item.highlights, 'techStack', Array.isArray(value) ? value.join(', ') : '') }
-      if (key === 'contribution') return { ...item, highlights: replaceMarkedHighlight(item.highlights, 'contribution', text) }
+      if (key === 'highlights') return { ...item, highlights: text.split('\n').map((line) => line.trim()).filter(Boolean) }
+      if (key === 'teamSize') return { ...item, teamSize: text || undefined }
+      if (key === 'techStack') return { ...item, techStack: Array.isArray(value) && value.length ? value : undefined }
+      if (key === 'contribution') return { ...item, contribution: text || undefined }
       return item
     })
     return projects ? { ...draft, sections: { ...draft.sections, projects } } : draft
@@ -143,6 +117,11 @@ const emptyDocuments: DocumentState = { committed: null, draft: null }
 
 function cloneDocument(document: DraftDocument): DraftDocument {
   return JSON.parse(JSON.stringify(document)) as DraftDocument
+}
+
+function normalizeDocument(document: DraftDocument, legacyVisibility = false): DraftDocument {
+  const layout = normalizeLayout(document.layout, legacyVisibility ? document.cv.activeSections : undefined)
+  return { layout, cv: synchronizeCVActiveSections(document.cv, layout) }
 }
 
 function documentsEqual(left: DraftDocument | null, right: DraftDocument | null): boolean {
@@ -176,6 +155,10 @@ export function useCVStore(id: string) {
   const [status, setStatus] = useState<CVStoreStatus>('loading')
   const [error, setError] = useState<string | undefined>()
   const [savePending, setSavePending] = useState(false)
+  const [baseRevision, setBaseRevision] = useState(0)
+  const [pendingAIProvenance, setPendingAIProvenance] = useState<Array<{ id: number; summary: string }>>([])
+  const provenanceRef = useRef<Array<{ id: number; summary: string }>>([])
+  const provenanceIDRef = useRef(0)
   const documentVersionRef = useRef(0)
   const pendingSaveRef = useRef<Promise<void> | undefined>(undefined)
 
@@ -192,13 +175,16 @@ export function useCVStore(id: string) {
     setError(undefined)
     try {
       const envelope = await getCV(id)
-      const loaded: DraftDocument = {
+      const loaded = normalizeDocument({
         cv: envelope.profileSnapshot as CV,
         layout: envelope.layout as CVLayout,
-      }
+      }, true)
       const committed = cloneDocument(loaded)
       replaceDocuments({ committed, draft: cloneDocument(committed) })
       setProfileId(envelope.profileId)
+      setBaseRevision(envelope.revisionNumber ?? 0)
+      provenanceRef.current = []
+      setPendingAIProvenance([])
       setStatus('ready')
     } catch (err) {
       setStatus('error')
@@ -214,8 +200,22 @@ export function useCVStore(id: string) {
     const current = documentsRef.current
     if (!current.committed) return
 
-    const draft = cloneDocument(next)
+    const draft = cloneDocument(normalizeDocument(next))
     documentVersionRef.current += 1
+    replaceDocuments({ committed: current.committed, draft })
+    setError(undefined)
+    setStatus(documentsEqual(current.committed, draft) ? 'ready' : 'dirty')
+  }, [replaceDocuments])
+
+  const applyAIDraft = useCallback((next: DraftDocument, summary: string) => {
+    const current = documentsRef.current
+    if (!current.committed) return
+    const draft = cloneDocument(normalizeDocument(next))
+    if (documentsEqual(current.draft, draft)) return
+    documentVersionRef.current += 1
+    const entry = { id: ++provenanceIDRef.current, summary }
+    provenanceRef.current = [...provenanceRef.current, entry]
+    setPendingAIProvenance(provenanceRef.current)
     replaceDocuments({ committed: current.committed, draft })
     setError(undefined)
     setStatus(documentsEqual(current.committed, draft) ? 'ready' : 'dirty')
@@ -227,23 +227,29 @@ export function useCVStore(id: string) {
     if (!committed) return
     documentVersionRef.current += 1
     replaceDocuments({ committed, draft: cloneDocument(committed) })
+    provenanceRef.current = []
+    setPendingAIProvenance([])
     setError(undefined)
     setStatus('ready')
   }, [replaceDocuments])
 
-  const saveDraft = useCallback((source: 'user' | 'ai' = 'user', message?: string): Promise<void> => {
+  const saveDraft = useCallback((): Promise<void> => {
     if (pendingSaveRef.current) return pendingSaveRef.current
     const snapshot = documentsRef.current.draft
     if (!snapshot || documentsEqual(documentsRef.current.committed, snapshot)) return Promise.resolve()
 
     const saveVersion = documentVersionRef.current
+    const savedProvenance = [...provenanceRef.current]
+    const source = savedProvenance.length ? 'ai' : 'user'
+    const message = savedProvenance.length ? savedProvenance.map((entry) => entry.summary).join('\n') : undefined
+    const saveBaseRevision = baseRevision
     setSavePending(true)
     setStatus('saving')
     setError(undefined)
 
     const pending = (async () => {
       try {
-        const result = await commitCV(id, snapshot.cv, snapshot.layout, source, message)
+        const result = await commitCV(id, snapshot.cv, snapshot.layout, source, message, saveBaseRevision)
         const committed = cloneDocument({
           cv: result.cv.profileSnapshot as CV,
           layout: result.cv.layout as CVLayout,
@@ -253,6 +259,10 @@ export function useCVStore(id: string) {
           ? cloneDocument(committed)
           : current.draft
         replaceDocuments({ committed, draft })
+        setBaseRevision(result.revision?.number ?? result.cv.revisionNumber ?? saveBaseRevision + 1)
+        const savedIDs = new Set(savedProvenance.map((entry) => entry.id))
+        provenanceRef.current = provenanceRef.current.filter((entry) => !savedIDs.has(entry.id))
+        setPendingAIProvenance(provenanceRef.current)
         setStatus(documentsEqual(committed, draft) ? 'saved' : 'dirty')
       } catch (err) {
         setStatus(documentVersionRef.current === saveVersion ? 'error' : 'dirty')
@@ -265,23 +275,27 @@ export function useCVStore(id: string) {
     })()
     pendingSaveRef.current = pending
     return pending
-  }, [id, replaceDocuments])
+  }, [baseRevision, id, replaceDocuments])
 
   const restoreRevision = useCallback((revisionId: string): Promise<void> => {
     if (pendingSaveRef.current) return Promise.reject(new ApiError(409, 'Đang lưu thay đổi, chưa thể khôi phục phiên bản'))
+    if (!documentsEqual(documentsRef.current.committed, documentsRef.current.draft)) return Promise.reject(new ApiError(409, 'Bản nháp chưa lưu. Hãy lưu hoặc bỏ thay đổi trước khi khôi phục.'))
     setSavePending(true)
     setStatus('saving')
     setError(undefined)
 
     const pending = (async () => {
       try {
-        const result = await restoreCVRevision(id, revisionId)
+        const result = await restoreCVRevision(id, revisionId, baseRevision)
         const restored = cloneDocument({
           cv: result.cv.profileSnapshot as CV,
           layout: result.cv.layout as CVLayout,
         })
         documentVersionRef.current += 1
         replaceDocuments({ committed: restored, draft: cloneDocument(restored) })
+        setBaseRevision(result.revision?.number ?? result.cv.revisionNumber ?? baseRevision + 1)
+        provenanceRef.current = []
+        setPendingAIProvenance([])
         setStatus('saved')
       } catch (err) {
         const current = documentsRef.current
@@ -295,7 +309,7 @@ export function useCVStore(id: string) {
     })()
     pendingSaveRef.current = pending
     return pending
-  }, [id, replaceDocuments])
+  }, [baseRevision, id, replaceDocuments])
 
   const dirty = !documentsEqual(documents.committed, documents.draft)
 
@@ -307,9 +321,12 @@ export function useCVStore(id: string) {
     status,
     error,
     profileId,
+    baseRevision,
+    pendingAIProvenance: pendingAIProvenance.map((entry) => entry.summary),
     draftVersion: documentVersionRef.current,
     getDraft: () => documentsRef.current.draft,
     updateDraft,
+    applyAIDraft,
     saveDraft,
     restoreRevision,
     discardDraft,

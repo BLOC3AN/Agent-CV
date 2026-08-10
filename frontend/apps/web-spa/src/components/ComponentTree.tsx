@@ -16,7 +16,7 @@ interface ComponentTreeProps {
 type Dragged = { kind: 'node'; nodeId: string } | { kind: 'item'; nodeId: string; itemId: string } | null
 
 const labels: Record<CVNodeType, string> = {
-  header: 'Thông tin cá nhân', summary: 'Giới thiệu bản thân', experience: 'Kinh nghiệm làm việc', projects: 'Dự án nổi bật', education: 'Học vấn & Bằng cấp', skills: 'Kỹ năng & Công nghệ', certifications: 'Chứng chỉ', languages: 'Ngoại ngữ', footer: 'Footer',
+  header: 'Thông tin cá nhân', summary: 'Giới thiệu bản thân', experience: 'Kinh nghiệm làm việc', projects: 'Dự án nổi bật', education: 'Học vấn & Bằng cấp', skills: 'Kỹ năng & Công nghệ', activities: 'Hoạt động & Ngoại khóa', certifications: 'Chứng chỉ', languages: 'Ngoại ngữ', footer: 'Footer',
 }
 
 function nestedItems(cv: CV, node: LayoutNode): Array<{ id: string; label: string }> {

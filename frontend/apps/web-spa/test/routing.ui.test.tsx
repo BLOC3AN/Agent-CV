@@ -109,14 +109,21 @@ describe('bản đồ URL', () => {
         experience: [firstExperience, secondExperience],
       },
     } as CV
-    const envelope = (profileSnapshot: CV, layout: unknown = {}) => ({
-      id: 'cv-structured', profileId: 'profile-1', profileSnapshot, layout,
+    const envelope = (profileSnapshot: CV, layout: unknown = {}, revisionNumber = 0) => ({
+      id: 'cv-structured', profileId: 'profile-1', profileSnapshot, layout, revisionNumber,
     } as never)
     const restoredCV = {
       ...structuredCV,
       sections: { ...structuredCV.sections, intro: { ...structuredCV.sections.intro, fullName: 'Restored candidate' } },
     }
-    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({ cv: envelope(structuredCV) } as never)
+    let committedRevision = 0
+    const commit = vi.spyOn(api, 'commitCV').mockImplementation(async (_id, profileSnapshot, layout, source, message) => {
+      committedRevision += 1
+      return {
+        cv: envelope(profileSnapshot as CV, layout, committedRevision),
+        revision: { id: `revision-${committedRevision}`, number: committedRevision, cvId: 'cv-structured', source, message, createdAt: '2026-08-10T09:15:00.000Z', profileSnapshot, layout },
+      } as never
+    })
     vi.spyOn(api, 'getCV').mockResolvedValue(envelope(structuredCV))
     vi.spyOn(api, 'sendChat').mockResolvedValue({
       kind: 'patch', proposalId: 'proposal-1', summary: 'AI summary', rejected: [],
@@ -161,6 +168,11 @@ describe('bản đồ URL', () => {
     expect(renderedNodeIds()[0]).toBe('header')
     expect(screen.getByTestId('cv-block-experience')).toBeInTheDocument()
 
+    // Resetting back to the loaded layout is intentionally clean; make a real
+    // content edit so this save assertion exercises an explicit draft commit.
+    fireEvent.click(screen.getAllByTitle('Chỉnh sửa phần này')[0]!)
+    fireEvent.change(screen.getByDisplayValue('Legacy candidate'), { target: { value: 'Saved candidate' } })
+
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
     await waitFor(() => expect(commit).toHaveBeenCalledTimes(1))
     expect(commit.mock.calls[0]?.slice(0, 4)).toEqual(['cv-structured', expect.anything(), expect.objectContaining({ version: 1 }), 'user'])
@@ -178,10 +190,9 @@ describe('bản đồ URL', () => {
     const history = await screen.findByRole('dialog', { name: 'Lịch sử phiên bản' })
     fireEvent.click(within(history).getByRole('button', { name: 'Khôi phục phiên bản 1' }))
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Xác nhận khôi phục phiên bản' })).getByRole('button', { name: 'Tạo phiên bản khôi phục' }))
-    await waitFor(() => expect(restore).toHaveBeenCalledWith('cv-structured', 'revision-1'))
+    await waitFor(() => expect(restore).toHaveBeenCalledWith('cv-structured', 'revision-1', 2))
     expect(await screen.findByText('Restored candidate')).toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByTitle('Chỉnh sửa phần này')[0]!)
     fireEvent.change(screen.getByDisplayValue('Restored candidate'), { target: { value: 'Discarded candidate' } })
     await act(async () => { await router.navigate('/cv') })
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Thay đổi chưa lưu' })).getByRole('button', { name: 'Bỏ thay đổi' }))

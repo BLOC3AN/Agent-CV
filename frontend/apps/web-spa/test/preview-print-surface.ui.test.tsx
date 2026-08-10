@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { PreviewModal } from '../src/components/PreviewModal'
 import { initialCVs } from '../src/mockData'
+import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 import type { CVLayout } from '../src/types'
 
 const cv = initialCVs[0]!
@@ -12,6 +13,9 @@ const reorderedAndHidden: CVLayout = {
     { id: 'footer', type: 'footer', visible: true },
     { id: 'header', type: 'header', visible: true },
     { id: 'summary', type: 'summary', visible: true },
+    ...DEFAULT_CV_LAYOUT.nodes
+      .filter((node) => !['experience', 'footer', 'header', 'summary'].includes(node.type))
+      .map((node) => ({ ...node, visible: false } as CVLayout['nodes'][number])),
   ],
 }
 

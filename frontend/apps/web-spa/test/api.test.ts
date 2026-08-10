@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { CVLayoutSchema, CVSchema, type CV } from '@hr/schema'
+import { CVLayoutSchema, CVSchema, DEFAULT_CV_LAYOUT, type CV } from '@hr/schema'
 import {
   ApiError,
   completeImport,
@@ -196,13 +196,13 @@ describe('CV revisions', () => {
       cv: { id: 'cv-1', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } },
       revision: { id: 'revision-1', number: 1, cvId: 'cv-1', source: 'user', createdAt: '2026-08-10T00:00:00Z', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } },
     })
-    const layout = CVLayoutSchema.parse({ version: 1, nodes: [] })
+    const layout = CVLayoutSchema.parse(DEFAULT_CV_LAYOUT)
 
     const result = await commitCV('cv-1', sampleCV, layout, 'user', 'Save draft')
 
     expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1/commit')
     expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'POST' })
-    expect(JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)).toEqual({ cv: sampleCV, layout, source: 'user', message: 'Save draft' })
+    expect(JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)).toEqual({ cv: sampleCV, layout, source: 'user', message: 'Save draft', baseRevision: 0 })
     expect(result.revision.number).toBe(1)
   })
 
@@ -216,9 +216,10 @@ describe('CV revisions', () => {
     expect((previewSpy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1/revisions/revision-2')
 
     const restoreSpy = mockFetch(200, { cv: { id: 'cv-1', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } }, revision: { id: 'revision-3', number: 3, cvId: 'cv-1', source: 'restore', createdAt: '2026-08-10T00:00:00Z', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } } })
-    await expect(restoreCVRevision('cv-1', 'revision-1')).resolves.toMatchObject({ revision: { source: 'restore', number: 3 } })
+    await expect(restoreCVRevision('cv-1', 'revision-1', 2)).resolves.toMatchObject({ revision: { source: 'restore', number: 3 } })
     expect((restoreSpy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1/revisions/revision-1/restore')
     expect((restoreSpy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((restoreSpy.mock.calls as any)[0]?.[1]?.body as string)).toEqual({ baseRevision: 2 })
   })
 })
 

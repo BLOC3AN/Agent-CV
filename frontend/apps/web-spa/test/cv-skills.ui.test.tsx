@@ -83,9 +83,9 @@ describe('bullet dự án xuống dòng như PreviewModal', () => {
         onDownloadPDF={noop}
       />,
     )
-    const preLine = [...container.querySelectorAll('p.whitespace-pre-line')].map(
+    const renderedBullets = [...container.querySelectorAll('[data-cv-node="projects"] .cv-bullets li')].map(
       (el) => el.textContent,
     )
-    expect(preLine).toContain(project.highlights.join('\n'))
+    expect(renderedBullets).toEqual(expect.arrayContaining(project.highlights))
   })
 })
