@@ -119,7 +119,7 @@ interface ProvenanceChange {
   after?: unknown
   exists: boolean
   arrayParentPath?: string
-  arrayKind?: 'add' | 'remove' | 'reorder'
+  arrayKind?: 'add' | 'remove' | 'replace' | 'reorder'
   arrayValue?: unknown
   arrayBaselineCount?: number
   arrayOrder?: unknown[]
@@ -185,6 +185,13 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
     if (beforeArray.length === afterArray.length && beforeArray.some((value, index) => !deepEqual(value, afterArray[index]))) {
       const sameValues = beforeArray.every((value) => beforeArray.filter((candidate) => deepEqual(candidate, value)).length === afterArray.filter((candidate) => deepEqual(candidate, value)).length)
       if (sameValues) return [{ path, exists: true, arrayParentPath: path, arrayKind: 'reorder', arrayOrder: cloneValue(afterOrder) as unknown[], arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }]
+      return afterArray.flatMap((value, index) => deepEqual(beforeArray[index], value) ? [] : [{
+        path: `${path}/${index}`, before: cloneValue(beforeArray[index]), after: cloneValue(value), exists: true,
+        arrayParentPath: path, arrayKind: 'replace' as const, arrayValue: cloneValue(value),
+        arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length,
+        arrayItemId, arrayItemCollectionPath,
+        arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined,
+      }])
     }
     if (afterArray.length > beforeArray.length) {
       const remaining = [...beforeArray]
@@ -265,7 +272,7 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
         }) && orderIndex === change.arrayOrder?.length
       }
       const count = target.filter((value) => deepEqual(value, change.arrayValue)).length
-      return change.arrayKind === 'add' ? count > (change.arrayBaselineCount ?? 0) : count < (change.arrayBaselineCount ?? 1)
+      return change.arrayKind === 'add' || change.arrayKind === 'replace' ? count > (change.arrayBaselineCount ?? 0) : count < (change.arrayBaselineCount ?? 1)
     }
     if (change.arrayItemId && change.arrayItemCollectionPath && change.arrayItemFieldPath) {
       const parent = valueAtPath(draft, change.arrayItemCollectionPath)
