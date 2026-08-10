@@ -130,6 +130,7 @@ interface ProvenanceChange {
   arrayItemCollectionPath?: string
   arrayItemParentPath?: string
   arrayItemFieldPath?: string
+  scalarDelta?: { removedBefore: string; insertedAfter: string; position: number }
 }
 interface ProvenanceEntry { id: number; summary: string; changes: ProvenanceChange[] }
 
@@ -263,7 +264,8 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
       return collectChanges(beforeRecord[key], afterRecord[key], childPath, arrayParentPath, arrayItemId, arrayItemRootPath, arrayItemCollectionPath)
     })
   }
-  return [{ path, before: cloneValue(before), after: cloneValue(after), exists: true, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }]
+  const scalarDelta = typeof before === 'string' && typeof after === 'string' ? scalarDeltaFor(before, after) : undefined
+  return [{ path, before: cloneValue(before), after: cloneValue(after), exists: true, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined, scalarDelta }]
 }
 
 function valueAtPath(value: unknown, path: string): { exists: boolean; value?: unknown } {
@@ -340,6 +342,14 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
 
 function valueContributionSurvives(current: unknown, change: ProvenanceChange): boolean {
   if (deepEqual(current, change.after)) return true
+  if (typeof current === 'string' && typeof change.before === 'string' && typeof change.after === 'string') {
+    const delta = change.scalarDelta ?? scalarDeltaFor(change.before, change.after)
+    if (!delta.insertedAfter) {
+      if (change.after === '') return deepEqual(current, change.after)
+      return current.includes(change.after) && !current.includes(delta.removedBefore)
+    }
+    return current.includes(delta.insertedAfter)
+  }
   return typeof current === 'string' && typeof change.after === 'string' && change.after !== '' && !deepEqual(current, change.before) && current.includes(change.after)
 }
 
@@ -363,22 +373,37 @@ function sameLogicalChange(left: ProvenanceChange, right: ProvenanceChange): boo
   return left.path === right.path
 }
 
-function scalarAddedContribution(before: string, after: string): string {
+function scalarDeltaFor(before: string, after: string): { removedBefore: string; insertedAfter: string; position: number } {
   let prefix = 0
   while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1
   let suffix = 0
   while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - suffix - 1] === after[after.length - suffix - 1]) suffix += 1
-  return after.slice(prefix, after.length - suffix)
+  if (suffix < 3) suffix = 0
+  return {
+    removedBefore: before.slice(prefix, before.length - suffix),
+    insertedAfter: after.slice(prefix, after.length - suffix),
+    position: prefix,
+  }
 }
 
 function onlyRemovesPriorScalarContribution(change: ProvenanceChange, immediateBefore: unknown, priorChanges: ProvenanceChange[]): boolean {
   if (change.arrayKind || typeof immediateBefore !== 'string' || typeof change.after !== 'string') return false
+  const beforeValue = immediateBefore
+  const afterValue = change.after
   return priorChanges.some((prior) => {
     if (prior.arrayKind || typeof prior.before !== 'string' || typeof prior.after !== 'string' || !sameLogicalChange(change, prior)) return false
-    const contribution = scalarAddedContribution(prior.before, prior.after)
-    if (!contribution || !immediateBefore.includes(contribution)) return false
-    const residual = immediateBefore.replace(contribution, '').trim()
-    return change.after === residual
+    const delta = prior.scalarDelta ?? scalarDeltaFor(prior.before, prior.after)
+    let residuals: string[]
+    if (delta.insertedAfter) {
+      if (!beforeValue.includes(delta.insertedAfter)) return false
+      residuals = [
+        beforeValue.replace(delta.insertedAfter, '').trim(),
+        beforeValue.replace(delta.insertedAfter, delta.removedBefore).trim(),
+      ]
+    } else {
+      residuals = [`${beforeValue.slice(0, delta.position)}${delta.removedBefore}${beforeValue.slice(delta.position)}`.trim()]
+    }
+    return residuals.includes(afterValue)
   })
 }
 
@@ -495,7 +520,7 @@ export function useCVStore(id: string) {
     const priorAIEntries = provenanceRef.current.map((entry) => ({ entry, changes: entry.changes }))
     provenanceRef.current = reconcileProvenance(provenanceRef.current, draft)
     const survivingChanges = changes.filter((change) => {
-      if (!changeMatchesNetChange(change, netChanges)) return false
+      if (!changeMatchesNetChange(change, netChanges) && !pendingSaveRef.current) return false
       const immediateBefore = current.draft ? valueAtPath(current.draft, change.path).value : undefined
       const priorChanges = priorAIEntries
         .filter(({ entry }) => !inFlightProvenanceIDsRef.current.has(entry.id))
@@ -557,8 +582,12 @@ export function useCVStore(id: string) {
       } catch (err) {
         const currentDraft = documentsRef.current.draft
         if (currentDraft) {
-          const entriesToRebase = [...savedProvenance, ...provenanceRef.current.filter((entry) => !savedIDs.has(entry.id))]
-          provenanceRef.current = rebaseProvenanceAfterFailedSave(entriesToRebase, currentDraft)
+          if (documentsEqual(documentsRef.current.committed, currentDraft)) {
+            provenanceRef.current = []
+          } else {
+            const entriesToRebase = [...savedProvenance, ...provenanceRef.current.filter((entry) => !savedIDs.has(entry.id))]
+            provenanceRef.current = rebaseProvenanceAfterFailedSave(entriesToRebase, currentDraft)
+          }
           setPendingAIProvenance(provenanceRef.current)
         }
         setStatus(documentVersionRef.current === saveVersion ? 'error' : 'dirty')

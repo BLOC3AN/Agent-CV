@@ -824,4 +824,104 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
     expect(commit).toHaveBeenLastCalledWith('cv-1', expect.objectContaining({ title: 'Manual' }), layout, 'ai', 'AI B', 1)
   })
+
+  it('cancels an AI replacement while preserving the manual residual', async () => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', title: 'Engineer' }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...source, title: 'Engineer Manual' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'Developer' }, layout }, 'AI A'))
+    act(() => result.current.updateDraft({ cv: { ...source, title: 'Developer Manual' }, layout }))
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'Engineer Manual' }, layout }, 'AI B'))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'user', undefined, 0)
+  })
+
+  it('cancels an AI removal while preserving the manual residual', async () => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', title: 'Senior Engineer' }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...source, title: 'Senior Engineer Manual' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'Engineer' }, layout }, 'AI A'))
+    act(() => result.current.updateDraft({ cv: { ...source, title: 'Engineer Manual' }, layout }))
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'Senior Engineer Manual' }, layout }, 'AI B'))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'user', undefined, 0)
+  })
+
+  it('retains an exact scalar restoration accepted during a successful older save', async () => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', title: 'CV' }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const first = deferred<api.CVCommitResult>()
+    const commit = vi.spyOn(api, 'commitCV').mockReturnValueOnce(first.promise).mockResolvedValueOnce(commitResult({ ...source, title: 'AI' }, 1)).mockResolvedValueOnce(commitResult({ ...source, title: 'CV' }, 2))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'AI' }, layout }, 'AI A'))
+    let saving!: Promise<void>
+    act(() => { saving = result.current.saveDraft() })
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'CV' }, layout }, 'AI restore'))
+    first.resolve(commitResult({ ...source, title: 'AI' }, 1))
+    await act(async () => { await saving })
+    expect(result.current.pendingAIProvenance).toEqual(['AI restore'])
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenLastCalledWith('cv-1', expect.objectContaining({ title: 'CV' }), layout, 'ai', 'AI restore', 1)
+  })
+
+  it('clears an exact scalar restoration accepted during a failed older save', async () => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', title: 'CV' }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const first = deferred<api.CVCommitResult>()
+    const commit = vi.spyOn(api, 'commitCV').mockReturnValueOnce(first.promise).mockResolvedValueOnce(commitResult({ ...source, title: 'CV' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'AI' }, layout }, 'AI A'))
+    let saving!: Promise<void>
+    act(() => { saving = result.current.saveDraft() })
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'CV' }, layout }, 'AI restore'))
+    first.reject(new Error('temporary failure'))
+    await act(async () => { await expect(saving).rejects.toThrow('temporary failure') })
+    expect(result.current.pendingAIProvenance).toEqual([])
+    expect(commit).toHaveBeenCalledTimes(1)
+  })
+
+  it('retains exact primitive-array restoration across a successful older save', async () => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['Go'] }] } }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const first = deferred<api.CVCommitResult>()
+    const commit = vi.spyOn(api, 'commitCV').mockReturnValueOnce(first.promise).mockResolvedValueOnce(commitResult({ ...source, sections: { ...source.sections, experience: [{ ...source.sections.experience[0]!, techStack: ['Go', 'Rust'] }] } }, 1)).mockResolvedValueOnce(commitResult(source, 2))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const added = applyChatOpsToDraft(result.current.draft!, [{ op: 'add', path: '/sections/experience/0/techStack/-', value: 'Rust', rationale: 'AI add', grounding: { type: 'user_message', ref: 'Rust' } }])
+    act(() => result.current.applyAIDraft(added, 'AI A'))
+    let saving!: Promise<void>
+    act(() => { saving = result.current.saveDraft() })
+    const restored = result.current.getDraft()!
+    act(() => result.current.applyAIDraft({ cv: source, layout: restored.layout }, 'AI restore'))
+    first.resolve(commitResult({ ...source, sections: { ...source.sections, experience: [{ ...source.sections.experience[0]!, techStack: ['Go', 'Rust'] }] } }, 1))
+    await act(async () => { await saving })
+    expect(result.current.pendingAIProvenance).toEqual(['AI restore'])
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenLastCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ techStack: ['Go'] })] }) }), expect.anything(), 'ai', 'AI restore', 1)
+  })
+
+  it('clears exact primitive-array restoration after an older save fails', async () => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['Go'] }] } }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const first = deferred<api.CVCommitResult>()
+    const commit = vi.spyOn(api, 'commitCV').mockReturnValueOnce(first.promise).mockResolvedValueOnce(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const added = applyChatOpsToDraft(result.current.draft!, [{ op: 'add', path: '/sections/experience/0/techStack/-', value: 'Rust', rationale: 'AI add', grounding: { type: 'user_message', ref: 'Rust' } }])
+    act(() => result.current.applyAIDraft(added, 'AI A'))
+    let saving!: Promise<void>
+    act(() => { saving = result.current.saveDraft() })
+    const restored = result.current.getDraft()!
+    act(() => result.current.applyAIDraft({ cv: source, layout: restored.layout }, 'AI restore'))
+    first.reject(new Error('temporary failure'))
+    await act(async () => { await expect(saving).rejects.toThrow('temporary failure') })
+    expect(result.current.pendingAIProvenance).toEqual([])
+    expect(commit).toHaveBeenCalledTimes(1)
+  })
 })

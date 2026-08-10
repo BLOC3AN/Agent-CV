@@ -111,3 +111,13 @@ The findings in `FINAL-MERGE-REVIEW-10.md` are resolved:
 - Failed in-flight saves rebase the captured older entries together with newer entries against the unchanged committed baseline before retry. Successful saves continue to promote the captured snapshot and preserve newer provenance.
 
 Added regressions cover baseline-preserving suffix cancellation, committed-content removal, in-flight success, and failed-save cancellation reclassification. Verification passed: focused store 55/55, full frontend 26 files / 239 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.
+
+## Round 16 follow-up
+
+The findings in `FINAL-MERGE-REVIEW-11.md` are resolved:
+
+- Scalar provenance now records both the removed-before span and inserted-after span with their shared position. Reconciliation can distinguish cancellation of only an earlier AI fragment from a later AI removal of committed/manual content, including replacement and removal cases.
+- Failed-save rebasing applies the same scalar-delta model against the unchanged committed baseline. An exact cancellation accepted while a save is in flight is reclassified as user content after failure, while surviving newer AI work remains attributed.
+- AI proposals accepted during an in-flight save are retained provisionally even when their result equals the stale pre-save baseline. Save success rebases them against the actual committed response, preserving exact AI restoration on the newer revision; failure clears an exact restoration against the unchanged committed baseline and retains no stale AI message.
+
+Added normal and failure regressions for scalar replacement/removal residuals, scalar exact restoration, and primitive-array exact restoration during an older in-flight save. Verification passed: focused store **61/61**, full frontend **26 files / 245 tests**, frontend typecheck, `go test ./...`, real Playwright/PDF print integration **2/2**, smoke integration **4/4** with `SPA_BASE_URL=http://localhost:3000`, and `git diff --check`.
