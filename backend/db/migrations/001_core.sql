@@ -135,6 +135,4 @@ CREATE TRIGGER profiles_touch BEFORE UPDATE ON profiles
 CREATE TRIGGER cv_touch BEFORE UPDATE ON cv_documents
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
-INSERT INTO schema_migrations (version) VALUES ('001_core');
-
 COMMIT;
