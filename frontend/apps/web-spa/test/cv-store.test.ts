@@ -289,11 +289,36 @@ describe('useCVStore', () => {
     act(() => result.current.applyAIDraft(proposal, 'Add AI highlight'))
     const manual = result.current.getDraft()!
     act(() => result.current.updateDraft({
-      cv: { ...manual.cv, sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, highlights: ['Existing', 'AI bullet', 'Manual bullet'] }] } },
+      cv: { ...manual.cv, sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, highlights: ['AI bullet', 'Manual first', 'Existing'] }] } },
       layout: manual.layout,
     }))
     await act(async () => result.current.saveDraft())
 
-    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ highlights: ['Existing', 'AI bullet', 'Manual bullet'] })] }) }), expect.anything(), 'ai', 'Add AI highlight', 0)
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ highlights: ['AI bullet', 'Manual first', 'Existing'] })] }) }), expect.anything(), 'ai', 'Add AI highlight', 0)
+  })
+
+  it('preserves AI removal provenance when a manual edit changes the same array', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', highlights: ['Existing', 'AI remove me'] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{
+      op: 'remove', path: '/sections/experience/0/highlights/1',
+      rationale: 'Remove stale highlight', grounding: { type: 'user_message', ref: 'Remove highlight' },
+    }])
+    act(() => result.current.applyAIDraft(proposal, 'Remove AI highlight'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({
+      cv: { ...manual.cv, sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, highlights: ['Existing', 'Manual follow-up'] }] } },
+      layout: manual.layout,
+    }))
+    await act(async () => result.current.saveDraft())
+
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ highlights: ['Existing', 'Manual follow-up'] })] }) }), expect.anything(), 'ai', 'Remove AI highlight', 0)
   })
 })

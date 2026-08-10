@@ -113,7 +113,15 @@ interface DocumentState {
   draft: DraftDocument | null
 }
 
-interface ProvenanceChange { path: string; after?: unknown; exists: boolean }
+interface ProvenanceChange {
+  path: string
+  after?: unknown
+  exists: boolean
+  arrayParentPath?: string
+  arrayKind?: 'add' | 'remove'
+  arrayValue?: unknown
+  arrayBaselineCount?: number
+}
 interface ProvenanceEntry { id: number; summary: string; changes: ProvenanceChange[] }
 
 const emptyDocuments: DocumentState = { committed: null, draft: null }
@@ -127,13 +135,34 @@ function cloneValue(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value))
 }
 
-function collectChanges(before: unknown, after: unknown, path = ''): ProvenanceChange[] {
+function collectChanges(before: unknown, after: unknown, path = '', arrayParentPath?: string): ProvenanceChange[] {
   if (deepEqual(before, after)) return []
   if (Array.isArray(before) && Array.isArray(after)) {
-    if (before.length > after.length) return [{ path, after: cloneValue(after), exists: true }]
+    const beforeArray = before
+    const afterArray = after
+    if (afterArray.length > beforeArray.length) {
+      const remaining = [...beforeArray]
+      const added = afterArray.flatMap((value, index) => {
+        const existing = remaining.findIndex((candidate) => deepEqual(candidate, value))
+        if (existing < 0) return [{ value, index }]
+        remaining.splice(existing, 1)
+        return []
+      })
+      return added.map(({ value, index }) => ({ path: `${path}/${index}`, after: cloneValue(value), exists: true, arrayParentPath: path, arrayKind: 'add' as const, arrayValue: cloneValue(value) }))
+    }
+    if (beforeArray.length > afterArray.length) {
+      const remaining = [...afterArray]
+      const removed = beforeArray.filter((value) => {
+        const index = remaining.findIndex((candidate) => deepEqual(candidate, value))
+        if (index < 0) return true
+        remaining.splice(index, 1)
+        return false
+      })
+      return removed.map((value) => ({ path, exists: false, arrayParentPath: path, arrayKind: 'remove' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length }))
+    }
     return after.flatMap((value, index) => index < before.length
-      ? collectChanges(before[index], value, `${path}/${index}`)
-      : collectChanges(undefined, value, `${path}/${index}`))
+      ? collectChanges(before[index], value, `${path}/${index}`, path)
+      : collectChanges(undefined, value, `${path}/${index}`, path))
   }
   if (before && after && typeof before === 'object' && typeof after === 'object' && !Array.isArray(before) && !Array.isArray(after)) {
     const beforeRecord = before as Record<string, unknown>
@@ -144,10 +173,10 @@ function collectChanges(before: unknown, after: unknown, path = ''): ProvenanceC
       if (!Object.prototype.hasOwnProperty.call(afterRecord, key)) {
         return [{ path: childPath, exists: false }]
       }
-      return collectChanges(beforeRecord[key], afterRecord[key], childPath)
+      return collectChanges(beforeRecord[key], afterRecord[key], childPath, arrayParentPath)
     })
   }
-  return [{ path, after: cloneValue(after), exists: true }]
+  return [{ path, after: cloneValue(after), exists: true, arrayParentPath }]
 }
 
 function valueAtPath(value: unknown, path: string): { exists: boolean; value?: unknown } {
@@ -162,7 +191,18 @@ function valueAtPath(value: unknown, path: string): { exists: boolean; value?: u
 
 function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): ProvenanceEntry[] {
   return entries.map((entry) => ({ ...entry, changes: entry.changes.filter((change) => {
+    if (change.arrayKind && change.arrayParentPath) {
+      const parent = valueAtPath(draft, change.arrayParentPath)
+      if (!parent.exists || !Array.isArray(parent.value)) return false
+      if (change.arrayKind === 'add') return parent.value.some((value) => deepEqual(value, change.arrayValue))
+      const count = parent.value.filter((value) => deepEqual(value, change.arrayValue)).length
+      return count < (change.arrayBaselineCount ?? 1)
+    }
     const current = valueAtPath(draft, change.path)
+    if (change.arrayParentPath && change.exists && change.after !== undefined) {
+      const parent = valueAtPath(draft, change.arrayParentPath)
+      if (parent.exists && Array.isArray(parent.value) && parent.value.some((value) => deepEqual(value, change.after))) return true
+    }
     return change.exists
       ? current.exists && (deepEqual(current.value, change.after) || (change.after !== '' && typeof current.value === 'string' && typeof change.after === 'string' && current.value.includes(change.after)))
       : !current.exists
