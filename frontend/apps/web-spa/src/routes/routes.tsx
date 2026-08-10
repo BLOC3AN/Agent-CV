@@ -21,7 +21,10 @@ import {
 import { AnalyzeRoute } from './AnalyzeRoute';
 import { TemplatesView } from '../components/TemplatesView';
 import { SettingsRoute } from './SettingsRoute';
+import { GuidedRoute } from './GuidedRoute';
+import { KBRoute } from './KBRoute';
 import { RequireAuth, SessionProvider } from '../lib/session';
+import { LocaleProvider } from '../lib/i18n';
 
 /**
  * Bản đồ URL — một chỗ duy nhất.
@@ -70,7 +73,7 @@ const protectedChildren: RouteObject[] = [
     ),
   },
   // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
-  // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
+  // `/analyze/:cvId` là màn hình phân tích theo đúng CV đang mở.
   // chỉ là dạng chọn sẵn khi tới từ một CV cụ thể.
   {
     path: 'analyze',
@@ -86,6 +89,8 @@ const protectedChildren: RouteObject[] = [
   },
   { path: 'templates', element: <div data-testid="view-templates"><TemplatesView cvs={[]} /></div> },
   { path: 'settings', element: <SettingsRoute /> },
+  { path: 'start/guided', element: <GuidedRoute /> },
+  { path: 'kb', element: <KBRoute /> },
   { path: '*', element: <NotFound /> },
 ];
 
@@ -100,9 +105,9 @@ const builderChildren: RouteObject[] = [{ path: 'builder/:cvId', element: <div d
 export const appRoutes: RouteObject[] = [
   {
     element: (
-      <SessionProvider>
-        <Outlet />
-      </SessionProvider>
+      <LocaleProvider>
+        <SessionProvider><Outlet /></SessionProvider>
+      </LocaleProvider>
     ),
     children: [
       { path: 'login', element: <LoginPage /> },

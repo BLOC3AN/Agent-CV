@@ -125,17 +125,24 @@ if (!rollback) {
       assertReversible(row.data, cvAsStored)
 
       if (dryRun) { ok++; continue }
-      await client.query('UPDATE profiles SET data_v2 = $2::jsonb WHERE id = $1', [
-        row.id,
-        JSON.stringify(cv),
-      ])
-      // SP-5 publication reads the immutable document snapshot, not the
-      // mutable profile row. Keep every CV document belonging to this
-      // profile publishable in the same backfill pass.
-      await client.query(
-        'UPDATE cv_documents SET snapshot_v2 = $2::jsonb WHERE profile_id = $1',
-        [row.id, JSON.stringify(cv)],
-      )
+      await client.query('BEGIN')
+      try {
+        await client.query('UPDATE profiles SET data_v2 = $2::jsonb WHERE id = $1', [
+          row.id,
+          JSON.stringify(cv),
+        ])
+        // SP-5 publication reads the immutable document snapshot, not the
+        // mutable profile row. Keep every CV document belonging to this
+        // profile publishable in the same backfill pass.
+        await client.query(
+          'UPDATE cv_documents SET snapshot_v2 = $2::jsonb WHERE profile_id = $1',
+          [row.id, JSON.stringify(cv)],
+        )
+        await client.query('COMMIT')
+      } catch (err) {
+        await client.query('ROLLBACK')
+        throw err
+      }
       ok++
     } catch (err) {
       failures.push({ id: row.id, reason: (err as Error).message })
@@ -158,11 +165,18 @@ if (!rollback) {
       const restored = reattachUnknownKeys(profile, cv._meta.droppedFields)
 
       if (dryRun) { ok++; continue }
-      await client.query('UPDATE profiles SET data = $2::jsonb WHERE id = $1', [
-        row.id,
-        JSON.stringify(restored),
-      ])
-      await client.query('UPDATE cv_documents SET snapshot_v2 = NULL WHERE profile_id = $1', [row.id])
+      await client.query('BEGIN')
+      try {
+        await client.query('UPDATE profiles SET data = $2::jsonb WHERE id = $1', [
+          row.id,
+          JSON.stringify(restored),
+        ])
+        await client.query('UPDATE cv_documents SET snapshot_v2 = NULL WHERE profile_id = $1', [row.id])
+        await client.query('COMMIT')
+      } catch (err) {
+        await client.query('ROLLBACK')
+        throw err
+      }
       ok++
     } catch (err) {
       failures.push({ id: row.id, reason: (err as Error).message })

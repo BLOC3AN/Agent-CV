@@ -102,10 +102,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/analyze/", s.getAnalyze)
 	mux.HandleFunc("POST /api/chat", s.chat)
 	mux.HandleFunc("POST /api/chat/proposals/", s.chatProposal)
-	// Compatibility endpoints used by the approved standalone frontend.
-	mux.HandleFunc("POST /api/ai/chat", s.compatAIChat)
-	mux.HandleFunc("POST /api/ai/quick-action", s.compatAIQuickAction)
-	mux.HandleFunc("POST /api/ai/match-job", s.compatAIMatchJob)
 	return withJSON(mux)
 }
 

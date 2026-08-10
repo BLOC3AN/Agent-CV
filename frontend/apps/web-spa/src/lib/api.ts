@@ -251,6 +251,27 @@ export async function getCitations(chunkIds: string[]): Promise<Citation[]> {
   return body.citations ?? []
 }
 
+export interface KBSource {
+  id: string
+  title: string
+  authorName: string
+  authorTitle: string
+  language: 'vi' | 'en'
+  status: 'draft' | 'active' | 'archived'
+  version: number
+  chunkCount: number
+  canActivate: boolean
+}
+
+export async function listKBSources(): Promise<KBSource[]> {
+  const body = await request<{ sources: KBSource[] }>('/api/kb')
+  return body.sources ?? []
+}
+
+export async function updateKBSource(input: { sourceId: string; status?: KBSource['status']; authorName?: string; authorTitle?: string }): Promise<void> {
+  await request('/api/kb', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) })
+}
+
 export async function getCV(id: string): Promise<CVEnvelope> {
   const body = await request<{ cv: CVEnvelope }>(`/api/cv/${encodeURIComponent(id)}`)
   return body.cv

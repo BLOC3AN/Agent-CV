@@ -32,6 +32,7 @@
     "db:backfill-v2": "tsx ../backend/db/backfill-v2.ts",
     "db:roundtrip-check": "tsx ../backend/db/roundtrip-check.ts",
     "db:pair-check": "tsx ../backend/db/pair-check.ts",
+    "verify:real-pdfs": "tsx scripts/verify-real-pdfs.ts",
     "db:reset": "docker compose -f ../backend/docker-compose.yml down -v postgres && docker compose -f ../backend/docker-compose.yml up -d postgres && sleep 8 && npm run db:migrate",
     "dev:restart": "bash ../backend/scripts/dev-restart.sh",
     "build:web": "cd apps/web && next build",

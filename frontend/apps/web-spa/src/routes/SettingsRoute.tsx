@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import { ApiError, deleteAccount } from '../lib/api'
 import { useSession } from '../lib/session'
+import { useLocale, type Locale } from '../lib/i18n'
 
 export function SettingsRoute() {
   const { email, signOut } = useSession()
+  const { locale, setLocale, t } = useLocale()
   const [confirmEmail, setConfirmEmail] = useState('')
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState(false)
@@ -31,6 +33,7 @@ export function SettingsRoute() {
         <p className="text-xs text-slate-300 mt-1">Quản lý phiên đăng nhập và dữ liệu CV.</p>
       </div>
       <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+        <label className="block text-xs font-semibold text-slate-700">{t('locale')}<select value={locale} onChange={(e) => setLocale(e.target.value as Locale)} className="mt-2 block rounded-xl border px-3 py-2 text-sm"><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
         <h2 className="font-bold text-slate-900">Xoá tài khoản</h2>
         <p className="text-xs text-slate-600">Thao tác này xoá vĩnh viễn tài khoản và toàn bộ CV, không thể khôi phục.</p>
         <label className="block text-xs font-semibold text-slate-700" htmlFor="delete-account-email">Nhập email để xác nhận</label>

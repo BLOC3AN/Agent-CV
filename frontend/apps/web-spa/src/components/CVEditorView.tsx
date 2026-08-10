@@ -65,27 +65,11 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const [editingSection, setEditingSection] = useState<string | null>(null);
 
   // Right AI Assistant State
-  const [showAIPanel, setShowAIPanel] = useState(true);
+  // AI lives in the authenticated ChatPanel mounted by BuilderRoute. Keep
+  // this legacy editor shell free of a second, mock assistant.
+  const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiModel, setAiModel] = useState('standard');
-  const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
-    {
-      id: 'm-1',
-      sender: 'user',
-      text: "Tối ưu hoá giúp tôi phần 'Kinh nghiệm làm việc'?",
-      timestamp: 'Vừa xong',
-    },
-    {
-      id: 'm-2',
-      sender: 'ai',
-      text: "Đã phân tích phần kinh nghiệm làm việc! Dưới đây là mô tả chuẩn ATS đi kèm số liệu cụ thể:\n\n• Microservices & Infrastructure: Thiết kế kiến trúc nền tảng Vision MLOps gồm 11 microservices, giúp giảm 45% độ trễ triển khai.\n• Edge AIoT: Tối ưu hoá mô hình YOLO bằng kỹ thuật Knowledge Distillation cho Jetson Orin Nano, đạt tốc độ 19 FPS ở độ trễ dưới 300ms.",
-      timestamp: 'Vừa xong',
-      suggestedAction: {
-        type: 'apply_text',
-        targetSection: 'experience',
-        content: 'Microservices & Infrastructure: Thiết kế kiến trúc nền tảng Vision MLOps gồm 11 microservices, giúp giảm 45% độ trễ triển khai.\nEdge AIoT: Tối ưu hoá mô hình YOLO bằng kỹ thuật Knowledge Distillation cho Jetson Orin Nano, đạt tốc độ 19 FPS ở độ trễ dưới 300ms.',
-      },
-    },
-  ]);
+  const [aiMessages, setAiMessages] = useState<ChatMessage[]>([]);
   const [aiInputText, setAiInputText] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
 
@@ -123,17 +107,10 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
     setAiMessages((prev) => [...prev, userMsg]);
 
     try {
-      const res = await fetch('/api/ai/quick-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: actionType, cvData: cv.sections }),
-      });
-      const data = await res.json();
-
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: data.result || 'Đã phân tích xong!',
+        text: `Yêu cầu “${actionType}” đã được chuyển sang Trợ lý CV bên phải.`,
         timestamp: 'Vừa xong',
       };
       setAiMessages((prev) => [...prev, aiMsg]);
@@ -167,21 +144,10 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
     setIsAiLoading(true);
 
     try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userText,
-          model: aiModel,
-          cvData: cv.sections,
-        }),
-      });
-      const data = await res.json();
-
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: data.reply || 'Dưới đây là phản hồi từ AI Assistant.',
+        text: 'Hãy dùng Trợ lý CV bên phải để nhận trả lời SSE và duyệt thay đổi.',
         timestamp: 'Vừa xong',
       };
       setAiMessages((prev) => [...prev, aiMsg]);
@@ -997,4 +963,3 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
     </div>
   );
 };
-

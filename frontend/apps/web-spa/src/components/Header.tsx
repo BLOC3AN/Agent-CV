@@ -9,6 +9,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useSession } from '../lib/session';
+import { useLocale } from '../lib/i18n';
 
 interface HeaderProps {
   onOpenPreview?: () => void;
@@ -27,6 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
   const isEditor = location.pathname.startsWith('/builder');
   const { email, signOut } = useSession();
   const userEmail = email ?? 'Chưa đăng nhập';
+  const { t } = useLocale();
 
   return (
     <header className="h-[88px] bg-white border-b border-slate-200/80 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xs">
@@ -64,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`
             }
           >
-            Trang chủ
+            {t('home')}
           </NavLink>
 
           <NavLink
@@ -78,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`
             }
           >
-            CV của tôi
+            {t('cvs')}
           </NavLink>
         </nav>
       </div>
@@ -94,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-2xs"
             >
               <Eye className="w-4 h-4 text-slate-500" />
-              <span>Xem trước</span>
+              <span>{t('preview')}</span>
             </button>
 
             <button
@@ -103,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-2xs"
             >
               <Share2 className="w-4 h-4 text-slate-500" />
-              <span>Chia sẻ</span>
+              <span>{t('share')}</span>
             </button>
 
             <button
@@ -112,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center space-x-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-xs"
             >
               <Download className="w-4 h-4 text-white" />
-              <span>Tải PDF</span>
+              <span>{t('download')}</span>
             </button>
 
             <div className="h-5 w-px bg-slate-200 mx-1 hidden sm:block"></div>
@@ -129,7 +131,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={signOut}
               className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
             >
-              Đăng xuất
+              {t('logout')}
             </button>
           </>
         ) : (
@@ -152,7 +154,7 @@ export const Header: React.FC<HeaderProps> = ({
               to="/settings"
               id="btn-header-help"
               className="p-1.5 text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition"
-              title="Trợ giúp & Cài đặt"
+              title={t('settings')}
             >
               <HelpCircle className="w-4 h-4" />
             </Link>
@@ -161,7 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={signOut}
               className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
             >
-              Đăng xuất
+              {t('logout')}
             </button>
           </>
         )}

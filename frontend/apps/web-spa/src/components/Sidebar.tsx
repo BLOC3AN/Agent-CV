@@ -8,6 +8,7 @@ import {
   Layout,
   Settings,
 } from 'lucide-react';
+import { useLocale } from '../lib/i18n';
 
 interface NavItem {
   to: string;
@@ -25,20 +26,23 @@ interface NavItem {
  * không sinh được đề xuất có ngữ cảnh — nên mục sidebar đó không còn đích đến
  * và bị bỏ. Quyết định của chủ sản phẩm ngày 2026-08-09.
  *
- * `/analyze` KHÔNG kèm id là một màn hình thật: `JobMatchView` vốn đã nhận cả
+ * `/analyze` KHÔNG kèm id là một màn hình thật; màn phân tích cần một CV cụ thể
  * danh sách CV và tự cho người dùng chọn. `/analyze/:cvId` chỉ là dạng chọn
  * sẵn.
  */
-const primary: NavItem[] = [
-  { to: '/', end: true, id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
-  { to: '/cv', end: false, id: 'cv', label: 'CV của tôi', icon: FileText },
-  { to: '/analyze', end: false, id: 'analyze', label: 'Đối chiếu việc làm', icon: GitCompare },
-];
-
-const secondary: NavItem[] = [
-  { to: '/templates', end: false, id: 'templates', label: 'Mẫu CV', icon: Layout },
-  { to: '/settings', end: false, id: 'settings', label: 'Cài đặt', icon: Settings },
-];
+function navItems(t: (key: 'home' | 'cvs' | 'analyze' | 'templates' | 'settings') => string) {
+  return {
+    primary: [
+      { to: '/', end: true, id: 'dashboard', label: t('home'), icon: LayoutDashboard },
+      { to: '/cv', end: false, id: 'cv', label: t('cvs'), icon: FileText },
+      { to: '/analyze', end: false, id: 'analyze', label: t('analyze'), icon: GitCompare },
+    ] as NavItem[],
+    secondary: [
+      { to: '/templates', end: false, id: 'templates', label: t('templates'), icon: Layout },
+      { to: '/settings', end: false, id: 'settings', label: t('settings'), icon: Settings },
+    ] as NavItem[],
+  }
+}
 
 function itemClass({ isActive }: { isActive: boolean }): string {
   return `w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs transition ${
@@ -75,6 +79,8 @@ function NavGroup({ items, id }: { items: NavItem[]; id: string }) {
 }
 
 export const Sidebar: React.FC = () => {
+  const { t } = useLocale();
+  const { primary, secondary } = navItems(t);
   return (
     <aside className="w-60 bg-slate-50/80 border-r border-slate-200/80 flex flex-col justify-between p-4 shrink-0 hidden md:flex">
       <div className="space-y-6">
