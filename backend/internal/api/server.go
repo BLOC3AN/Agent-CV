@@ -326,6 +326,10 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	if err != nil {
+		if isInvalidCVIdentifier(err) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+			return
+		}
 		if errors.Is(err, errV2NotBackfilled) {
 			// Không im lặng trả dữ liệu khác schema: client chỉ đọc CV v2.
 			writeJSON(w, http.StatusConflict, map[string]string{
@@ -357,6 +361,18 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
 		return
 	}
+	var normalizedLayout json.RawMessage
+	if len(body.Layout) > 0 {
+		var err error
+		// Legacy metadata PATCH is the only write path that accepts an empty
+		// stored layout. Normalize it before storage so a subsequent GET never
+		// has to recover from a value this handler just wrote.
+		normalizedLayout, err = normalizeCVLayout(body.Layout)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "layout không hợp lệ"})
+			return
+		}
+	}
 	sets, args := []string{}, []any{}
 	n := 1
 	if body.Title != nil {
@@ -376,7 +392,7 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	if len(body.Layout) > 0 {
 		sets = append(sets, fmt.Sprintf("layout = $%d::jsonb", n))
-		args = append(args, string(body.Layout))
+		args = append(args, string(normalizedLayout))
 		n++
 	}
 	if len(sets) == 0 {
