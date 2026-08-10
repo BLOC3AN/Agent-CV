@@ -1,5 +1,20 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { ApiError, deleteCV, getSession, listCVs, requestLogin } from '../src/lib/api.js'
+import { CVSchema, type CV } from '@hr/schema'
+import {
+  ApiError,
+  completeImport,
+  createCV,
+  deleteAccount,
+  deleteCV,
+  getCV,
+  getImportReview,
+  getJob,
+  getSession,
+  listCVs,
+  requestLogin,
+  saveCV,
+  uploadCV,
+} from '../src/lib/api.js'
 
 function mockFetch(status: number, body: unknown, contentType = 'application/json') {
   const spy = vi.fn(async () =>
@@ -14,6 +29,18 @@ function mockFetch(status: number, body: unknown, contentType = 'application/jso
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+// CV v2 tối giản hợp lệ theo CVSchema — dùng .parse() để mọi default (design,
+// activeSections, _meta...) được điền đúng như bộ chuyển đổi thật mong đợi,
+// thay vì tự bịa một object rồi ép kiểu `as CV` che mất lỗi hình dạng.
+const sampleCV: CV = CVSchema.parse({
+  schemaVersion: 2,
+  id: 'cv-1',
+  title: 'CV mẫu',
+  lastModified: '2026-08-10T00:00:00Z',
+  language: 'vi',
+  sections: { intro: { fullName: 'Nguyễn Văn A' } },
 })
 
 describe('listCVs', () => {
@@ -93,5 +120,139 @@ describe('requestLogin', () => {
 
     expect(JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)).toEqual({ email: 'a@b.com' })
     expect(result.devLink).toBe('http://x/verify?token=t')
+  })
+})
+
+// --- SP-3 Task 4: header opt-in v2 và các hàm CV/job/import mới ---
+
+describe('X-CV-Schema header', () => {
+  it('gắn X-CV-Schema: 2 vào MỌI lời gọi, không phải từng chỗ nhớ thì gắn', async () => {
+    const seen: HeadersInit[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+      seen.push(init?.headers ?? {})
+      return new Response(JSON.stringify({ cv: { id: 'x' }, items: [] }), { status: 200 })
+    }))
+
+    await getCV('cv-1')
+    await listCVs()
+
+    expect(seen.length).toBe(2)
+    for (const h of seen) {
+      expect(new Headers(h).get('X-CV-Schema')).toBe('2')
+    }
+  })
+})
+
+describe('getCV', () => {
+  it('gọi GET đúng đường dẫn và trả về cv từ body', async () => {
+    const spy = mockFetch(200, { cv: { id: 'cv-1', profileSnapshot: sampleCV, schemaVersion: 2 } })
+
+    const result = await getCV('cv-1')
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1')
+    expect(result.schemaVersion).toBe(2)
+    expect(result.profileSnapshot).toEqual(sampleCV)
+  })
+
+  it('409 V2_NOT_BACKFILLED thành thông điệp người đọc hiểu được', async () => {
+    mockFetch(409, { error: '...', code: 'V2_NOT_BACKFILLED' })
+
+    await expect(getCV('cv-1')).rejects.toThrow(/chưa có bản v2/i)
+  })
+})
+
+describe('saveCV', () => {
+  it('gửi CẢ HAI biểu diễn tới PATCH /api/cv/:id', async () => {
+    const spy = mockFetch(200, { ok: true })
+
+    await saveCV('cv-1', sampleCV)
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1')
+    expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'PATCH' })
+    const body = JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)
+    expect(body.cv.schemaVersion).toBe(2)
+    expect(body.profile.schemaVersion).toBe(1)
+  })
+
+  it('400 SCHEMA_PAIR_INVALID thành thông điệp người đọc hiểu được', async () => {
+    mockFetch(400, { error: '...', code: 'SCHEMA_PAIR_INVALID' })
+
+    await expect(saveCV('cv-1', sampleCV)).rejects.toThrow(/định dạng/i)
+  })
+})
+
+describe('createCV', () => {
+  it('gọi POST /api/cv với thông tin cơ bản', async () => {
+    const spy = mockFetch(201, { cvId: 'cv-2', profileId: 'p-2' })
+
+    const result = await createCV({ name: 'Trần Thị B', language: 'vi' })
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/cv')
+    expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'POST' })
+    expect(result).toEqual({ cvId: 'cv-2', profileId: 'p-2' })
+  })
+})
+
+describe('uploadCV', () => {
+  it('gửi file dạng multipart tới POST /api/uploads/cv, không tự set content-type', async () => {
+    const spy = mockFetch(202, { jobId: 'job-1', queued: true, uploadId: 'up-1' })
+    const file = new File([new Uint8Array([1, 2, 3])], 'cv.pdf', { type: 'application/pdf' })
+
+    const result = await uploadCV(file)
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/uploads/cv')
+    const init = (spy.mock.calls as any)[0]?.[1] as RequestInit
+    expect(init.method).toBe('POST')
+    expect(init.body).toBeInstanceOf(FormData)
+    // Trình duyệt tự sinh boundary cho multipart; ép content-type thủ công ở
+    // đây là hỏng request vì thiếu boundary.
+    expect(new Headers(init.headers).has('content-type')).toBe(false)
+    expect(result).toEqual({ jobId: 'job-1', queued: true, uploadId: 'up-1' })
+  })
+})
+
+describe('getJob', () => {
+  it('gọi GET /api/jobs/:id', async () => {
+    const spy = mockFetch(200, { id: 'job-1', kind: 'parse_cv', status: 'done', createdAt: '2026-08-10T00:00:00Z' })
+
+    const job = await getJob('job-1')
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/jobs/job-1')
+    expect(job.status).toBe('done')
+  })
+})
+
+describe('getImportReview', () => {
+  it('gọi GET /api/imports/:id', async () => {
+    const spy = mockFetch(200, { ready: false, status: 'processing' })
+
+    const review = await getImportReview('job-1')
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/imports/job-1')
+    expect(review.ready).toBe(false)
+  })
+})
+
+describe('completeImport', () => {
+  it('gọi POST /api/imports/:id/complete', async () => {
+    const spy = mockFetch(200, { cvId: 'cv-3', created: true })
+
+    const result = await completeImport('job-1')
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/imports/job-1/complete')
+    expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'POST' })
+    expect(result).toEqual({ cvId: 'cv-3', created: true })
+  })
+})
+
+describe('deleteAccount', () => {
+  it('gọi DELETE /api/account kèm email xác nhận', async () => {
+    const spy = mockFetch(200, { ok: true })
+
+    await deleteAccount('a@b.com')
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/account')
+    expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'DELETE' })
+    expect(JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)).toEqual({ confirmEmail: 'a@b.com' })
   })
 })
