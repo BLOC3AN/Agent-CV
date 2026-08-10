@@ -113,7 +113,7 @@ interface DocumentState {
   draft: DraftDocument | null
 }
 
-interface ProvenanceChange { path: string; after: unknown }
+interface ProvenanceChange { path: string; after?: unknown; exists: boolean }
 interface ProvenanceEntry { id: number; summary: string; changes: ProvenanceChange[] }
 
 const emptyDocuments: DocumentState = { committed: null, draft: null }
@@ -123,30 +123,43 @@ function cloneDocument(document: DraftDocument): DraftDocument {
 }
 
 function cloneValue(value: unknown): unknown {
+  if (value === undefined) return undefined
   return JSON.parse(JSON.stringify(value))
 }
 
 function collectChanges(before: unknown, after: unknown, path = ''): ProvenanceChange[] {
   if (deepEqual(before, after)) return []
   if (before && after && typeof before === 'object' && typeof after === 'object' && !Array.isArray(before) && !Array.isArray(after)) {
-    const keys = new Set([...Object.keys(before), ...Object.keys(after)])
-    return [...keys].flatMap((key) => collectChanges((before as Record<string, unknown>)[key], (after as Record<string, unknown>)[key], `${path}/${key}`))
+    const beforeRecord = before as Record<string, unknown>
+    const afterRecord = after as Record<string, unknown>
+    const keys = new Set([...Object.keys(beforeRecord), ...Object.keys(afterRecord)])
+    return [...keys].flatMap((key) => {
+      const childPath = `${path}/${key}`
+      if (!Object.prototype.hasOwnProperty.call(afterRecord, key)) {
+        return [{ path: childPath, exists: false }]
+      }
+      return collectChanges(beforeRecord[key], afterRecord[key], childPath)
+    })
   }
-  return [{ path, after: cloneValue(after) }]
+  return [{ path, after: cloneValue(after), exists: true }]
 }
 
-function valueAtPath(value: unknown, path: string): unknown {
-  if (!path) return value
-  return path.slice(1).split('/').reduce<unknown>((current, key) => {
-    if (!current || typeof current !== 'object') return undefined
-    return (current as Record<string, unknown>)[key]
-  }, value)
+function valueAtPath(value: unknown, path: string): { exists: boolean; value?: unknown } {
+  if (!path) return { exists: true, value }
+  let current: unknown = value
+  for (const key of path.slice(1).split('/')) {
+    if (!current || typeof current !== 'object' || !Object.prototype.hasOwnProperty.call(current, key)) return { exists: false }
+    current = (current as Record<string, unknown>)[key]
+  }
+  return { exists: true, value: current }
 }
 
 function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): ProvenanceEntry[] {
   return entries.map((entry) => ({ ...entry, changes: entry.changes.filter((change) => {
     const current = valueAtPath(draft, change.path)
-    return deepEqual(current, change.after) || (typeof current === 'string' && typeof change.after === 'string' && current.includes(change.after))
+    return change.exists
+      ? current.exists && (deepEqual(current.value, change.after) || (change.after !== '' && typeof current.value === 'string' && typeof change.after === 'string' && current.value.includes(change.after)))
+      : !current.exists
   }) })).filter((entry) => entry.changes.length > 0)
 }
 

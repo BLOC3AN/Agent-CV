@@ -4,7 +4,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { useCVStore } from '../src/lib/cv-store.js'
 import * as api from '../src/lib/api.js'
 import type { CV, CVLayout } from '../src/types.js'
-import { DEFAULT_CV_LAYOUT } from '@hr/schema'
+import { CVSchema, DEFAULT_CV_LAYOUT } from '@hr/schema'
+import { applyChatOpsToDraft } from '../src/lib/cv-patch.js'
 
 const cv = {
   id: 'cv-1',
@@ -235,5 +236,36 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
 
     expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Independent manual save' }), layout, 'user', undefined, 0)
+  })
+
+  it('accepts an optional-field remove proposal through chat ops and AI draft application', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, intro: { ...cv.sections.intro, availability: 'Now' } },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'remove', path: '/sections/intro/availability', rationale: 'Remove availability', grounding: { type: 'user_message', ref: 'Remove availability' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Remove availability'))
+
+    expect(result.current.draft?.cv.sections.intro.availability).toBeUndefined()
+    expect(result.current.pendingAIProvenance).toEqual(['Remove availability'])
+  })
+
+  it('labels a manual replacement as user after AI empties a string', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...cv, title: 'Independent manual' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: '' }, layout }, 'AI blanked title'))
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Independent manual' }, layout }))
+    expect(result.current.pendingAIProvenance).toEqual([])
+    await act(async () => result.current.saveDraft())
+
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Independent manual' }), layout, 'user', undefined, 0)
   })
 })
