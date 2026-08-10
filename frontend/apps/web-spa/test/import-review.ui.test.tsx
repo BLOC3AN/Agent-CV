@@ -256,6 +256,35 @@ describe('/import/:jobId/review', () => {
     expect(screen.getByRole('button', { name: /hoàn tất/i })).toBeDisabled()
   })
 
+  it('Hoàn tất vẫn khoá nếu client dựng ra một mục mà server không biết tới (chiều lệch còn lại của Finding 1, review vòng 2)', async () => {
+    // Chiều NGƯỢC của test trên: client build 2 mục (/basics, /education/0),
+    // cả hai đều "đã xác nhận" theo _meta.verified — nhưng server chỉ đếm
+    // được 1 mục (progress.total=1). Server không hề biết tới mục thứ hai,
+    // nên path của nó không nằm trong progress.pending — riêng lẻ mục đó vẫn
+    // hiện "Đã xác nhận" (đây là giới hạn đã biết, không sửa ở đây), nhưng
+    // Hoàn tất phải khoá vì TỔNG số mục hai bên đếm được khác nhau.
+    const profile = sampleProfile({
+      education: [{ school: 'Bách Khoa', degree: 'Kỹ sư', highlights: [] }],
+      _meta: { verified: { '/basics': true, '/education/0': true }, source: 'pdf_import' },
+    })
+    const review = reviewFor(profile) // items.length=2, nhưng ta giả lập server chỉ biết 1
+    const drifted = { ...review, progress: { done: 1, total: 1, complete: true, pending: [] } }
+    const getImportReview = vi.fn(async () => drifted)
+
+    renderReview({
+      getImportReview,
+      patchProfile: vi.fn(),
+      verifyProfile: vi.fn(),
+      completeImport: vi.fn(),
+    })
+
+    await screen.findByTestId('review-item-/education/0')
+    // Xoá điều kiện so khớp `progress.total === items.length` khỏi canFinish
+    // làm assertion này đỏ: pendingCount sẽ tính ra 0 (cả hai mục đều "đã xác
+    // nhận" theo pending=[]) và progress.complete=true, nên nút sẽ mở nhầm.
+    expect(screen.getByRole('button', { name: /hoàn tất/i })).toBeDisabled()
+  })
+
   it('hiện các field KHÔNG nằm trong danh sách hiển thị của mục — kể cả PII — trước khi user bấm Đúng rồi (Finding 2)', async () => {
     // `buildReviewItems` cho /basics chỉ hiện name/headline/email/phone/
     // location — nhưng "Đúng rồi" xác nhận cả /basics, bao gồm dob và photo
@@ -312,6 +341,52 @@ describe('/import/:jobId/review', () => {
       expect.arrayContaining([
         { op: 'add', path: '/work/0/highlights', value: ['Sửa dòng 1', 'Sửa dòng 2, có dấu phẩy'] },
       ]),
+    )
+  })
+
+  it('field mảng mang giá trị null (worker parse thật sinh ra khi mục không có gạch đầu dòng) vẫn sửa được như một mảng, không phải ô nhập một dòng (Finding 7, review vòng 2)', async () => {
+    // parseActivities/parseEducation (backend/cmd/worker/main.go) gán một
+    // slice nil khi mục không có highlight nào — Go marshal `nil []any`
+    // thành JSON `null`, không phải `[]`. Đây là dữ liệu THẬT, không phải ca
+    // dựng. Nếu toProfile không tự chuẩn hoá null → [] TRƯỚC khi
+    // buildReviewItems/editKindFor nhìn thấy nó, field này sẽ render thành
+    // ô nhập một dòng — sửa rồi xác nhận sẽ gửi một CHUỖI đè lên field
+    // z.array(z.string()), và patchProfile (server.go) áp patch không kiểm
+    // lại schema nên chuỗi sai kiểu đó được lưu thẳng.
+    const profile = sampleProfile({
+      activities: [{ name: 'CLB Kỹ năng', role: 'Thành viên', highlights: null as unknown as string[] }],
+    })
+    const review = reviewFor(profile)
+    const getImportReview = vi.fn(async () => review)
+    const patchProfile = vi.fn(
+      async (): Promise<PatchProfileResult> => ({ profile, revisionId: 1, applied: 1, rejected: [] }),
+    )
+    const verifyProfile = vi.fn(
+      async (): Promise<VerifyProfileResult> => ({ profile, progress: { complete: true } }),
+    )
+
+    renderReview({ getImportReview, patchProfile, verifyProfile, completeImport: vi.fn() })
+
+    // Nếu editKindFor thấy `null` (chưa được chuẩn hoá thành mảng), field này
+    // render thành <input> và findByLabelText vẫn "thấy" nó — phải kiểm rõ nó
+    // là MỘT VÙNG NHIỀU DÒNG (textarea/multiline), không phải input một dòng,
+    // để test này thật sự phân biệt hai nhánh của editKindFor.
+    const highlightsField = await screen.findByLabelText('Mô tả')
+    expect(highlightsField.tagName).toBe('TEXTAREA')
+
+    fireEvent.change(highlightsField, { target: { value: 'Tổ chức sự kiện' } })
+
+    const activityItem = screen.getByTestId('review-item-/activities/0')
+    const confirmBtn = within(activityItem).getByRole('button', { name: /đúng rồi/i })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() => expect(verifyProfile).toHaveBeenCalled())
+    // Đích: op mang giá trị MẢNG. Xoá `arrayOrEmpty` khỏi `toProfile` (hoặc bỏ
+    // áp nó cho activities[].highlights) làm assertion này đỏ, vì lúc đó
+    // value sẽ là chuỗi "Tổ chức sự kiện" thay vì mảng một phần tử.
+    expect(patchProfile).toHaveBeenCalledWith(
+      review.profileId,
+      expect.arrayContaining([{ op: 'add', path: '/activities/0/highlights', value: ['Tổ chức sự kiện'] }]),
     )
   })
 

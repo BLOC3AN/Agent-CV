@@ -32,6 +32,20 @@ export interface ImportReviewRouteProps {
 type Phase = 'loading' | 'pending' | 'ready' | 'error';
 
 /**
+ * Mảng con (`highlights`, `tech`, `links`) → chính nó nếu đã là mảng, `[]`
+ * nếu không (kể cả `null`/`undefined`).
+ *
+ * Vì sao cần: worker parse CV thật (`backend/cmd/worker/main.go`,
+ * `parseActivities`/`parseEducation`) gán một slice `nil` khi một mục không
+ * có gạch đầu dòng nào — Go marshal `nil []any` thành JSON `null`, không phải
+ * `[]`. Đây là dữ liệu THẬT sẽ tới, không phải ca dựng — không chờ backend tự
+ * sửa (việc đó được ghi nhận riêng), màn hình này phải tự đứng vững trước nó.
+ */
+function arrayOrEmpty<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+/**
  * Ép hồ sơ v1 thô (JSON tuỳ ý từ server, `unknown`) thành đủ hình dạng để
  * `buildReviewItems` chạy được — KHÔNG dùng `ProfileSchema.parse()`.
  *
@@ -41,6 +55,19 @@ type Phase = 'loading' | 'pending' | 'ready' | 'error';
  * `buildReviewItems` tự nó không validate gì (chỉ đọc field), nên chỉ cần bảo
  * đảm các mảng không bị `undefined` — rủi ro duy nhất là một mảng thiếu hẳn,
  * không phải field bên trong rỗng.
+ *
+ * Không chỉ mảng ở TẦNG NGOÀI (`education`, `work`, …) — các mảng NẰM TRONG
+ * từng phần tử (`work[i].highlights`, `projects[i].tech`, `basics.links`, …)
+ * cũng phải qua `arrayOrEmpty` ở ĐÂY, TRƯỚC khi `buildReviewItems`/
+ * `editKindFor` nhìn thấy chúng (review vòng 2, Finding 7). Nếu không: một
+ * field mảng mang giá trị `null` (worker parse thật sinh ra, xem
+ * `arrayOrEmpty` ở trên) khiến `editKindFor` — vốn CHỈ suy từ hình dạng, đúng
+ * như thiết kế — kết luận "không phải mảng" và render một ô nhập MỘT DÒNG.
+ * Sửa rồi xác nhận thì `patchProfile` gửi lên một CHUỖI đè lên field
+ * `z.array(z.string())` — `patchProfile` (server.go) áp patch không kiểm lại
+ * schema, nên chuỗi sai kiểu đó được lưu thẳng, và tầng matching JD
+ * (`stringArray`, matching.go) đọc một chuỗi ở chỗ đợi mảng thành rỗng — nội
+ * dung biến mất khỏi so khớp JD mà không có gì báo lỗi.
  */
 function toProfile(raw: unknown): Profile {
   const p = (raw ?? {}) as Partial<Profile>;
@@ -48,13 +75,26 @@ function toProfile(raw: unknown): Profile {
   return {
     schemaVersion: 1,
     language: p.language ?? 'vi',
-    basics: { name: '', links: [], ...basics },
-    education: p.education ?? [],
-    work: p.work ?? [],
-    projects: p.projects ?? [],
+    basics: { name: '', ...basics, links: arrayOrEmpty(basics.links) },
+    education: arrayOrEmpty<Profile['education'][number]>(p.education).map((e) => ({
+      ...e,
+      highlights: arrayOrEmpty(e.highlights),
+    })),
+    work: arrayOrEmpty<Profile['work'][number]>(p.work).map((w) => ({
+      ...w,
+      highlights: arrayOrEmpty(w.highlights),
+    })),
+    projects: arrayOrEmpty<Profile['projects'][number]>(p.projects).map((pr) => ({
+      ...pr,
+      tech: arrayOrEmpty(pr.tech),
+      highlights: arrayOrEmpty(pr.highlights),
+    })),
     skills: p.skills ?? [],
     certifications: p.certifications ?? [],
-    activities: p.activities ?? [],
+    activities: arrayOrEmpty<Profile['activities'][number]>(p.activities).map((a) => ({
+      ...a,
+      highlights: arrayOrEmpty(a.highlights),
+    })),
     languages: p.languages ?? [],
     _meta: p._meta ?? { verified: {}, source: 'pdf_import' },
   };
@@ -348,7 +388,14 @@ export function ImportReviewRoute({
   const pendingCount = items.filter(isItemPending).length;
   // Finding 1 (review vòng 1): bắt buộc đọc CẢ cờ `progress.complete` của
   // server LẪN `pendingCount` tự đối chiếu — xem comment ở đầu component.
-  const canFinish = phase === 'ready' && progress?.complete === true && pendingCount === 0;
+  // `progress.total !== items.length` là chiều lệch CÒN LẠI của Finding 1
+  // (review vòng 1): nếu client dựng ra một mục mà server không biết tới,
+  // path đó không nằm trong `progress.pending` (server không đếm nó), nên
+  // riêng lẻ nó vẫn hiện "Đã xác nhận" dù chưa ai xác nhận gì — nhưng tổng số
+  // mục hai bên đếm được sẽ khác nhau. So khớp tổng số là lưới an toàn RẺ cho
+  // đúng chiều lệch đó, dù không sửa được cách hiển thị của riêng mục thừa.
+  const totalsMatch = progress !== undefined && progress.total === items.length;
+  const canFinish = phase === 'ready' && progress?.complete === true && totalsMatch && pendingCount === 0;
 
   async function refreshProgress() {
     if (!jobId) return;
