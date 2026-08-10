@@ -7,7 +7,8 @@ import { initialCVs } from '../mockData';
 import { DashboardView } from '../components/DashboardView';
 import { MyCVsRoute } from './MyCVsRoute';
 import { NewCVRoute } from './NewCVRoute';
-import { createCV as apiCreateCV } from '../lib/api';
+import { ImportRoute } from './ImportRoute';
+import { createCV as apiCreateCV, uploadCV as apiUploadCV, getJob as apiGetJob } from '../lib/api';
 import { CVEditorView } from '../components/CVEditorView';
 import { JobMatchView } from '../components/JobMatchView';
 import { TemplatesView } from '../components/TemplatesView';
@@ -53,6 +54,11 @@ const protectedChildren: RouteObject[] = [
   // bây giờ để không ai vô tình thêm `cv/:id` phía trước sau này.
   { path: 'cv/new', element: <NewCVRoute createCV={apiCreateCV} /> },
   { path: 'cv', element: <MyCVsRoute /> },
+  // Đích của `onOpenUploadModal` trong `MyCVsView` (xem `MyCVsRoute.tsx`) —
+  // `/import/:jobId/review` (Task 7) là chặng BẮT BUỘC sau khi job xong,
+  // chưa đăng ký ở đây nên tạm thời khớp `NotFound`; route đó tự thêm khi
+  // Task 7 tới, không phải việc của task này.
+  { path: 'import', element: <ImportRoute uploadCV={apiUploadCV} getJob={apiGetJob} /> },
   // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
   // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
   // chỉ là dạng chọn sẵn khi tới từ một CV cụ thể.
