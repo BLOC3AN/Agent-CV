@@ -111,7 +111,7 @@ services:
   web:
     build:
       context: ..
-      dockerfile: frontend/apps/web/Dockerfile
+      dockerfile: frontend/apps/web-spa/Dockerfile
     container_name: hr-web
     restart: unless-stopped
     environment:
@@ -119,7 +119,7 @@ services:
       # Dev default giúp `docker compose` quản lý từng service; production
       # phải ghi đè bằng AUTH_SECRET thật trong .env/secret manager.
       AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me}
-      GO_BACKEND_URL: http://backend:8080
+      BACKEND_URL: http://backend:8080
     ports:
       - '3000:3000'
     volumes:
@@ -129,20 +129,20 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
-  # SPA mới — chạy song song với `web` (Next) suốt SP-1..SP-4.
-  # Cổng 3002 chứ không 3000: việc chiếm cổng 3000 là bước cutover ở SP-5.
-  web-spa:
+  # Rollback target: giữ Next sẵn ở cổng 3001 trong cửa sổ theo dõi cutover.
+  # Không nhận traffic production mặc định; bật bằng `--profile rollback`.
+  web-next-rollback:
+    profiles: ['rollback']
     build:
       context: ..
-      dockerfile: frontend/apps/web-spa/Dockerfile
-    container_name: hr-web-spa
+      dockerfile: frontend/apps/web/Dockerfile
+    container_name: hr-web-next-rollback
     restart: unless-stopped
     environment:
-      PORT: 3002
       NODE_ENV: production
-      BACKEND_URL: http://backend:8080
+      GO_BACKEND_URL: http://backend:8080
     ports:
-      - '3002:3002'
+      - '3001:3000'
     depends_on:
       backend: { condition: service_started }
 

@@ -1,6 +1,7 @@
 import express from 'express'
 import path from 'node:path'
 import { createApiProxy } from './proxy.js'
+import { createPrintHandler } from './print.js'
 
 export interface AppOptions {
   backendURL: string
@@ -26,6 +27,7 @@ export async function createApp(options: AppOptions): Promise<express.Express> {
   const production = options.production ?? process.env.NODE_ENV === 'production'
 
   app.all('/api/*', createApiProxy(options.backendURL))
+  app.get('/print/:cvId', createPrintHandler(options.backendURL))
 
   if (options.serveApp === false) return app
 

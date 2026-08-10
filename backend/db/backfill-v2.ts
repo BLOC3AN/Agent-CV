@@ -129,6 +129,13 @@ if (!rollback) {
         row.id,
         JSON.stringify(cv),
       ])
+      // SP-5 publication reads the immutable document snapshot, not the
+      // mutable profile row. Keep every CV document belonging to this
+      // profile publishable in the same backfill pass.
+      await client.query(
+        'UPDATE cv_documents SET snapshot_v2 = $2::jsonb WHERE profile_id = $1',
+        [row.id, JSON.stringify(cv)],
+      )
       ok++
     } catch (err) {
       failures.push({ id: row.id, reason: (err as Error).message })
@@ -155,6 +162,7 @@ if (!rollback) {
         row.id,
         JSON.stringify(restored),
       ])
+      await client.query('UPDATE cv_documents SET snapshot_v2 = NULL WHERE profile_id = $1', [row.id])
       ok++
     } catch (err) {
       failures.push({ id: row.id, reason: (err as Error).message })
