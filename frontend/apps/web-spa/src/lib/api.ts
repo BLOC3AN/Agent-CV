@@ -309,6 +309,19 @@ export async function patchProfile(
 
 export interface VerifyProfileResult {
   profile: unknown
+  /**
+   * KHÔNG phải tiến độ rà soát — server.go dòng ~876 trả nguyên văn
+   * `{"complete": verified}`, với `verified` là chính cờ `verified` gửi lên
+   * trong body request (mặc định `true`), không phải một phép tính lại trên
+   * toàn bộ `_meta.verified`. Gọi `verifyProfile(id, paths, true)` thì trường
+   * này LUÔN là `{complete: true}` dù còn 10 mục khác chưa xác nhận — tên
+   * field trùng với `ImportReview.progress` (đúng hình dạng
+   * `{done,total,complete,pending}`) nhưng KHÔNG cùng ý nghĩa.
+   *
+   * Review vòng 1 (Minor 2): giữ field này vì server thật sự trả về nó, nhưng
+   * đừng dùng nó để mở khoá bất cứ nút nào — `ImportReviewRoute` cố tình bỏ
+   * qua field này và gọi lại `getImportReview` để lấy `progress` thật.
+   */
   progress: { complete: boolean }
 }
 

@@ -1,10 +1,10 @@
 import '@testing-library/jest-dom/vitest'
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom'
 import { buildReviewItems, reviewProgress, type Profile } from '@hr/schema'
-import { ImportReviewRoute } from '../src/routes/ImportReviewRoute.js'
+import { ImportReviewRoute, editKindFor } from '../src/routes/ImportReviewRoute.js'
 import { ApiError } from '../src/lib/api.js'
 import type {
   ImportReview,
@@ -228,5 +228,136 @@ describe('/import/:jobId/review', () => {
     const retryBtn = screen.getByRole('button', { name: /thử lại/i })
     await userEvent.click(retryBtn)
     expect(getImportReview).toHaveBeenCalledTimes(2)
+  })
+
+  // --- Fix vòng 1: 3 Important + 3 Minor từ review ---
+
+  it('Hoàn tất vẫn khoá nếu server nói progress.complete=false, dù client tự đếm ra 0 mục pending (Finding 1)', async () => {
+    // `buildReviewItems` (client) và `reviewContract` (server, Go) là HAI cài
+    // đặt độc lập của cùng một hợp đồng — mô phỏng trường hợp chúng LỆCH
+    // NHAU: progress.pending rỗng (client sẽ đếm ra 0 mục pending) nhưng
+    // progress.complete vẫn false. Nếu canFinish chỉ đọc pendingCount tự đối
+    // chiếu mà bỏ qua progress.complete, nút sẽ mở khoá sai ở đây.
+    const profile = sampleProfile()
+    const drifted = { ...reviewFor(profile), progress: { done: 1, total: 1, complete: false, pending: [] } }
+    const getImportReview = vi.fn(async () => drifted)
+
+    renderReview({
+      getImportReview,
+      patchProfile: vi.fn(),
+      verifyProfile: vi.fn(),
+      completeImport: vi.fn(),
+    })
+
+    // pending: [] rỗng khiến mục /basics hiện "Đã xác nhận" (client tin server
+    // không còn gì pending) — nhưng progress.complete vẫn false, nên đây
+    // chính xác là ca cần Hoàn tất khoá dù client không đếm ra mục nào pending.
+    await screen.findByTestId('review-item-/basics')
+    expect(screen.getByRole('button', { name: /hoàn tất/i })).toBeDisabled()
+  })
+
+  it('hiện các field KHÔNG nằm trong danh sách hiển thị của mục — kể cả PII — trước khi user bấm Đúng rồi (Finding 2)', async () => {
+    // `buildReviewItems` cho /basics chỉ hiện name/headline/email/phone/
+    // location — nhưng "Đúng rồi" xác nhận cả /basics, bao gồm dob và photo
+    // (PII_PATHS, profile.ts). Người dùng phải THẤY được hai field đó trước
+    // khi xác nhận, không phải bị xác nhận thay sight-unseen.
+    const longPhoto = 'data:image/png;base64,' + 'A'.repeat(200)
+    const profile = sampleProfile({
+      basics: { name: 'Nguyen Van A', dob: '1999-01-01', photo: longPhoto, links: [] },
+    })
+
+    renderReview({
+      getImportReview: vi.fn(async () => reviewFor(profile)),
+      patchProfile: vi.fn(),
+      verifyProfile: vi.fn(),
+      completeImport: vi.fn(),
+    })
+
+    const basicsItem = await screen.findByTestId('review-item-/basics')
+    expect(within(basicsItem).getByText('1999-01-01')).toBeInTheDocument()
+    // Ảnh dài không được in nguyên văn (phá bố cục) — chỉ báo có/không.
+    expect(within(basicsItem).getByText('Có ảnh đính kèm')).toBeInTheDocument()
+    expect(within(basicsItem).queryByText(longPhoto)).not.toBeInTheDocument()
+  })
+
+  it('sửa "Mô tả" (highlights) nhiều dòng rồi xác nhận thì gửi đi MẢNG đã sửa, không phải chuỗi nối dấu phẩy (Finding 3)', async () => {
+    // review.ts nối highlights bằng ", " chỉ để HIỂN THỊ — patch lại phải là
+    // mảng thật, nguồn từ profile thô, không phải tách ngược chuỗi đã nối.
+    const profile = sampleProfile({
+      work: [{ org: 'Cty A', role: 'Dev', highlights: ['Dòng gốc 1', 'Dòng gốc 2'] }],
+    })
+    const review = reviewFor(profile)
+    const getImportReview = vi.fn(async () => review)
+    const patchProfile = vi.fn(
+      async (): Promise<PatchProfileResult> => ({ profile, revisionId: 1, applied: 1, rejected: [] }),
+    )
+    const verifyProfile = vi.fn(
+      async (): Promise<VerifyProfileResult> => ({ profile, progress: { complete: true } }),
+    )
+
+    renderReview({ getImportReview, patchProfile, verifyProfile, completeImport: vi.fn() })
+
+    const highlightsInput = await screen.findByLabelText('Mô tả')
+    fireEvent.change(highlightsInput, { target: { value: 'Sửa dòng 1\nSửa dòng 2, có dấu phẩy' } })
+
+    // Hồ sơ có cả /basics lẫn /work/0 nên có HAI nút "Đúng rồi" — bấm đúng
+    // nút của mục chứa field vừa sửa (/work/0), không phải nút đầu tiên vớ được.
+    const workItem = screen.getByTestId('review-item-/work/0')
+    const confirmBtn = within(workItem).getByRole('button', { name: /đúng rồi/i })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() => expect(verifyProfile).toHaveBeenCalled())
+    expect(patchProfile).toHaveBeenCalledWith(
+      review.profileId,
+      expect.arrayContaining([
+        { op: 'add', path: '/work/0/highlights', value: ['Sửa dòng 1', 'Sửa dòng 2, có dấu phẩy'] },
+      ]),
+    )
+  })
+
+  it('editKindFor suy cách sửa từ HÌNH DẠNG thật của giá trị, không phải một danh sách hậu tố cố định (Minor 1)', () => {
+    // Trước bản vá: một denylist hậu tố (`endsWith('/highlights')`, …) canh
+    // theo field list của review.ts — package khác. Thêm field mảng-object
+    // mới ở đó mà quên cập nhật denylist thì màn hình PATCH chuỗi đè lên mảng.
+    // Suy từ hình dạng thì không còn danh sách nào để quên cập nhật.
+    expect(editKindFor('một chuỗi bất kỳ')).toBe('text')
+    expect(editKindFor(undefined)).toBe('text')
+    expect(editKindFor(['Dòng 1', 'Dòng 2'])).toBe('list')
+    expect(editKindFor([])).toBe('list')
+    expect(editKindFor([{ label: 'GitHub', url: 'https://x' }])).toBe('readonly')
+    expect(editKindFor([{ name: 'Python', level: 'advanced' }])).toBe('readonly')
+  })
+
+  it('lưu xác nhận thành công nhưng tải lại tiến độ hỏng thì KHÔNG báo "lưu thất bại" — báo đúng lỗi tải lại, Hoàn tất vẫn khoá (Minor 3)', async () => {
+    const profile = sampleProfile()
+    const review = reviewFor(profile) // chỉ /basics, đang pending
+    const getImportReview = vi
+      .fn<(jobId: string) => Promise<ImportReview>>()
+      .mockResolvedValueOnce(review) // tải ban đầu
+      .mockRejectedValueOnce(new ApiError(500, 'Mất kết nối khi tải lại tiến độ'))
+    const verifyProfile = vi.fn(
+      async (): Promise<VerifyProfileResult> => ({ profile, progress: { complete: true } }),
+    )
+
+    renderReview({ getImportReview, patchProfile: vi.fn(), verifyProfile, completeImport: vi.fn() })
+
+    const confirmBtn = await screen.findByRole('button', { name: /đúng rồi/i })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() => expect(verifyProfile).toHaveBeenCalled())
+    // Mục hiện đã xác nhận (lạc quan cục bộ) dù chưa tải lại được progress mới.
+    expect(await screen.findByRole('button', { name: /đã xác nhận/i })).toBeInTheDocument()
+    // Lỗi tải lại phải xuất hiện dưới dạng banner CÓ NÚT "Tải lại tiến độ" —
+    // đúng nhánh `refreshError`. Nếu code gộp nhầm lỗi refetch vào
+    // `itemErrors` của riêng mục đó (mất phân biệt "lưu" vs "tải lại"), nút
+    // này sẽ không xuất hiện dù message text có thể trùng nhau ở cả hai chỗ.
+    expect(await screen.findByRole('button', { name: /tải lại tiến độ/i })).toBeInTheDocument()
+    // Và bên trong CHÍNH mục /basics không được có lỗi riêng — patch+verify
+    // của nó đã thành công thật, "lưu thất bại" là sai sự thật ở đây.
+    const basicsItem = screen.getByTestId('review-item-/basics')
+    expect(within(basicsItem).queryByText(/mất kết nối|không lưu được xác nhận/i)).not.toBeInTheDocument()
+    // Hoàn tất vẫn khoá vì progress của server (nguồn xác thực duy nhất cho
+    // canFinish) chưa cập nhật được.
+    expect(screen.getByRole('button', { name: /hoàn tất/i })).toBeDisabled()
   })
 })
