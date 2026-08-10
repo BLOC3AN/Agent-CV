@@ -533,9 +533,24 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Create: `frontend/apps/web-spa/test/new-cv.ui.test.tsx`
 - Modify: `frontend/apps/web-spa/src/routes/routes.tsx`
 
+> **Ràng buộc bắt buộc, phát hiện ở Task 3.** `POST /api/cv` tạo ra một CV có
+> `data` nhưng **chưa có `data_v2`**. Theo Task 2, mọi lời gọi GET kèm header v2
+> lên hàng đó trả **409 `V2_NOT_BACKFILLED`**. Nghĩa là nếu `/cv/new` chuyển
+> thẳng sang builder và builder đọc bằng header v2, người dùng đâm vào bức tường
+> 409 trên chính CV họ vừa tạo.
+>
+> Chọn một trong hai và ghi rõ đã chọn cái nào: (a) gieo `data_v2` ngay sau khi
+> tạo, đồng bộ, trước khi điều hướng; hoặc (b) builder coi 409 là "CV rỗng, hiện
+> khung trắng" thay vì lỗi. Không được để mặc — đây là đường đi của **mọi** CV
+> tạo mới, không phải ca hiếm.
+
 - [ ] **Step 1: Viết test thất bại**
 
 ```tsx
+it('CV vừa tạo mở được ngay, không đâm vào 409 V2_NOT_BACKFILLED', async () => {
+  // Ràng buộc từ Task 3: CV mới có data nhưng chưa có data_v2.
+})
+
 it('tạo CV rỗng rồi chuyển sang builder của chính CV vừa tạo', async () => {
   const created = vi.fn(async () => ({ id: 'cv-moi' }))
   render(<NewCVRoute createCV={created} />, { wrapper: MemoryRouter })
@@ -693,7 +708,22 @@ Kỳ vọng: `24/24 cặp khớp`.
 
 ---
 
-### Task 10: Trả nợ SP-2 — tám chỗ đọc v1 trong matching.go
+### Task 10: Test chạm DB thật, và trả nợ tám chỗ đọc v1 trong matching.go
+
+**Phần A — hạ tầng test chạm database.** Task 2 và Task 3 đều dừng lại ở cùng một bức tường: `NewServer()` không có database, nên mọi thứ chạm SQL chỉ được review nhìn bằng mắt. Cụ thể, ba thứ sau **không có test nào bảo vệ**, và cả ba đều là chỗ hỏng thì hỏng ngầm:
+
+1. **Tính nguyên tử của `patchCVPair`.** Xoá `defer tx.Rollback()`, tách thành hai transaction, hoặc bỏ hẳn câu `UPDATE` thứ hai — không test nào đỏ. Mà đó chính là điều Task 3 mang tên.
+2. **Dịch `errV2NotBackfilled` thành HTTP 409.** Xoá nhánh `errors.Is` hoặc `return` của nó — không test nào đỏ.
+3. **Điều kiện `p.user_id = $2`.** Chỉ có review chứng kiến.
+
+Dựng một harness dùng chính Postgres đang chạy: tạo user và CV riêng cho test trong một transaction rồi rollback ở cuối, hoặc dùng schema tạm rồi `DROP SCHEMA`. **Không được đụng tới 24 hồ sơ thật.** Gắn vào vitest project `integration` hoặc một build tag Go riêng, để `go test ./...` mặc định vẫn chạy được khi không có DB.
+
+Ba ca tối thiểu, mỗi ca phải đỏ khi xoá dòng nó bảo vệ:
+- Ghi hỏng ở câu `UPDATE` thứ hai → **cả hai** cột giữ nguyên giá trị cũ.
+- `GET /api/cv/:id` với header, trên hàng chưa có `data_v2` → 409 kèm `V2_NOT_BACKFILLED`.
+- `GET /api/cv/:id` với id của người khác → không trả nội dung, kể cả khi `cv_documents.user_id` bị làm cho lệch khỏi `profiles.user_id`.
+
+**Phần B — tám chỗ đọc v1 trong matching.go.**
 
 **Files:**
 - Modify: `backend/cmd/worker/matching.go`
