@@ -354,10 +354,23 @@ function changeMatchesNetChange(change: ProvenanceChange, netChanges: Provenance
   })
 }
 
-function introducesNewScalarContent(change: ProvenanceChange, immediateBefore: unknown, committedValue: unknown): boolean {
-  if (change.arrayKind || typeof immediateBefore !== 'string' || typeof change.after !== 'string') return true
-  if (change.after === committedValue) return true
-  return !(immediateBefore.includes(change.after) && immediateBefore !== change.after)
+function sameLogicalChange(left: ProvenanceChange, right: ProvenanceChange): boolean {
+  if (left.arrayItemId && right.arrayItemId && left.arrayItemCollectionPath && right.arrayItemCollectionPath && left.arrayItemFieldPath && right.arrayItemFieldPath) {
+    return left.arrayItemId === right.arrayItemId
+      && left.arrayItemCollectionPath === right.arrayItemCollectionPath
+      && left.arrayItemFieldPath === right.arrayItemFieldPath
+  }
+  return left.path === right.path
+}
+
+function onlyRemovesPriorScalarContribution(change: ProvenanceChange, immediateBefore: unknown, priorChanges: ProvenanceChange[]): boolean {
+  if (change.arrayKind || typeof immediateBefore !== 'string' || typeof change.after !== 'string') return false
+  return priorChanges.some((prior) => {
+    if (prior.arrayKind || typeof prior.after !== 'string' || !sameLogicalChange(change, prior)) return false
+    if (!immediateBefore.includes(prior.after)) return false
+    const residual = immediateBefore.replace(prior.after, '').trim()
+    return change.after === residual
+  })
 }
 
 function normalizeDocument(document: DraftDocument, legacyVisibility = false): DraftDocument {
@@ -400,6 +413,7 @@ export function useCVStore(id: string) {
   const [pendingAIProvenance, setPendingAIProvenance] = useState<ProvenanceEntry[]>([])
   const provenanceRef = useRef<ProvenanceEntry[]>([])
   const provenanceIDRef = useRef(0)
+  const inFlightProvenanceIDsRef = useRef(new Set<number>())
   const documentVersionRef = useRef(0)
   const pendingSaveRef = useRef<Promise<void> | undefined>(undefined)
 
@@ -425,6 +439,7 @@ export function useCVStore(id: string) {
       setProfileId(envelope.profileId)
       setBaseRevision(envelope.revisionNumber ?? 0)
       provenanceRef.current = []
+      inFlightProvenanceIDsRef.current.clear()
       setPendingAIProvenance([])
       setStatus('ready')
     } catch (err) {
@@ -458,13 +473,15 @@ export function useCVStore(id: string) {
     documentVersionRef.current += 1
     const changes = current.draft ? collectChanges(current.draft, draft) : []
     const netChanges = collectChanges(current.committed, draft)
-    const priorAIPaths = new Set(provenanceRef.current.flatMap((entry) => entry.changes.map((change) => change.path)))
+    const priorAIEntries = provenanceRef.current.map((entry) => ({ entry, changes: entry.changes }))
     provenanceRef.current = reconcileProvenance(provenanceRef.current, draft)
     const survivingChanges = changes.filter((change) => {
       if (!changeMatchesNetChange(change, netChanges)) return false
       const immediateBefore = current.draft ? valueAtPath(current.draft, change.path).value : undefined
-      const committedValue = valueAtPath(current.committed, change.path).value
-      return !priorAIPaths.has(change.path) || introducesNewScalarContent(change, immediateBefore, committedValue)
+      const priorChanges = priorAIEntries
+        .filter(({ entry }) => !inFlightProvenanceIDsRef.current.has(entry.id))
+        .flatMap(({ changes: entryChanges }) => entryChanges)
+      return !onlyRemovesPriorScalarContribution(change, immediateBefore, priorChanges)
     })
     if (survivingChanges.length) provenanceRef.current = [...provenanceRef.current, { id: ++provenanceIDRef.current, summary, changes: survivingChanges }]
     setPendingAIProvenance(provenanceRef.current)
@@ -492,6 +509,7 @@ export function useCVStore(id: string) {
 
     const saveVersion = documentVersionRef.current
     const savedProvenance = [...provenanceRef.current]
+    inFlightProvenanceIDsRef.current = new Set(savedProvenance.map((entry) => entry.id))
     const source = savedProvenance.length ? 'ai' : 'user'
     const message = savedProvenance.length ? savedProvenance.map((entry) => entry.summary).join('\n') : undefined
     const saveBaseRevision = baseRevision
@@ -514,6 +532,7 @@ export function useCVStore(id: string) {
         setBaseRevision(result.revision?.number ?? result.cv.revisionNumber ?? saveBaseRevision + 1)
         const savedIDs = new Set(savedProvenance.map((entry) => entry.id))
         provenanceRef.current = provenanceRef.current.filter((entry) => !savedIDs.has(entry.id))
+        for (const savedID of savedIDs) inFlightProvenanceIDsRef.current.delete(savedID)
         setPendingAIProvenance(provenanceRef.current)
         setStatus(documentsEqual(committed, draft) ? 'saved' : 'dirty')
       } catch (err) {
@@ -521,6 +540,7 @@ export function useCVStore(id: string) {
         setError(err instanceof ApiError ? err.message : 'Không lưu được CV')
         throw err
       } finally {
+        for (const savedEntry of savedProvenance) inFlightProvenanceIDsRef.current.delete(savedEntry.id)
         if (pendingSaveRef.current === pending) pendingSaveRef.current = undefined
         setSavePending(false)
       }

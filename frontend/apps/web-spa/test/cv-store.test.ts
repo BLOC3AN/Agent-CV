@@ -713,4 +713,55 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
     expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: proposedTitle }), layout, 'ai', 'AI scalar removal', 0)
   })
+
+  it.each([
+    ['residual shortening', 'Man'],
+    ['residual blanking', ''],
+  ])('attributes later AI changes that alter the manual residual: %s', async (_label, proposedTitle) => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...cv, title: proposedTitle }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: 'AI fragment' }, layout }, 'AI A'))
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'AI fragment Manual' }, layout }))
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: proposedTitle }, layout }, 'AI B'))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: proposedTitle }), layout, 'ai', 'AI B', 0)
+  })
+
+  it('cancels same-field AI content after a stable-ID item reorder', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '' }, { id: 'exp-2', title: 'Designer', company: '' }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...source, title: 'CV' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...source, sections: { ...source.sections, experience: [{ ...source.sections.experience[0]!, title: 'AI fragment' }, source.sections.experience[1]!] } }, layout }, 'AI A'))
+    const reordered = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...reordered.cv, sections: { ...reordered.cv.sections, experience: [reordered.cv.sections.experience[1]!, { ...reordered.cv.sections.experience[0]!, title: 'AI fragment Manual' }] } }, layout: reordered.layout }))
+    const current = result.current.getDraft()!
+    act(() => result.current.applyAIDraft({ cv: { ...current.cv, sections: { ...current.cv.sections, experience: [current.cv.sections.experience[0]!, { ...current.cv.sections.experience[1]!, title: 'Manual' }] } }, layout: current.layout }, 'AI B'))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'user', undefined, 0)
+  })
+
+  it('preserves newer AI blanking while an older scalar save is in flight', async () => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', title: 'Senior Engineer' }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const first = deferred<api.CVCommitResult>()
+    const commit = vi.spyOn(api, 'commitCV').mockReturnValueOnce(first.promise).mockResolvedValueOnce(commitResult({ ...source, title: '' }, 2))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'Engineer' }, layout }, 'AI truncate'))
+    let saving!: Promise<void>
+    act(() => { saving = result.current.saveDraft() })
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: '' }, layout }, 'AI blank'))
+    first.resolve(commitResult({ ...source, title: 'Engineer' }, 1))
+    await act(async () => { await saving })
+    expect(result.current.pendingAIProvenance).toEqual(['AI blank'])
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenLastCalledWith('cv-1', expect.objectContaining({ title: '' }), layout, 'ai', 'AI blank', 1)
+  })
 })

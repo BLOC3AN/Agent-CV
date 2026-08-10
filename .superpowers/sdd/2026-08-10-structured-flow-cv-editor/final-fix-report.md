@@ -93,3 +93,12 @@ The finding in `FINAL-MERGE-REVIEW-8.md` is resolved:
 - Same-path scalar cancellation filtering now checks whether an earlier AI provenance entry existed on that exact path before suppressing substring-only changes. Standalone AI truncation and blanking therefore remain AI-attributed, while the earlier AI-fragment/manual-residual/AI-cancellation sequence still clears.
 
 Added AI-only truncation and blanking regressions while retaining the cancellation regression. Verification passed: focused store 47/47, full frontend 26 files / 231 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.
+
+## Round 14 follow-up
+
+The findings in `FINAL-MERGE-REVIEW-9.md` are resolved:
+
+- Prior scalar provenance is matched by stable item ID, collection, and logical field path when available, with raw-path matching retained for non-item fields. Same-field cancellation therefore survives supported stable-ID item reorders.
+- Cancellation suppression now removes only a prior, non-in-flight AI scalar contribution when the resulting value is exactly the residual left after that contribution is removed. Later shortening/blanking of the manual residual remains AI-attributed, and entries captured by an older in-flight save do not suppress newer AI work.
+
+Added regressions cover stable-ID reorder cancellation, residual shortening, residual blanking, and newer in-flight AI blanking. Verification passed: focused store 51/51, full frontend 26 files / 235 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.
