@@ -265,6 +265,70 @@ export async function getImportReview(jobId: string): Promise<ImportReview> {
   return request<ImportReview>(`/api/imports/${encodeURIComponent(jobId)}`)
 }
 
+/**
+ * Một thao tác JSON Patch RFC 6902 thô — KHÔNG phải `PatchOp` của `@hr/schema`
+ * (`packages/schema/src/patch.ts`), thứ đó là đề xuất CỦA AI và bắt buộc kèm
+ * `rationale`/`grounding` để user duyệt trước khi áp. Ở đây là user tự tay sửa
+ * một field trên chính màn rà soát của họ — không có gì để "duyệt" thêm một
+ * lớp nữa — nên chỉ cần hình dạng tối thiểu mà `applyJSONPatch` (server.go,
+ * dùng thư viện `evanphx/json-patch`) đọc được.
+ */
+export interface JSONPatchOp {
+  op: 'add' | 'remove' | 'replace' | 'move' | 'copy' | 'test'
+  path: string
+  value?: unknown
+  from?: string
+}
+
+export interface PatchProfileResult {
+  profile: unknown
+  revisionId: number
+  applied: number
+  rejected: unknown[]
+}
+
+/**
+ * `PATCH /api/profiles/:id` (patchProfile, server.go dòng ~577) — đích duy
+ * nhất nơi một sửa tại chỗ ở màn rà soát (`ImportReviewRoute`, Task 7) thực sự
+ * được lưu. Dùng `op: 'add'` thay vì `'replace'` cho field vốn có thể vắng mặt
+ * (vd. `headline` model không trích ra được): theo RFC 6902, `add` tại một
+ * field object đã tồn tại là ghi đè, còn `replace` đòi field đó PHẢI có sẵn từ
+ * trước — model bỏ sót field nào thì patch đó vỡ ngay tại field cần sửa nhất.
+ */
+export async function patchProfile(
+  profileId: string,
+  ops: JSONPatchOp[],
+  author: 'user' | 'ai' | 'import' = 'user',
+): Promise<PatchProfileResult> {
+  return request<PatchProfileResult>(`/api/profiles/${encodeURIComponent(profileId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ops, author }),
+  })
+}
+
+export interface VerifyProfileResult {
+  profile: unknown
+  progress: { complete: boolean }
+}
+
+/**
+ * `POST /api/profiles/:id/verify` (verifyProfile, server.go dòng ~819) — nơi
+ * `_meta.verified` thật sự được ghi. Đây là hành động "Đúng rồi" của UC-22:
+ * xác nhận CẢ MỤC (`/basics`, `/work/0`, …), không phải từng field lẻ.
+ */
+export async function verifyProfile(
+  profileId: string,
+  paths: string[],
+  verified = true,
+): Promise<VerifyProfileResult> {
+  return request<VerifyProfileResult>(`/api/profiles/${encodeURIComponent(profileId)}/verify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ paths, verified }),
+  })
+}
+
 export interface CompleteImportResult {
   cvId: string
   created: boolean

@@ -11,9 +11,11 @@ import {
   getJob,
   getSession,
   listCVs,
+  patchProfile,
   requestLogin,
   saveCV,
   uploadCV,
+  verifyProfile,
 } from '../src/lib/api.js'
 
 function mockFetch(status: number, body: unknown, contentType = 'application/json') {
@@ -230,6 +232,39 @@ describe('getImportReview', () => {
 
     expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/imports/job-1')
     expect(review.ready).toBe(false)
+  })
+})
+
+describe('patchProfile', () => {
+  it('gửi ops dạng MẢNG THẬT (không phải chuỗi JSON) tới PATCH /api/profiles/:id', async () => {
+    // `Ops` phía Go là `json.RawMessage` — nếu client gói `ops` thành chuỗi
+    // (`JSON.stringify(ops)` rồi lại `JSON.stringify` một lần nữa ở body),
+    // `json.Unmarshal(body.Ops, &ops)` nhận một chuỗi thay vì mảng và ném lỗi
+    // kiểu, route trả 400 ngay cả khi ops hợp lệ.
+    const spy = mockFetch(200, { profile: { schemaVersion: 1 }, revisionId: 1, applied: 1, rejected: [] })
+
+    await patchProfile('profile-1', [{ op: 'add', path: '/basics/name', value: 'Nguyễn Văn A' }])
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/profiles/profile-1')
+    expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'PATCH' })
+    const body = JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)
+    expect(Array.isArray(body.ops)).toBe(true)
+    expect(body.ops).toEqual([{ op: 'add', path: '/basics/name', value: 'Nguyễn Văn A' }])
+    expect(body.author).toBe('user')
+  })
+})
+
+describe('verifyProfile', () => {
+  it('gọi POST /api/profiles/:id/verify kèm danh sách path', async () => {
+    const spy = mockFetch(200, { profile: { schemaVersion: 1 }, progress: { complete: true } })
+
+    const result = await verifyProfile('profile-1', ['/basics', '/education/0'])
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/profiles/profile-1/verify')
+    expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'POST' })
+    const body = JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)
+    expect(body).toEqual({ paths: ['/basics', '/education/0'], verified: true })
+    expect(result.progress.complete).toBe(true)
   })
 })
 
