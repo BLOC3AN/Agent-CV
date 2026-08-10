@@ -77,6 +77,86 @@ describe('CV version history', () => {
     expect(screen.getByText('After name')).toBeInTheDocument()
   })
 
+  it('keeps the latest selected revision when preview responses resolve out of order', async () => {
+    const previewFive = deferred<Awaited<ReturnType<typeof api.getCVRevision>>>()
+    const previewFour = deferred<Awaited<ReturnType<typeof api.getCVRevision>>>()
+    vi.spyOn(api, 'listCVRevisions').mockResolvedValue([
+      revision('revision-5', 5, 'ai'),
+      revision('revision-4', 4, 'user'),
+    ])
+    vi.spyOn(api, 'getCVRevision').mockImplementation((_, revisionId) => revisionId === 'revision-5' ? previewFive.promise : previewFour.promise)
+    renderBuilder()
+
+    const dialog = await openHistory()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xem trước phiên bản 5' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xem trước phiên bản 4' }))
+    expect(screen.getByText('Đang tải bản xem trước…')).toBeInTheDocument()
+
+    await act(async () => previewFour.resolve({
+      before: { profileSnapshot: { ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'Before four' } } }, layout },
+      revision: { ...revision('revision-4', 4, 'user'), profileSnapshot: { ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'After four' } } }, layout },
+    } as never))
+    await act(async () => previewFive.resolve({
+      before: { profileSnapshot: { ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'Before five' } } }, layout },
+      revision: { ...revision('revision-5', 5, 'ai'), profileSnapshot: { ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'After five' } } }, layout },
+    } as never))
+
+    expect(await screen.findByText('After four')).toBeInTheDocument()
+    expect(screen.getByText('Before four')).toBeInTheDocument()
+    expect(screen.queryByText('After five')).not.toBeInTheDocument()
+    expect(screen.queryByText('Before five')).not.toBeInTheDocument()
+  })
+
+  it('focuses history, traps Tab, and restores the invoker on Escape', async () => {
+    vi.spyOn(api, 'listCVRevisions').mockResolvedValue([revision('revision-4', 4, 'user')])
+    renderBuilder()
+    const invoker = await screen.findByRole('button', { name: 'Lịch sử phiên bản' })
+    fireEvent.click(invoker)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Lịch sử phiên bản' })
+    const close = within(dialog).getByRole('button', { name: 'Đóng' })
+    const preview = within(dialog).getByRole('button', { name: 'Xem trước phiên bản 4' })
+    const last = within(dialog).getByRole('button', { name: 'Khôi phục phiên bản 4' })
+    expect(document.activeElement).toBe(close)
+
+    fireEvent.keyDown(close, { key: 'Tab' })
+    expect(document.activeElement).toBe(preview)
+    fireEvent.keyDown(preview, { key: 'Tab' })
+    expect(document.activeElement).toBe(last)
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(document.activeElement).toBe(close)
+    fireEvent.keyDown(close, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog', { name: 'Lịch sử phiên bản' })).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(invoker)
+  })
+
+  it('moves focus into nested restore confirmation and isolates its background', async () => {
+    vi.spyOn(api, 'listCVRevisions').mockResolvedValue([revision('revision-4', 4, 'user')])
+    renderBuilder()
+    await openHistory()
+    const restore = screen.getByRole('button', { name: 'Khôi phục phiên bản 4' })
+    fireEvent.click(restore)
+
+    const confirmation = screen.getByRole('dialog', { name: 'Xác nhận khôi phục phiên bản' })
+    const cancel = within(confirmation).getByRole('button', { name: 'Hủy' })
+    const confirm = within(confirmation).getByRole('button', { name: 'Tạo phiên bản khôi phục' })
+    expect(document.activeElement).toBe(cancel)
+    const history = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Lịch sử phiên bản"]')
+    expect(history).not.toBeNull()
+    expect(history).toHaveAttribute('aria-hidden', 'true')
+    expect(history).toHaveProperty('inert', true)
+
+    fireEvent.keyDown(cancel, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(confirm)
+    fireEvent.keyDown(confirm, { key: 'Tab' })
+    expect(document.activeElement).toBe(cancel)
+    fireEvent.keyDown(cancel, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog', { name: 'Xác nhận khôi phục phiên bản' })).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(restore)
+  })
+
   it('restores only after confirmation and server confirmation, creating a new restore revision', async () => {
     const restoring = deferred<api.CVCommitResult>()
     vi.spyOn(api, 'listCVRevisions').mockResolvedValue([revision('revision-4', 4, 'user')])

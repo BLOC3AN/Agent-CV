@@ -81,6 +81,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const historyInvokerRef = React.useRef<HTMLButtonElement>(null);
   const layout = normalizeLayout(providedLayout ?? cv.layout);
 
   const editNode = (nodeId: string) => {
@@ -148,7 +149,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   ];
 
   return (
-    <div data-testid="cv-editor" className="flex flex-1 h-[calc(100vh-4rem)] overflow-hidden bg-slate-100">
+    <div aria-hidden={historyOpen ? 'true' : undefined} data-testid="cv-editor" className="flex flex-1 h-[calc(100vh-4rem)] overflow-hidden bg-slate-100">
       {/* 1. Left Control Panel */}
       <div className="w-80 bg-white border-r border-slate-200/80 flex flex-col shrink-0 z-10 shadow-xs">
         {/* Sub-header Tabs: SECTIONS vs DESIGN */}
@@ -204,6 +205,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
             {cvId && onRestoreVersion && (
               <button
                 type="button"
+                ref={historyInvokerRef}
                 onClick={() => setHistoryOpen(true)}
                 disabled={saving}
                 className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -627,7 +629,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
         </PaginatedA4Document>
       </div>
 
-      {historyOpen && cvId && onRestoreVersion && <VersionHistoryPanel cvId={cvId} onClose={() => setHistoryOpen(false)} onRestore={onRestoreVersion} />}
+      {historyOpen && cvId && onRestoreVersion && <VersionHistoryPanel cvId={cvId} returnFocusRef={historyInvokerRef} onClose={() => setHistoryOpen(false)} onRestore={onRestoreVersion} />}
 
     </div>
   );
