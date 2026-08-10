@@ -89,7 +89,9 @@ export function BuilderRoute() {
       </div>
       <CVEditorView
         cv={store.draft.cv}
+        layout={store.draft.layout}
         onUpdateCV={(cv) => store.updateDraft({ cv, layout: store.draft!.layout })}
+        onUpdateLayout={(layout) => store.updateDraft({ cv: store.draft!.cv, layout })}
         onSave={() => void save().catch(() => undefined)}
         onDiscard={store.discardDraft}
         dirty={store.dirty}

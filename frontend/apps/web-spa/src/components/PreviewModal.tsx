@@ -1,12 +1,15 @@
 import React from 'react';
-import { CV } from '../types';
+import { CV, CVLayout } from '../types';
 import { X, Printer, Download } from 'lucide-react';
 import { PaginatedA4Document } from './PaginatedA4Document';
+import { CVBlockRenderer } from './CVBlockRenderer';
+import { normalizeLayout } from '../lib/layout-draft';
 
 interface PreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   cv: CV;
+  layout?: CVLayout;
   onDownloadPDF: () => void;
 }
 
@@ -14,9 +17,11 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   isOpen,
   onClose,
   cv,
+  layout: providedLayout,
   onDownloadPDF,
 }) => {
   if (!isOpen) return null;
+  const layout = normalizeLayout(providedLayout ?? cv.layout);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-between p-4 md:p-6 overflow-hidden">
@@ -63,66 +68,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
             fontSize: `${cv.design.fontSize}px`,
           }}
         >
-          {/* Header */}
-          <div className="border-b pb-4 mb-6 relative">
-            <h1 className="text-3xl font-extrabold text-gray-900 uppercase tracking-tight">
-              {cv.sections.intro.fullName}
-            </h1>
-            <p className="text-lg font-bold mt-1" style={{ color: cv.design.accentColor }}>
-              {cv.sections.intro.title}
-            </p>
-            <p className="text-xs text-gray-600 mt-2">
-              {cv.sections.intro.email} • {cv.sections.intro.phone} • {cv.sections.intro.location}
-            </p>
-          </div>
-
-          {/* Introduction */}
-          {cv.sections.intro.summary && (
-            <div className="mb-6">
-              <h3 className="font-bold text-xs uppercase tracking-wider mb-2" style={{ color: cv.design.accentColor }}>
-                INTRODUCTION
-              </h3>
-              <p className="text-xs text-gray-700 leading-relaxed">{cv.sections.intro.summary}</p>
-            </div>
-          )}
-
-          {/* Experience */}
-          {cv.sections.experience.length > 0 && (
-            <div className="mb-6">
-              <h3 className="font-bold text-xs uppercase tracking-wider mb-2 border-b pb-1" style={{ color: cv.design.accentColor }}>
-                EXPERIENCE
-              </h3>
-              <div className="space-y-4">
-                {cv.sections.experience.map((e) => (
-                  <div key={e.id}>
-                    <div className="flex justify-between font-bold text-sm text-gray-900">
-                      <span>{e.title} — {e.company}</span>
-                      <span className="text-xs text-gray-500">{e.startDate} – {e.endDate}</span>
-                    </div>
-                    <p className="text-xs text-gray-700 whitespace-pre-line mt-1">{e.highlights.join('\n')}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Skills */}
-          {cv.sections.skills.length > 0 && (
-            <div className="mb-6">
-              <h3 className="font-bold text-xs uppercase tracking-wider mb-2 border-b pb-1" style={{ color: cv.design.accentColor }}>
-                SKILLS
-              </h3>
-              <div className="space-y-1 text-xs">
-                {cv.sections.skills.map((s) => (
-                  <div key={s.id} className="flex">
-                    <span className="font-bold w-36 text-gray-900">{s.category}:</span>
-                    {/* Mảng ở dữ liệu, một dòng ngăn bằng ", " ở màn hình. */}
-                    <span className="text-gray-700">{s.skills.join(', ')}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <CVBlockRenderer cv={cv} layout={layout} variant="preview" />
         </PaginatedA4Document>
       </div>
     </div>

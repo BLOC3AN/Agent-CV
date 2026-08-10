@@ -39,6 +39,16 @@ const longCv = CVSchema.parse({
   },
 })
 
+const movedLongLayout = {
+  version: 1 as const,
+  nodes: [
+    { id: 'experience', type: 'experience' as const, visible: true },
+    { id: 'footer', type: 'footer' as const, visible: true },
+    { id: 'header', type: 'header' as const, visible: true },
+    { id: 'summary', type: 'summary' as const, visible: true },
+  ],
+}
+
 afterEach(async () => { while (tempDirs.length) await rm(tempDirs.pop()!, { recursive: true, force: true }) })
 
 describe('real Playwright print', () => {
@@ -70,7 +80,7 @@ describe('real Playwright print', () => {
   it('keeps a long CV as multiple A4 pages instead of clipping it to one page', async () => {
     const backend = http.createServer((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ cv: { ...longCv, templateId: 'elegant', theme: {}, layout: {} } }))
+      res.end(JSON.stringify({ cv: { ...longCv, templateId: 'elegant', theme: {}, layout: movedLongLayout } }))
     })
     await new Promise<void>((done) => backend.listen(0, '127.0.0.1', done))
     const appServer = http.createServer(await createApp({ backendURL: `http://127.0.0.1:${(backend.address() as AddressInfo).port}`, serveApp: false }))

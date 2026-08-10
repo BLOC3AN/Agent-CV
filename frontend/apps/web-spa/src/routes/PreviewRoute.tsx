@@ -17,6 +17,7 @@ export function PreviewRoute() {
     <PreviewModal
       isOpen
       cv={store.cv}
+      layout={store.draft?.layout}
       onClose={() => navigate(`/builder/${encodeURIComponent(cvId)}`)}
       onDownloadPDF={() => { window.location.assign(`/api/cv/${encodeURIComponent(cvId)}/export?variant=presentation`) }}
     />

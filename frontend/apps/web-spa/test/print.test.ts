@@ -13,13 +13,23 @@ const cv = CVSchema.parse({
   sections: { intro: { fullName: 'Nguyễn Văn A', title: 'Kỹ sư phần mềm', summary: 'Tóm tắt' } },
 })
 
+const movedLayout = {
+  version: 1 as const,
+  nodes: [
+    { id: 'experience', type: 'experience' as const, visible: true },
+    { id: 'footer', type: 'footer' as const, visible: true },
+    { id: 'header', type: 'header' as const, visible: true },
+    { id: 'summary', type: 'summary' as const, visible: true },
+  ],
+}
+
 const servers: Array<() => Promise<void>> = []
 afterEach(async () => { while (servers.length) await servers.pop()!() })
 
 it('SSR /print render cùng template và đổi được presentation/ats/thumbnail', async () => {
   const backend = http.createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ cv: { ...cv, templateId: 'minimal', theme: {}, layout: {} } }))
+    res.end(JSON.stringify({ cv: { ...cv, templateId: 'minimal', theme: {}, layout: movedLayout } }))
   })
   await new Promise<void>((done) => backend.listen(0, '127.0.0.1', done))
   servers.push(() => new Promise<void>((done) => backend.close(() => done())))
@@ -36,5 +46,7 @@ it('SSR /print render cùng template và đổi được presentation/ats/thumbn
     expect(response.status).toBe(200)
     expect(html).toContain(`data-variant="${variant}"`)
     expect(html).toContain('Nguyễn Văn A')
+    expect(html.indexOf('data-cv-node="footer"')).toBeGreaterThan(html.indexOf('data-cv-node="experience"'))
+    expect(html.indexOf('data-cv-node="header"')).toBeGreaterThan(html.indexOf('data-cv-node="footer"'))
   }
 })

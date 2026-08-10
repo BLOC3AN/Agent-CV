@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
-import { CV, CVDesign } from '../types';
+import { CV, CVDesign, CVLayout } from '../types';
 import {
-  CheckCircle2,
   Edit2,
-  Plus,
-  ArrowUpDown,
   X,
-  SlidersHorizontal,
-  Layers,
   Check,
 } from 'lucide-react';
 import { PaginatedA4Document } from './PaginatedA4Document';
+import { ComponentTree } from './ComponentTree';
+import { CVBlockRenderer } from './CVBlockRenderer';
+import { hasDefaultNodeOrder, materializeItemOrder, moveItem, moveNode, normalizeLayout, resetDefaultLayout, setNodeVisible } from '../lib/layout-draft';
 
 interface CVEditorViewProps {
   cv: CV;
+  layout?: CVLayout;
   onUpdateCV: (updatedCV: CV) => void;
+  onUpdateLayout?: (layout: CVLayout) => void;
   onSave?: () => void;
   onDiscard?: () => void;
   dirty?: boolean;
@@ -54,7 +54,9 @@ const addHighlight = (cv: CV, s: BulletSection, idx: number) =>
 
 export const CVEditorView: React.FC<CVEditorViewProps> = ({
   cv,
+  layout: providedLayout,
   onUpdateCV,
+  onUpdateLayout,
   onSave,
   onDiscard,
   dirty = false,
@@ -66,6 +68,22 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   // Navigation & Edit state
   const [activeTab, setActiveTab] = useState<'SECTIONS' | 'DESIGN'>('SECTIONS');
   const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string>();
+  const layout = normalizeLayout(providedLayout ?? cv.layout);
+
+  const editNode = (nodeId: string) => {
+    const section = nodeId === 'header' || nodeId === 'summary' ? 'intro' : nodeId;
+    if (section !== 'footer') setEditingSection(section);
+  };
+
+  const itemIdsFor = (nodeId: string): string[] => {
+    if (nodeId === 'experience') return cv.sections.experience.map((item) => item.id);
+    if (nodeId === 'projects') return cv.sections.projects.map((item) => item.id);
+    if (nodeId === 'education') return cv.sections.education.map((item) => item.id);
+    return [];
+  };
+
+  const updateLayout = (next: CVLayout) => onUpdateLayout?.(next);
 
   // Toggle active sections in CV
   const toggleSectionActive = (sectionKey: keyof typeof cv.activeSections) => {
@@ -215,24 +233,30 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 })}
               </div>
 
-              {/* Action Buttons: Add Section & Reorder */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  onClick={() => alert('Đã tự động thêm các mục mở rộng!')}
-                  className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px] rounded-xl flex items-center justify-center space-x-1 transition"
-                >
-                  <Plus className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Thêm mục</span>
-                </button>
-
-                <button
-                  onClick={() => alert('Bạn có thể kéo thả trực tiếp trên bản xem trước!')}
-                  className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px] rounded-xl flex items-center justify-center space-x-1 transition"
-                >
-                  <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Sắp xếp</span>
-                </button>
-              </div>
+              <section aria-label="Bố cục CV" className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Bố cục CV</h3>
+                  <button
+                    type="button"
+                    onClick={() => updateLayout(resetDefaultLayout(layout))}
+                    disabled={hasDefaultNodeOrder(layout)}
+                    className="rounded-md px-2 py-1 text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    Đặt lại mặc định
+                  </button>
+                </div>
+                {!hasDefaultNodeOrder(layout) && <p className="rounded-md bg-amber-50 px-2 py-1 text-[10px] leading-relaxed text-amber-700">Thứ tự này khác bố cục CV tiêu chuẩn. Nội dung vẫn được in theo đúng thứ tự đang chọn.</p>}
+                <ComponentTree
+                  cv={cv}
+                  layout={layout}
+                  selectedNodeId={selectedNodeId}
+                  onMoveNode={(nodeId, beforeNodeId) => updateLayout(moveNode(layout, nodeId, beforeNodeId))}
+                  onMoveItem={(nodeId, itemId, beforeItemId) => updateLayout(moveItem(materializeItemOrder(layout, nodeId, itemIdsFor(nodeId)), nodeId, itemId, beforeItemId))}
+                  onSetNodeVisible={(nodeId, visible) => updateLayout(setNodeVisible(layout, nodeId, visible))}
+                  onSelect={(nodeId) => setSelectedNodeId(nodeId)}
+                  onEdit={(nodeId) => editNode(nodeId)}
+                />
+              </section>
 
               {/* Inline Form Editor Drawer for Selected Section */}
               {editingSection && (
@@ -537,210 +561,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
             lineHeight: cv.design.spacing === 'condensed' ? '1.4' : cv.design.spacing === 'wide' ? '1.8' : '1.6',
           }}
         >
-          {/* Header Section */}
-          {cv.activeSections.intro && (
-            <div className="mb-6 pb-4 border-b border-slate-200 relative">
-              {/* Accent Left Stripe */}
-              <div
-                className="absolute top-0 bottom-0 left-[-20mm] w-2.5"
-                style={{ backgroundColor: cv.design.accentColor }}
-              ></div>
-
-              <h1
-                className="text-2xl md:text-3xl font-extrabold uppercase tracking-tight text-slate-900"
-              >
-                {cv.sections.intro.fullName || 'LE THANH HAI'}
-              </h1>
-
-              <p
-                className="text-base font-bold mt-0.5"
-                style={{ color: cv.design.accentColor }}
-              >
-                {cv.sections.intro.title || 'AI Engineer'}
-              </p>
-
-              <div className="flex flex-wrap items-center gap-x-3 text-xs text-slate-600 mt-2 font-medium">
-                <span>{cv.sections.intro.email}</span>
-                {cv.sections.intro.phone && (
-                  <>
-                    <span>•</span>
-                    <span>{cv.sections.intro.phone}</span>
-                  </>
-                )}
-                {cv.sections.intro.location && (
-                  <>
-                    <span>•</span>
-                    <span>{cv.sections.intro.location}</span>
-                  </>
-                )}
-              </div>
-
-              {cv.sections.intro.summary && (
-                <div className="mt-3 text-xs text-slate-700 leading-relaxed">
-                  <h3
-                    className="font-bold text-xs uppercase tracking-wider mb-1"
-                    style={{ color: cv.design.accentColor }}
-                  >
-                    GIỚI THIỆU BẢN THÂN
-                  </h3>
-                  <p>{cv.sections.intro.summary}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Experience Section */}
-          {cv.activeSections.experience && cv.sections.experience.length > 0 && (
-            <div className="mb-6">
-              <h3
-                className="font-bold text-xs uppercase tracking-wider mb-2 border-b border-slate-200 pb-1"
-                style={{ color: cv.design.accentColor }}
-              >
-                KINH NGHIỆM LÀM VIỆC
-              </h3>
-              <div className="space-y-4">
-                {cv.sections.experience.map((exp) => (
-                  <div key={exp.id} className="space-y-1">
-                    <div className="flex justify-between items-baseline">
-                      <span className="font-bold text-sm text-slate-900">
-                        {exp.title} — <span className="font-semibold text-slate-700">{exp.company}</span>
-                      </span>
-                      <span className="text-[11px] font-medium text-slate-500">
-                        {exp.startDate} – {exp.endDate}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
-                      {exp.highlights.join('\n')}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Projects Section */}
-          {cv.activeSections.projects && cv.sections.projects.length > 0 && (
-            <div className="mb-6">
-              <h3
-                className="font-bold text-xs uppercase tracking-wider mb-2 border-b border-slate-200 pb-1"
-                style={{ color: cv.design.accentColor }}
-              >
-                DỰ ÁN NỔI BẬT
-              </h3>
-              <div className="space-y-3">
-                {cv.sections.projects.map((proj) => (
-                  <div key={proj.id} className="space-y-0.5">
-                    <div className="flex justify-between items-baseline">
-                      <span className="font-bold text-xs text-slate-900">
-                        {proj.name} ({proj.role})
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {proj.startDate} - {proj.endDate}
-                      </span>
-                    </div>
-                    {/* Cùng cách trình bày với mục kinh nghiệm ở trên và với
-                        PreviewModal: nối bằng '\n' dưới whitespace-pre-line.
-                        Nối bằng ' ' làm các gạch đầu dòng dính thành một câu,
-                        và đây là bản người dùng in ra PDF để gửi đi. */}
-                    <p className="text-xs text-slate-700 whitespace-pre-line">
-                      {proj.highlights.join('\n')}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Skills Section */}
-          {cv.activeSections.skills && cv.sections.skills.length > 0 && (
-            <div className="mb-6">
-              <h3
-                className="font-bold text-xs uppercase tracking-wider mb-2 border-b border-slate-200 pb-1"
-                style={{ color: cv.design.accentColor }}
-              >
-                KĨ NĂNG & CÔNG NGHỆ
-              </h3>
-              <div className="space-y-1.5 text-xs text-slate-800">
-                {cv.sections.skills.map((sk) => (
-                  <div key={sk.id} className="flex">
-                    <span className="font-bold w-40 shrink-0 text-slate-900">
-                      {sk.category}:
-                    </span>
-                    {/* Lưu là mảng (hợp đồng CV v2), hiển thị vẫn là một dòng
-                        ngăn bằng ", " — không đổi gì về thị giác. */}
-                    <span className="text-slate-700">{sk.skills.join(', ')}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Education Section */}
-          {cv.activeSections.education && cv.sections.education.length > 0 && (
-            <div className="mb-6">
-              <h3
-                className="font-bold text-xs uppercase tracking-wider mb-2 border-b border-slate-200 pb-1"
-                style={{ color: cv.design.accentColor }}
-              >
-                HỌC VẤN & BẰNG CẤP
-              </h3>
-              <div className="space-y-2">
-                {cv.sections.education.map((edu) => (
-                  <div key={edu.id} className="flex justify-between items-baseline text-xs">
-                    <div>
-                      <span className="font-bold text-slate-900">{edu.school}</span>
-                      <p className="text-slate-700">
-                        {edu.degree} - {edu.fieldOfStudy} {edu.gpa ? `(GPA: ${edu.gpa})` : ''}
-                      </p>
-                    </div>
-                    <span className="text-slate-500 font-medium">
-                      {edu.startDate} - {edu.endDate}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Certifications & Languages */}
-          <div className="grid grid-cols-2 gap-6">
-            {cv.activeSections.certifications && cv.sections.certifications.length > 0 && (
-              <div>
-                <h3
-                  className="font-bold text-xs uppercase tracking-wider mb-2 border-b border-slate-200 pb-1"
-                  style={{ color: cv.design.accentColor }}
-                >
-                  CHỨNG CHỈ
-                </h3>
-                <ul className="list-disc list-inside text-xs text-slate-700 space-y-1">
-                  {cv.sections.certifications.map((c) => (
-                    <li key={c.id}>
-                      <span className="font-bold text-slate-900">{c.name}</span> ({c.issuer})
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {cv.activeSections.languages && cv.sections.languages.length > 0 && (
-              <div>
-                <h3
-                  className="font-bold text-xs uppercase tracking-wider mb-2 border-b border-slate-200 pb-1"
-                  style={{ color: cv.design.accentColor }}
-                >
-                  NGOẠI NGỮ
-                </h3>
-                <ul className="text-xs text-slate-700 space-y-1">
-                  {cv.sections.languages.map((l) => (
-                    <li key={l.id} className="flex justify-between">
-                      <span className="font-bold text-slate-900">{l.language}:</span>
-                      <span className="text-slate-600">{l.proficiency}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+          <CVBlockRenderer cv={cv} layout={layout} variant="editor" onSelect={setSelectedNodeId} onEdit={editNode} />
         </PaginatedA4Document>
       </div>
 
