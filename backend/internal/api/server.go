@@ -233,7 +233,10 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 			CV      json.RawMessage `json:"cv"`
 			Profile json.RawMessage `json:"profile"`
 		}
-		if json.NewDecoder(r.Body).Decode(&body) != nil {
+		// io.LimitReader khớp mức patchProfile dùng cho body lớn nhất khác
+		// trong file (2MB): thiếu nó, chốt chặn rẻ đặt sớm để từ chối input
+		// xấu lại trở thành chỗ đọc nhiều nhất vào bộ nhớ trước khi từ chối.
+		if json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body) != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
 			return
 		}
