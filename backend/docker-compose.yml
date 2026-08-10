@@ -116,6 +116,7 @@ services:
     restart: unless-stopped
     environment:
       <<: *env
+      NODE_ENV: production
       # Dev default giúp `docker compose` quản lý từng service; production
       # phải ghi đè bằng AUTH_SECRET thật trong .env/secret manager.
       AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me}
