@@ -130,7 +130,7 @@ interface ProvenanceChange {
   arrayItemCollectionPath?: string
   arrayItemParentPath?: string
   arrayItemFieldPath?: string
-  scalarDelta?: { removedBefore: string; insertedAfter: string; position: number }
+  scalarDelta?: { removedBefore: string; insertedAfter: string; position: number; afterOccurrence: number }
 }
 interface ProvenanceEntry { id: number; summary: string; changes: ProvenanceChange[] }
 
@@ -344,13 +344,15 @@ function valueContributionSurvives(current: unknown, change: ProvenanceChange): 
   if (deepEqual(current, change.after)) return true
   if (typeof current === 'string' && typeof change.before === 'string' && typeof change.after === 'string') {
     const delta = change.scalarDelta ?? scalarDeltaFor(change.before, change.after)
-    if (!delta.insertedAfter) {
-      if (change.after === '') return deepEqual(current, change.after)
-      return current.includes(change.after) && !current.includes(delta.removedBefore)
+    if (delta.insertedAfter) {
+      return stringOccurrences(current, delta.insertedAfter).length > delta.afterOccurrence
     }
-    return current.includes(delta.insertedAfter)
+    const occurrences = stringOccurrences(current, change.after)
+    const target = occurrences[delta.afterOccurrence]
+    if (target === undefined) return false
+    return current.slice(target - delta.removedBefore.length, target) !== delta.removedBefore
   }
-  return typeof current === 'string' && typeof change.after === 'string' && change.after !== '' && !deepEqual(current, change.before) && current.includes(change.after)
+  return false
 }
 
 function changeMatchesNetChange(change: ProvenanceChange, netChanges: ProvenanceChange[]): boolean {
@@ -373,47 +375,79 @@ function sameLogicalChange(left: ProvenanceChange, right: ProvenanceChange): boo
   return left.path === right.path
 }
 
-function scalarDeltaFor(before: string, after: string): { removedBefore: string; insertedAfter: string; position: number } {
+function stringOccurrences(value: string, needle: string): number[] {
+  if (!needle) return []
+  const positions: number[] = []
+  for (let index = value.indexOf(needle); index >= 0; index = value.indexOf(needle, index + 1)) positions.push(index)
+  return positions
+}
+
+function scalarDeltaCandidates(value: string, delta: { removedBefore: string; insertedAfter: string }): string[] {
+  return stringOccurrences(value, delta.insertedAfter).flatMap((index) => [
+    `${value.slice(0, index)}${delta.removedBefore}${value.slice(index + delta.insertedAfter.length)}`,
+    `${value.slice(0, index)}${value.slice(index + delta.insertedAfter.length)}`,
+  ])
+}
+
+function scalarDeltaFor(before: string, after: string): { removedBefore: string; insertedAfter: string; position: number; afterOccurrence: number } {
   let prefix = 0
   while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1
   let suffix = 0
   while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - suffix - 1] === after[after.length - suffix - 1]) suffix += 1
   if (suffix < 3) suffix = 0
+  const removedBefore = before.slice(prefix, before.length - suffix)
+  const insertedAfter = after.slice(prefix, after.length - suffix)
+  const anchor = insertedAfter || after
   return {
-    removedBefore: before.slice(prefix, before.length - suffix),
-    insertedAfter: after.slice(prefix, after.length - suffix),
+    removedBefore,
+    insertedAfter,
     position: prefix,
+    afterOccurrence: stringOccurrences(after, anchor).filter((index) => index <= prefix).length - 1,
   }
 }
 
-function onlyRemovesPriorScalarContribution(change: ProvenanceChange, immediateBefore: unknown, priorChanges: ProvenanceChange[]): boolean {
-  if (change.arrayKind || typeof immediateBefore !== 'string' || typeof change.after !== 'string') return false
+function cancelledPriorScalarChanges(change: ProvenanceChange, immediateBefore: unknown, priorChanges: ProvenanceChange[]): ProvenanceChange[] {
+  if (change.arrayKind || typeof immediateBefore !== 'string' || typeof change.after !== 'string') return []
   const beforeValue = immediateBefore
   const afterValue = change.after
-  return priorChanges.some((prior) => {
+  return priorChanges.filter((prior) => {
     if (prior.arrayKind || typeof prior.before !== 'string' || typeof prior.after !== 'string' || !sameLogicalChange(change, prior)) return false
     const delta = prior.scalarDelta ?? scalarDeltaFor(prior.before, prior.after)
-    let residuals: string[]
-    if (delta.insertedAfter) {
-      if (!beforeValue.includes(delta.insertedAfter)) return false
-      residuals = [
-        beforeValue.replace(delta.insertedAfter, '').trim(),
-        beforeValue.replace(delta.insertedAfter, delta.removedBefore).trim(),
-      ]
-    } else {
-      residuals = [`${beforeValue.slice(0, delta.position)}${delta.removedBefore}${beforeValue.slice(delta.position)}`.trim()]
-    }
-    return residuals.includes(afterValue)
+    const residuals = delta.insertedAfter
+      ? scalarDeltaCandidates(beforeValue, delta)
+      : stringOccurrences(beforeValue, prior.after).map((index) => `${beforeValue.slice(0, index)}${delta.removedBefore}${beforeValue.slice(index)}`)
+    return residuals.some((residual) => residual === afterValue || residual.trim() === afterValue.trim())
+  })
+}
+
+function rebaseProvenanceAfterSuccessfulSave(entries: ProvenanceEntry[], committed: DraftDocument, draft: DraftDocument): ProvenanceEntry[] {
+  const netChanges = collectChanges(committed, draft)
+  return entries.flatMap((entry) => {
+    const reconciled = reconcileProvenance([entry], draft)[0]
+    if (!reconciled) return []
+    const changes = reconciled.changes.filter((change) => changeMatchesNetChange(change, netChanges))
+    return changes.length ? [{ ...entry, changes }] : []
   })
 }
 
 function rebaseProvenanceAfterFailedSave(entries: ProvenanceEntry[], draft: DraftDocument): ProvenanceEntry[] {
-  return entries.flatMap((entry, entryIndex) => {
+  const rebased = entries.map((entry) => ({ ...entry, changes: [...entry.changes] }))
+  for (let entryIndex = 0; entryIndex < rebased.length; entryIndex += 1) {
+    const entry = rebased[entryIndex]!
+    const priorChanges = rebased.slice(0, entryIndex).flatMap((prior) => prior.changes)
+    const keptChanges = entry.changes.filter((change) => {
+      const cancelled = cancelledPriorScalarChanges(change, change.before, priorChanges)
+      if (!cancelled.length) return true
+      for (const prior of cancelled) {
+        for (const previous of rebased.slice(0, entryIndex)) previous.changes = previous.changes.filter((candidate) => candidate !== prior)
+      }
+      return false
+    })
+    entry.changes = keptChanges
+  }
+  return rebased.flatMap((entry) => {
     const reconciled = reconcileProvenance([entry], draft)[0]
-    if (!reconciled) return []
-    const priorChanges = entries.slice(0, entryIndex).flatMap((prior) => prior.changes)
-    const changes = reconciled.changes.filter((change) => !onlyRemovesPriorScalarContribution(change, change.before, priorChanges))
-    return changes.length ? [{ ...entry, changes }] : []
+    return reconciled ? [reconciled] : []
   })
 }
 
@@ -519,14 +553,23 @@ export function useCVStore(id: string) {
     const netChanges = collectChanges(current.committed, draft)
     const priorAIEntries = provenanceRef.current.map((entry) => ({ entry, changes: entry.changes }))
     provenanceRef.current = reconcileProvenance(provenanceRef.current, draft)
+    const cancelledPriorChanges = new Set<ProvenanceChange>()
     const survivingChanges = changes.filter((change) => {
       if (!changeMatchesNetChange(change, netChanges) && !pendingSaveRef.current) return false
       const immediateBefore = current.draft ? valueAtPath(current.draft, change.path).value : undefined
-      const priorChanges = priorAIEntries
-        .filter(({ entry }) => !inFlightProvenanceIDsRef.current.has(entry.id))
-        .flatMap(({ changes: entryChanges }) => entryChanges)
-      return !onlyRemovesPriorScalarContribution(change, immediateBefore, priorChanges)
+    const priorChanges = priorAIEntries
+      .filter(({ entry }) => !inFlightProvenanceIDsRef.current.has(entry.id))
+      .flatMap(({ changes: entryChanges }) => entryChanges)
+      const cancelled = cancelledPriorScalarChanges(change, immediateBefore, priorChanges)
+      cancelled.forEach((prior) => cancelledPriorChanges.add(prior))
+      return cancelled.length === 0
     })
+    if (cancelledPriorChanges.size) {
+      provenanceRef.current = provenanceRef.current.map((entry) => ({
+        ...entry,
+        changes: entry.changes.filter((change) => !cancelledPriorChanges.has(change)),
+      })).filter((entry) => entry.changes.length > 0)
+    }
     if (survivingChanges.length) provenanceRef.current = [...provenanceRef.current, { id: ++provenanceIDRef.current, summary, changes: survivingChanges }]
     setPendingAIProvenance(provenanceRef.current)
     replaceDocuments({ committed: current.committed, draft })
@@ -575,7 +618,8 @@ export function useCVStore(id: string) {
           : current.draft
         replaceDocuments({ committed, draft })
         setBaseRevision(result.revision?.number ?? result.cv.revisionNumber ?? saveBaseRevision + 1)
-        provenanceRef.current = provenanceRef.current.filter((entry) => !savedIDs.has(entry.id))
+        const newerProvenance = provenanceRef.current.filter((entry) => !savedIDs.has(entry.id))
+        provenanceRef.current = draft ? rebaseProvenanceAfterSuccessfulSave(newerProvenance, committed, draft) : []
         for (const savedID of savedIDs) inFlightProvenanceIDsRef.current.delete(savedID)
         setPendingAIProvenance(provenanceRef.current)
         setStatus(documentsEqual(committed, draft) ? 'saved' : 'dirty')

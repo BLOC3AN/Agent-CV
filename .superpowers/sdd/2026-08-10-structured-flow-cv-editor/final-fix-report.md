@@ -121,3 +121,12 @@ The findings in `FINAL-MERGE-REVIEW-11.md` are resolved:
 - AI proposals accepted during an in-flight save are retained provisionally even when their result equals the stale pre-save baseline. Save success rebases them against the actual committed response, preserving exact AI restoration on the newer revision; failure clears an exact restoration against the unchanged committed baseline and retains no stale AI message.
 
 Added normal and failure regressions for scalar replacement/removal residuals, scalar exact restoration, and primitive-array exact restoration during an older in-flight save. Verification passed: focused store **61/61**, full frontend **26 files / 245 tests**, frontend typecheck, `go test ./...`, real Playwright/PDF print integration **2/2**, smoke integration **4/4** with `SPA_BASE_URL=http://localhost:3000`, and `git diff --check`.
+
+## Round 17 follow-up
+
+The findings in `FINAL-MERGE-REVIEW-12.md` are resolved:
+
+- Scalar provenance now reconciles occurrence candidates rather than unqualified substring presence, first-occurrence replacement, or stale absolute positions. Insertions/replacements retain multiplicity-aware occurrence anchors; removals locate the matching surviving occurrence and cancellation candidates are rebased through manual prefixes/shifts. The same cancellation model is applied before failed-save entries are reconciled, so an older in-flight contribution can be removed when a newer proposal restores only its manual residual.
+- Successful saves now rebase every newer provisional entry against the actual committed response and the current draft. Entries whose effect is already in the response are cleared, while stale-baseline restorations remain only when they are a real committed-to-current delta. This applies to scalar and stable-ID primitive-array changes.
+
+Added regressions for duplicate scalar insertion undo, shifted removal cancellation, surviving removal with repeated text elsewhere, normal and failed-save flows, plus scalar and primitive-array net-zero provisional provenance after successful saves. Verification passed: focused store **67/67**, full frontend **26 files / 251 tests**, frontend typecheck, `go test ./...`, real Playwright/PDF print integration **2/2**, smoke integration **4/4** with `SPA_BASE_URL=http://localhost:3000`, and `git diff --check`.
