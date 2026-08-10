@@ -3,8 +3,8 @@ import type { RouteObject } from 'react-router-dom';
 import { Link, Outlet } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
 import { LoginPage } from './LoginPage';
-import { initialCVs } from '../mockData';
-import { DashboardView } from '../components/DashboardView';
+import { DashboardRoute } from './DashboardRoute';
+import { BuilderRoute } from './BuilderRoute';
 import { MyCVsRoute } from './MyCVsRoute';
 import { NewCVRoute } from './NewCVRoute';
 import { ImportRoute } from './ImportRoute';
@@ -18,10 +18,9 @@ import {
   verifyProfile as apiVerifyProfile,
   completeImport as apiCompleteImport,
 } from '../lib/api';
-import { CVEditorView } from '../components/CVEditorView';
 import { JobMatchView } from '../components/JobMatchView';
 import { TemplatesView } from '../components/TemplatesView';
-import { SettingsView } from '../components/SettingsView';
+import { SettingsRoute } from './SettingsRoute';
 import { RequireAuth, SessionProvider } from '../lib/session';
 
 /**
@@ -30,8 +29,7 @@ import { RequireAuth, SessionProvider } from '../lib/session';
  * Tách khỏi `main.tsx` để hai người dùng chung được: `BrowserRouter` ở trình
  * duyệt, và `StaticRouter` khi SSR trang in ở SP-5.
  *
- * Các màn hình chưa tới lượt vẫn dùng `mockData`. Chúng được thay lần lượt:
- * `/cv` ở Task 7, phần còn lại ở SP-3.
+ * Các màn hình SPA production đều lấy dữ liệu qua `lib/api.ts`.
  */
 function NotFound() {
   return (
@@ -45,17 +43,10 @@ function NotFound() {
   );
 }
 
-/** Chỗ giữ chân cho các prop dữ liệu chưa được nối. Task 7 và SP-3 thay dần. */
-const noop = () => {};
-
 const protectedChildren: RouteObject[] = [
   {
     index: true,
-    element: (
-      <div data-testid="view-dashboard">
-        <DashboardView cvs={initialCVs} onOpenUploadModal={noop} />
-      </div>
-    ),
+    element: <DashboardRoute />,
   },
   // `cv/new` PHẢI đứng trước mọi `cv/:id` trong tương lai — react-router khớp
   // theo thứ tự khai báo, để sau thì `new` bị nuốt làm giá trị của `:id`.
@@ -85,7 +76,7 @@ const protectedChildren: RouteObject[] = [
     path: 'analyze',
     element: (
       <div data-testid="view-job-match">
-        <JobMatchView cvs={initialCVs} />
+        <JobMatchView cvs={[]} />
       </div>
     ),
   },
@@ -93,31 +84,16 @@ const protectedChildren: RouteObject[] = [
     path: 'analyze/:cvId',
     element: (
       <div data-testid="view-job-match">
-        <JobMatchView cvs={initialCVs} />
+        <JobMatchView cvs={[]} />
       </div>
     ),
   },
-  { path: 'templates', element: <div data-testid="view-templates"><TemplatesView cvs={initialCVs} /></div> },
-  { path: 'settings', element: <div data-testid="view-settings"><SettingsView /></div> },
+  { path: 'templates', element: <div data-testid="view-templates"><TemplatesView cvs={[]} /></div> },
+  { path: 'settings', element: <SettingsRoute /> },
   { path: '*', element: <NotFound /> },
 ];
 
-const builderChildren: RouteObject[] = [
-  {
-    path: 'builder/:cvId',
-    element: (
-      <div data-testid="view-editor">
-        <CVEditorView
-          cv={initialCVs[0]!}
-          onUpdateCV={noop}
-          onOpenPreview={noop}
-          onOpenShare={noop}
-          onDownloadPDF={noop}
-        />
-      </div>
-    ),
-  },
-];
+const builderChildren: RouteObject[] = [{ path: 'builder/:cvId', element: <div data-testid="view-editor"><BuilderRoute /></div> }];
 
 /**
  * Route gốc không có `path` chỉ để bọc toàn cây trong `SessionProvider` —
