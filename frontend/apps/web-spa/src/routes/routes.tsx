@@ -6,6 +6,8 @@ import { LoginPage } from './LoginPage';
 import { initialCVs } from '../mockData';
 import { DashboardView } from '../components/DashboardView';
 import { MyCVsRoute } from './MyCVsRoute';
+import { NewCVRoute } from './NewCVRoute';
+import { createCV as apiCreateCV } from '../lib/api';
 import { CVEditorView } from '../components/CVEditorView';
 import { JobMatchView } from '../components/JobMatchView';
 import { TemplatesView } from '../components/TemplatesView';
@@ -45,6 +47,11 @@ const protectedChildren: RouteObject[] = [
       </div>
     ),
   },
+  // `cv/new` PHẢI đứng trước mọi `cv/:id` trong tương lai — react-router khớp
+  // theo thứ tự khai báo, để sau thì `new` bị nuốt làm giá trị của `:id`.
+  // Hiện chưa có `cv/:id` (Task 7 mới tới), nhưng thứ tự này giữ đúng ngay từ
+  // bây giờ để không ai vô tình thêm `cv/:id` phía trước sau này.
+  { path: 'cv/new', element: <NewCVRoute createCV={apiCreateCV} /> },
   { path: 'cv', element: <MyCVsRoute /> },
   // Hai đường dẫn, một màn hình. `/analyze` để người dùng tự chọn CV —
   // `JobMatchView` vốn đã nhận cả danh sách và làm việc đó. `/analyze/:cvId`
