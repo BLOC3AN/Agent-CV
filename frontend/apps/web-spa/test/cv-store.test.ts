@@ -937,6 +937,18 @@ describe('useCVStore', () => {
     expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'A XX B END' }), layout, 'user', undefined, 0)
   })
 
+  it('does not retain a duplicate insertion when a manual duplicate shifts the baseline', async () => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', title: 'A XX B END' }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...source, title: 'XX A XX B END' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: 'A XX B XX END' }, layout }, 'AI duplicate'))
+    act(() => result.current.updateDraft({ cv: { ...source, title: 'XX A XX B END' }, layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'XX A XX B END' }), layout, 'user', undefined, 0)
+  })
+
   it('cancels shifted scalar removal after a manual prefix is inserted', async () => {
     const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', title: 'Senior Engineer' }) as CV
     vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))

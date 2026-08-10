@@ -131,6 +131,7 @@ interface ProvenanceChange {
   arrayItemParentPath?: string
   arrayItemFieldPath?: string
   scalarDelta?: { removedBefore: string; insertedAfter: string; position: number; afterOccurrence: number }
+  scalarAnchor?: { start: number; end: number }
 }
 interface ProvenanceEntry { id: number; summary: string; changes: ProvenanceChange[] }
 
@@ -265,7 +266,18 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
     })
   }
   const scalarDelta = typeof before === 'string' && typeof after === 'string' ? scalarDeltaFor(before, after) : undefined
-  return [{ path, before: cloneValue(before), after: cloneValue(after), exists: true, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined, scalarDelta }]
+  return [{
+    path,
+    before: cloneValue(before),
+    after: cloneValue(after),
+    exists: true,
+    arrayParentPath,
+    arrayItemId,
+    arrayItemCollectionPath,
+    arrayItemFieldPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined,
+    scalarDelta,
+    scalarAnchor: scalarDelta ? { start: scalarDelta.position, end: scalarDelta.position + scalarDelta.insertedAfter.length } : undefined,
+  }]
 }
 
 function valueAtPath(value: unknown, path: string): { exists: boolean; value?: unknown } {
@@ -278,8 +290,95 @@ function valueAtPath(value: unknown, path: string): { exists: boolean; value?: u
   return { exists: true, value: current }
 }
 
-function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): ProvenanceEntry[] {
-  return entries.map((entry) => ({ ...entry, changes: entry.changes.filter((change) => {
+function resolveChangeValue(document: DraftDocument, change: ProvenanceChange): { exists: boolean; value?: unknown } {
+  if (change.arrayItemId && change.arrayItemCollectionPath && change.arrayItemFieldPath) {
+    const collection = valueAtPath(document, change.arrayItemCollectionPath)
+    if (!collection.exists || !Array.isArray(collection.value)) return { exists: false }
+    const item = collection.value.find((value) => Boolean(value && typeof value === 'object' && (value as { id?: unknown }).id === change.arrayItemId))
+    if (!item) return { exists: false }
+    return valueAtPath(item, change.arrayItemFieldPath)
+  }
+  return valueAtPath(document, change.path)
+}
+
+interface StringEdit {
+  oldStart: number
+  oldEnd: number
+  newStart: number
+  newEnd: number
+}
+
+function stringEditFor(before: string, after: string): StringEdit {
+  let prefix = 0
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1
+  let suffix = 0
+  while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - suffix - 1] === after[after.length - suffix - 1]) suffix += 1
+  return {
+    oldStart: prefix,
+    oldEnd: before.length - suffix,
+    newStart: prefix,
+    newEnd: after.length - suffix,
+  }
+}
+
+function rebaseScalarAnchor(anchor: { start: number; end: number }, before: string, after: string): { start: number; end: number } | undefined {
+  if (before === after) return anchor
+  const edit = stringEditFor(before, after)
+  const insertedLength = edit.newEnd - edit.newStart
+  const removedLength = edit.oldEnd - edit.oldStart
+  const shift = insertedLength - removedLength
+
+  // A removed AI span is represented by a gap. Insertions at that gap are
+  // considered manual text before the remaining baseline and move the gap
+  // after the inserted text. This preserves the occurrence identity when a
+  // user prefixes a repeated value.
+  if (anchor.start === anchor.end) {
+    if (removedLength === 0 && edit.oldStart === anchor.start) return { start: anchor.start + insertedLength, end: anchor.end + insertedLength }
+    if (edit.oldEnd <= anchor.start) return { start: anchor.start + shift, end: anchor.end + shift }
+    if (edit.oldStart > anchor.start) return anchor
+    return { start: edit.newStart, end: edit.newStart }
+  }
+
+  // An edit wholly before or after the authored span only shifts its
+  // position. An edit inside the span is allowed to extend it for manual
+  // insertions, but deleting any authored characters removes the contribution.
+  if (edit.oldEnd <= anchor.start) return { start: anchor.start + shift, end: anchor.end + shift }
+  if (edit.oldStart >= anchor.end) return anchor
+  if (removedLength > 0) return undefined
+  if (edit.oldStart <= anchor.start) return { start: anchor.start + insertedLength, end: anchor.end + insertedLength }
+  if (edit.oldStart < anchor.end) return { start: anchor.start, end: anchor.end + insertedLength }
+  return anchor
+}
+
+function rebaseScalarChange(change: ProvenanceChange, previous: DraftDocument, next: DraftDocument): ProvenanceChange | undefined {
+  if (!change.scalarDelta || !change.scalarAnchor) return change
+  const previousValue = resolveChangeValue(previous, change)
+  const nextValue = resolveChangeValue(next, change)
+  if (typeof previousValue.value !== 'string' || typeof nextValue.value !== 'string') return change
+  if (nextValue.value === change.before) return undefined
+  const edit = stringEditFor(previousValue.value, nextValue.value)
+  if (change.scalarAnchor.start === change.scalarAnchor.end
+    && edit.oldStart === change.scalarAnchor.start
+    && edit.oldEnd === edit.oldStart
+    && edit.newEnd > edit.newStart
+    && (typeof change.after !== 'string' || !change.after || !nextValue.value.endsWith(change.after))) return undefined
+  const anchor = rebaseScalarAnchor(change.scalarAnchor, previousValue.value, nextValue.value)
+  return anchor ? { ...change, scalarAnchor: anchor } : undefined
+}
+
+function rebaseProvenanceEntries(entries: ProvenanceEntry[], previous: DraftDocument, next: DraftDocument): ProvenanceEntry[] {
+  return entries.map((entry) => ({
+    ...entry,
+    changes: entry.changes.flatMap((change) => {
+      const rebased = rebaseScalarChange(change, previous, next)
+      return rebased ? [rebased] : []
+    }),
+  })).filter((entry) => entry.changes.length > 0)
+}
+
+function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument, previous?: DraftDocument): ProvenanceEntry[] {
+  const rebasedEntries = previous ? rebaseProvenanceEntries(entries, previous, draft) : entries
+  return rebasedEntries.map((entry) => ({ ...entry, changes: entry.changes.filter((change) => {
     if (change.arrayKind && change.arrayParentPath) {
       let target: unknown[] | undefined
       if (change.arrayItemId && change.arrayItemCollectionPath) {
@@ -344,13 +443,10 @@ function valueContributionSurvives(current: unknown, change: ProvenanceChange): 
   if (deepEqual(current, change.after)) return true
   if (typeof current === 'string' && typeof change.before === 'string' && typeof change.after === 'string') {
     const delta = change.scalarDelta ?? scalarDeltaFor(change.before, change.after)
-    if (delta.insertedAfter) {
-      return stringOccurrences(current, delta.insertedAfter).length > delta.afterOccurrence
-    }
-    const occurrences = stringOccurrences(current, change.after)
-    const target = occurrences[delta.afterOccurrence]
-    if (target === undefined) return false
-    return current.slice(target - delta.removedBefore.length, target) !== delta.removedBefore
+    const anchor = change.scalarAnchor
+    if (!anchor) return false
+    if (delta.insertedAfter) return current.slice(anchor.start, anchor.end).includes(delta.insertedAfter)
+    return current.slice(anchor.start, anchor.start + delta.removedBefore.length) !== delta.removedBefore
   }
   return false
 }
@@ -382,13 +478,6 @@ function stringOccurrences(value: string, needle: string): number[] {
   return positions
 }
 
-function scalarDeltaCandidates(value: string, delta: { removedBefore: string; insertedAfter: string }): string[] {
-  return stringOccurrences(value, delta.insertedAfter).flatMap((index) => [
-    `${value.slice(0, index)}${delta.removedBefore}${value.slice(index + delta.insertedAfter.length)}`,
-    `${value.slice(0, index)}${value.slice(index + delta.insertedAfter.length)}`,
-  ])
-}
-
 function scalarDeltaFor(before: string, after: string): { removedBefore: string; insertedAfter: string; position: number; afterOccurrence: number } {
   let prefix = 0
   while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1
@@ -404,6 +493,42 @@ function scalarDeltaFor(before: string, after: string): { removedBefore: string;
     position: prefix,
     afterOccurrence: stringOccurrences(after, anchor).filter((index) => index <= prefix).length - 1,
   }
+}
+
+function scalarChangesCancel(change: ProvenanceChange, prior: ProvenanceChange): boolean {
+  if (change.arrayKind || prior.arrayKind || !change.scalarDelta || !prior.scalarDelta || !change.scalarAnchor || !prior.scalarAnchor || !sameLogicalChange(change, prior)) return false
+  const current = change.scalarDelta
+  const previous = prior.scalarDelta
+  const authored = prior.scalarAnchor
+  const changedStart = current.position
+  const changedEnd = current.position + current.removedBefore.length
+
+  // A later AI insertion at a removed gap restores the exact removed
+  // occurrence. The gap anchor is already rebased through manual prefixes.
+  if (!previous.insertedAfter && current.insertedAfter) {
+    return current.insertedAfter === previous.removedBefore
+      && changedStart === authored.start
+      && changedEnd === authored.end
+  }
+
+  // A later AI removal of the exact authored span cancels an earlier
+  // insertion/replacement. A replacement is only inverse when it restores
+  // the old text at the same occurrence.
+  if (previous.insertedAfter && current.removedBefore) {
+    return current.removedBefore === previous.insertedAfter
+      && changedStart === authored.start
+      && changedEnd === authored.end
+      && (!current.insertedAfter || current.insertedAfter === previous.removedBefore)
+  }
+
+  return false
+}
+
+function scalarDeltaCandidates(value: string, delta: { removedBefore: string; insertedAfter: string }): string[] {
+  return stringOccurrences(value, delta.insertedAfter).flatMap((index) => [
+    `${value.slice(0, index)}${delta.removedBefore}${value.slice(index + delta.insertedAfter.length)}`,
+    `${value.slice(0, index)}${value.slice(index + delta.insertedAfter.length)}`,
+  ])
 }
 
 function cancelledPriorScalarChanges(change: ProvenanceChange, immediateBefore: unknown, priorChanges: ProvenanceChange[]): ProvenanceChange[] {
@@ -536,7 +661,7 @@ export function useCVStore(id: string) {
 
     const draft = cloneDocument(normalizeDocument(next))
     documentVersionRef.current += 1
-    provenanceRef.current = current.draft ? reconcileProvenance(provenanceRef.current, draft) : []
+    provenanceRef.current = current.draft ? reconcileProvenance(provenanceRef.current, draft, current.draft) : []
     setPendingAIProvenance(provenanceRef.current)
     replaceDocuments({ committed: current.committed, draft })
     setError(undefined)
@@ -557,9 +682,9 @@ export function useCVStore(id: string) {
     const survivingChanges = changes.filter((change) => {
       if (!changeMatchesNetChange(change, netChanges) && !pendingSaveRef.current) return false
       const immediateBefore = current.draft ? valueAtPath(current.draft, change.path).value : undefined
-    const priorChanges = priorAIEntries
-      .filter(({ entry }) => !inFlightProvenanceIDsRef.current.has(entry.id))
-      .flatMap(({ changes: entryChanges }) => entryChanges)
+      const priorChanges = priorAIEntries
+        .filter(({ entry }) => !inFlightProvenanceIDsRef.current.has(entry.id))
+        .flatMap(({ changes: entryChanges }) => entryChanges)
       const cancelled = cancelledPriorScalarChanges(change, immediateBefore, priorChanges)
       cancelled.forEach((prior) => cancelledPriorChanges.add(prior))
       return cancelled.length === 0
