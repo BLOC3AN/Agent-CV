@@ -19,7 +19,10 @@ export function DashboardRoute() {
       setItems(next)
       if (next[0]) {
         const envelope = await getCV(next[0].id)
-        setActive(envelope.profileSnapshot as unknown as CV)
+        // `profileSnapshot.id` là profile_id; các route builder/export cần
+        // `cv_documents.id` (next[0].id). Giữ hai định danh tách biệt để nút
+        // "Sửa CV ngay" không gọi nhầm GET /api/cv/:profileId.
+        setActive({ ...(envelope.profileSnapshot as unknown as CV), id: next[0].id })
       } else {
         setActive(null)
       }
