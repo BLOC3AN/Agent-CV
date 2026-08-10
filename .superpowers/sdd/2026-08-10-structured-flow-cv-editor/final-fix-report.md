@@ -102,3 +102,12 @@ The findings in `FINAL-MERGE-REVIEW-9.md` are resolved:
 - Cancellation suppression now removes only a prior, non-in-flight AI scalar contribution when the resulting value is exactly the residual left after that contribution is removed. Later shortening/blanking of the manual residual remains AI-attributed, and entries captured by an older in-flight save do not suppress newer AI work.
 
 Added regressions cover stable-ID reorder cancellation, residual shortening, residual blanking, and newer in-flight AI blanking. Verification passed: focused store 51/51, full frontend 26 files / 235 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.
+
+## Round 15 follow-up
+
+The findings in `FINAL-MERGE-REVIEW-10.md` are resolved:
+
+- Scalar provenance now derives the older AI-added delta from its `before`/`after` common prefix and suffix rather than treating the complete post-AI value as authored by AI. This correctly cancels an AI suffix while preserving committed/manual text, while later removal of committed text remains AI-attributed.
+- Failed in-flight saves rebase the captured older entries together with newer entries against the unchanged committed baseline before retry. Successful saves continue to promote the captured snapshot and preserve newer provenance.
+
+Added regressions cover baseline-preserving suffix cancellation, committed-content removal, in-flight success, and failed-save cancellation reclassification. Verification passed: focused store 55/55, full frontend 26 files / 239 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.

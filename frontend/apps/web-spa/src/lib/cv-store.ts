@@ -363,13 +363,32 @@ function sameLogicalChange(left: ProvenanceChange, right: ProvenanceChange): boo
   return left.path === right.path
 }
 
+function scalarAddedContribution(before: string, after: string): string {
+  let prefix = 0
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1
+  let suffix = 0
+  while (suffix < before.length - prefix && suffix < after.length - prefix && before[before.length - suffix - 1] === after[after.length - suffix - 1]) suffix += 1
+  return after.slice(prefix, after.length - suffix)
+}
+
 function onlyRemovesPriorScalarContribution(change: ProvenanceChange, immediateBefore: unknown, priorChanges: ProvenanceChange[]): boolean {
   if (change.arrayKind || typeof immediateBefore !== 'string' || typeof change.after !== 'string') return false
   return priorChanges.some((prior) => {
-    if (prior.arrayKind || typeof prior.after !== 'string' || !sameLogicalChange(change, prior)) return false
-    if (!immediateBefore.includes(prior.after)) return false
-    const residual = immediateBefore.replace(prior.after, '').trim()
+    if (prior.arrayKind || typeof prior.before !== 'string' || typeof prior.after !== 'string' || !sameLogicalChange(change, prior)) return false
+    const contribution = scalarAddedContribution(prior.before, prior.after)
+    if (!contribution || !immediateBefore.includes(contribution)) return false
+    const residual = immediateBefore.replace(contribution, '').trim()
     return change.after === residual
+  })
+}
+
+function rebaseProvenanceAfterFailedSave(entries: ProvenanceEntry[], draft: DraftDocument): ProvenanceEntry[] {
+  return entries.flatMap((entry, entryIndex) => {
+    const reconciled = reconcileProvenance([entry], draft)[0]
+    if (!reconciled) return []
+    const priorChanges = entries.slice(0, entryIndex).flatMap((prior) => prior.changes)
+    const changes = reconciled.changes.filter((change) => !onlyRemovesPriorScalarContribution(change, change.before, priorChanges))
+    return changes.length ? [{ ...entry, changes }] : []
   })
 }
 
@@ -512,6 +531,7 @@ export function useCVStore(id: string) {
     inFlightProvenanceIDsRef.current = new Set(savedProvenance.map((entry) => entry.id))
     const source = savedProvenance.length ? 'ai' : 'user'
     const message = savedProvenance.length ? savedProvenance.map((entry) => entry.summary).join('\n') : undefined
+    const savedIDs = new Set(savedProvenance.map((entry) => entry.id))
     const saveBaseRevision = baseRevision
     setSavePending(true)
     setStatus('saving')
@@ -530,12 +550,17 @@ export function useCVStore(id: string) {
           : current.draft
         replaceDocuments({ committed, draft })
         setBaseRevision(result.revision?.number ?? result.cv.revisionNumber ?? saveBaseRevision + 1)
-        const savedIDs = new Set(savedProvenance.map((entry) => entry.id))
         provenanceRef.current = provenanceRef.current.filter((entry) => !savedIDs.has(entry.id))
         for (const savedID of savedIDs) inFlightProvenanceIDsRef.current.delete(savedID)
         setPendingAIProvenance(provenanceRef.current)
         setStatus(documentsEqual(committed, draft) ? 'saved' : 'dirty')
       } catch (err) {
+        const currentDraft = documentsRef.current.draft
+        if (currentDraft) {
+          const entriesToRebase = [...savedProvenance, ...provenanceRef.current.filter((entry) => !savedIDs.has(entry.id))]
+          provenanceRef.current = rebaseProvenanceAfterFailedSave(entriesToRebase, currentDraft)
+          setPendingAIProvenance(provenanceRef.current)
+        }
         setStatus(documentVersionRef.current === saveVersion ? 'error' : 'dirty')
         setError(err instanceof ApiError ? err.message : 'Không lưu được CV')
         throw err
