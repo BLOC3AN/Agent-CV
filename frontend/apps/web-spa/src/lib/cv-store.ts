@@ -123,6 +123,7 @@ interface ProvenanceChange {
   arrayValue?: unknown
   arrayBaselineCount?: number
   arrayOrder?: unknown[]
+  arrayBaselineValues?: unknown[]
   arrayItemId?: string
   arrayItemCollectionPath?: string
   arrayItemParentPath?: string
@@ -139,6 +140,17 @@ function cloneDocument(document: DraftDocument): DraftDocument {
 function cloneValue(value: unknown): unknown {
   if (value === undefined) return undefined
   return JSON.parse(JSON.stringify(value))
+}
+
+function primitiveOrderTokens(before: unknown[], after: unknown[]): number[] {
+  const remaining = before.map((_, index) => index)
+  const tokens: number[] = []
+  for (const value of after) {
+    let match = remaining.findIndex((index) => deepEqual(before[index], value))
+    if (match < 0 && before.length === after.length && remaining.length) match = 0
+    if (match >= 0) tokens.push(remaining.splice(match, 1)[0]!)
+  }
+  return tokens
 }
 
 function collectChanges(before: unknown, after: unknown, path = '', arrayParentPath?: string, arrayItemId?: string, arrayItemRootPath?: string, arrayItemCollectionPath?: string): ProvenanceChange[] {
@@ -180,18 +192,22 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
       }
       return changes
     }
-    const beforeOrder = beforeArray
-    const afterOrder = afterArray
-    if (beforeArray.length === afterArray.length && beforeArray.some((value, index) => !deepEqual(value, afterArray[index]))) {
-      const sameValues = beforeArray.every((value) => beforeArray.filter((candidate) => deepEqual(candidate, value)).length === afterArray.filter((candidate) => deepEqual(candidate, value)).length)
-      if (sameValues) return [{ path, exists: true, arrayParentPath: path, arrayKind: 'reorder', arrayOrder: cloneValue(afterOrder) as unknown[], arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }]
-      return afterArray.flatMap((value, index) => deepEqual(beforeArray[index], value) ? [] : [{
+    const orderTokens = primitiveOrderTokens(beforeArray, afterArray)
+    const orderChanged = orderTokens.length > 1 && orderTokens.some((token, index) => token !== index)
+    const orderChange: ProvenanceChange | undefined = orderChanged ? {
+      path, exists: true, arrayParentPath: path, arrayKind: 'reorder', arrayOrder: orderTokens,
+      arrayBaselineValues: cloneValue(beforeArray) as unknown[], arrayItemId, arrayItemCollectionPath,
+      arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined,
+    } : undefined
+    if (beforeArray.length === afterArray.length) {
+      const replacements = afterArray.flatMap((value, index) => deepEqual(beforeArray[index], value) ? [] : [{
         path: `${path}/${index}`, before: cloneValue(beforeArray[index]), after: cloneValue(value), exists: true,
         arrayParentPath: path, arrayKind: 'replace' as const, arrayValue: cloneValue(value),
         arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length,
         arrayItemId, arrayItemCollectionPath,
         arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined,
       }])
+      if (orderChange || replacements.length) return orderChange ? [orderChange, ...replacements] : replacements
     }
     if (afterArray.length > beforeArray.length) {
       const remaining = [...beforeArray]
@@ -201,7 +217,8 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
         remaining.splice(existing, 1)
         return []
       })
-      return added.map(({ value, index }) => ({ path: `${path}/${index}`, after: cloneValue(value), exists: true, arrayParentPath: path, arrayKind: 'add' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
+      const additions = added.map(({ value, index }) => ({ path: `${path}/${index}`, after: cloneValue(value), exists: true, arrayParentPath: path, arrayKind: 'add' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
+      return orderChange ? [orderChange, ...additions] : additions
     }
     if (beforeArray.length > afterArray.length) {
       const remaining = [...afterArray]
@@ -211,7 +228,8 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
         remaining.splice(index, 1)
         return false
       })
-      return removed.map((value) => ({ path, exists: false, arrayParentPath: path, arrayKind: 'remove' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
+      const removals = removed.map((value) => ({ path, exists: false, arrayParentPath: path, arrayKind: 'remove' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
+      return orderChange ? [orderChange, ...removals] : removals
     }
     return after.flatMap((value, index) => index < before.length
       ? collectChanges(before[index], value, `${path}/${index}`, path, arrayItemId, arrayItemRootPath, arrayItemCollectionPath)
@@ -262,6 +280,12 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
       }
       if (!target) return false
       if (change.arrayKind === 'reorder') {
+        if (change.arrayBaselineValues) {
+          const tokens = primitiveOrderTokens(change.arrayBaselineValues, target)
+          let orderIndex = 0
+          for (const token of tokens) if (token === change.arrayOrder?.[orderIndex]) orderIndex += 1
+          return orderIndex === change.arrayOrder?.length
+        }
         let orderIndex = 0
         return target.every((value) => {
           if (orderIndex >= (change.arrayOrder?.length ?? 0)) return true
