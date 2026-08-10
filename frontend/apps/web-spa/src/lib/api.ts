@@ -155,6 +155,13 @@ export interface SettledChatProposal {
   rejected: number[]
 }
 
+export interface ChatDraftContext {
+  cvId: string
+  draft: CV
+  layout: CVLayout
+  draftVersion: number
+}
+
 export interface ClarifyRequest {
   reason: string
   targetPath: string | null
@@ -203,11 +210,17 @@ export async function sendChat(
   hint?: string,
   signal?: AbortSignal,
   onStep: (label: string) => void = () => {},
+  context?: ChatDraftContext,
 ): Promise<ChatResult> {
   const headers = new Headers({ 'content-type': 'application/json', 'X-CV-Schema': '2' })
   const res = await fetch('/api/chat', {
     method: 'POST', credentials: 'include', signal, headers,
-    body: JSON.stringify({ profileId, message, answers, modelRef, ...(hint ? { hint } : {}) }),
+    body: JSON.stringify({ profileId, message, answers, modelRef, ...(hint ? { hint } : {}), ...(context ? {
+      cvId: context.cvId,
+      draftToken: String(context.draftVersion),
+      draft: context.draft,
+      layout: context.layout,
+    } : {}) }),
   })
   if (!res.ok) throw new ApiError(res.status, ((await res.json().catch(() => null)) as { error?: string })?.error ?? 'Không gửi được tin nhắn')
   if (!res.body) throw new ApiError(0, 'Máy chủ không mở được luồng trả lời')
@@ -216,9 +229,12 @@ export async function sendChat(
   return result as unknown as ChatResult
 }
 
-export async function settleChatProposal(proposalId: string, profileId: string, accept: number[]): Promise<SettledChatProposal> {
+export async function settleChatProposal(proposalId: string, profileId: string, contextOrAccept: Pick<ChatDraftContext, 'cvId' | 'draftVersion'> | number[], maybeAccept?: number[]): Promise<SettledChatProposal> {
+  const legacy = Array.isArray(contextOrAccept)
+  const accept = legacy ? contextOrAccept : (maybeAccept ?? [])
+  const context = legacy ? undefined : contextOrAccept
   return request<SettledChatProposal>(`/api/chat/proposals/${encodeURIComponent(proposalId)}`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profileId, accept }),
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profileId, ...(context ? { cvId: context.cvId, draftToken: String(context.draftVersion) } : {}), accept }),
   })
 }
 

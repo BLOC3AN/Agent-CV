@@ -3,10 +3,11 @@ import { applyChatOpsToDraft } from '../src/lib/cv-patch'
 import type { CV, CVLayout } from '../src/types'
 
 const cv = {
-  id: 'cv-1', title: 'CV', lastModified: '',
+  schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
   sections: { intro: { fullName: 'A', title: '', email: '', phone: '', location: '', summary: '' }, experience: [], projects: [], education: [], skills: [], activities: [], certifications: [], languages: [] },
   design: { template: 'modern', accentColor: '#000', font: 'Roboto', fontSize: 14, spacing: 'normal' },
   activeSections: { intro: true, experience: true, projects: true, education: true, skills: true, activities: true, certifications: true, languages: true },
+  _meta: { verified: {}, source: 'manual', canonical: {} },
 } as CV
 
 const layout: CVLayout = { version: 1, nodes: [{ id: 'experience', type: 'experience', visible: true }, { id: 'summary', type: 'summary', visible: true }] }
@@ -29,5 +30,7 @@ describe('applyChatOpsToDraft', () => {
     expect(() => applyChatOpsToDraft({ cv, layout }, [operation('move', '/sections/intro/fullName', 'AI draft')])).toThrow(/không được hỗ trợ/i)
     expect(() => applyChatOpsToDraft({ cv, layout }, [operation('replace', '/sections/intro/missing', 'AI draft')])).toThrow(/không tồn tại/i)
     expect(() => applyChatOpsToDraft({ cv, layout }, [operation('add', '/layout/nodes/0/unknown', true)])).toThrow(/bố cục.*không hợp lệ/i)
+    expect(() => applyChatOpsToDraft({ cv, layout }, [operation('replace', '/sections/intro', false)])).toThrow(/CV.*không hợp lệ/i)
+    expect(() => applyChatOpsToDraft({ cv, layout }, [operation('add', '/sections/skills/-', { id: 'skills-1', category: 'Data', skills: [7] })])).toThrow(/CV.*không hợp lệ/i)
   })
 })

@@ -5,6 +5,9 @@ export const initialCVs: CV[] = [
     id: 'cv-1',
     title: 'LE THANH HAI',
     lastModified: 'Sửa 2 giờ trước',
+    schemaVersion: 2,
+    language: 'vi',
+    _meta: { verified: {}, source: 'manual', canonical: {} },
     design: {
       template: 'modern',
       accentColor: '#00897B',
@@ -178,6 +181,9 @@ export const initialCVs: CV[] = [
     id: 'cv-2',
     title: 'CV_Software_Engineer_2026',
     lastModified: 'Sửa 2 giờ trước',
+    schemaVersion: 2,
+    language: 'vi',
+    _meta: { verified: {}, source: 'manual', canonical: {} },
     design: {
       template: 'classic',
       accentColor: '#1E40AF',
@@ -217,6 +223,9 @@ export const initialCVs: CV[] = [
     id: 'cv-3',
     title: 'CV_Draft_Tech_Lead',
     lastModified: 'Sửa 2 giờ trước',
+    schemaVersion: 2,
+    language: 'vi',
+    _meta: { verified: {}, source: 'manual', canonical: {} },
     design: {
       template: 'professional',
       accentColor: '#0F766E',

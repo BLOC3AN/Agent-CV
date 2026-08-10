@@ -1,5 +1,5 @@
 import type { ChatOp } from './api'
-import { CVLayoutSchema } from '@hr/schema'
+import { CVLayoutSchema, CVSchema } from '@hr/schema'
 import type { CV, CVLayout } from '../types'
 
 export interface ChatDraftDocument {
@@ -70,5 +70,6 @@ export function applyChatOpsToDraft(draft: ChatDraftDocument, ops: ChatOp[]): Ch
     }
   }
   if (layoutChanged && !CVLayoutSchema.safeParse(result.layout).success) throw new Error('Bố cục từ JSON Patch không hợp lệ')
+  if (!CVSchema.safeParse(result.cv).success) throw new Error('CV từ JSON Patch không hợp lệ')
   return result
 }

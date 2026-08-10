@@ -160,6 +160,9 @@ export interface CV {
   id: string;
   title: string;
   lastModified: string;
+  schemaVersion?: 2;
+  language?: 'vi' | 'en';
+  _meta?: { verified: Record<string, boolean>; source: 'manual' | 'pdf_import' | 'ai_generated'; canonical: Record<string, string> };
   sections: CVSections;
   design: CVDesign;
   activeSections: {

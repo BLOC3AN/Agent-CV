@@ -6,12 +6,13 @@ import * as api from '../src/lib/api'
 import type { CV, CVLayout } from '../src/types'
 
 const cv = {
-  id: 'cv-1',
+  schemaVersion: 2, id: 'cv-1', language: 'vi',
   title: 'CV',
   lastModified: '',
   sections: { intro: { fullName: 'A', title: '', email: '', phone: '', location: '', summary: '' }, experience: [], projects: [], education: [], skills: [], activities: [], certifications: [], languages: [] },
   design: { template: 'modern', accentColor: '#000', font: 'Roboto', fontSize: 14, spacing: 'normal' },
   activeSections: { intro: true, experience: true, projects: true, education: true, skills: true, activities: true, certifications: true, languages: true },
+  _meta: { verified: {}, source: 'manual', canonical: {} },
 } as CV
 const layout: CVLayout = { version: 1, nodes: [{ id: 'header', type: 'header', visible: true }] }
 const envelope = (profileSnapshot = cv) => ({ id: 'cv-1', profileId: 'profile-1', layout, profileSnapshot } as never)
@@ -128,7 +129,7 @@ describe('CV editor explicit save workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
 
     await waitFor(() => expect(screen.getByText('AI draft')).toBeInTheDocument())
-    expect(settle).toHaveBeenCalledWith('proposal-1', 'profile-1', [0])
+    expect(settle).toHaveBeenCalledWith('proposal-1', 'profile-1', { cvId: 'cv-1', draftVersion: 1 }, [0])
     expect(legacySave).not.toHaveBeenCalled()
     expect(commit).not.toHaveBeenCalled()
     expect(screen.getByText('Chưa lưu', { exact: true })).toBeInTheDocument()
@@ -136,6 +137,46 @@ describe('CV editor explicit save workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
 
     await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', updated, layout, 'ai', 'Đề xuất AI'))
+  })
+
+  it('clears AI provenance after discard so a later manual save is user-sourced', async () => {
+    vi.spyOn(api, 'sendChat').mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'AI suggestion',
+      ops: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }], rejected: [],
+    } as never)
+    vi.spyOn(api, 'settleChatProposal').mockResolvedValue({ applied: 1, status: 'accepted', accepted: [0], rejected: [], selectedOps: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }] })
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({ cv: envelope({ ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'B' } } }) } as never)
+    renderBuilder()
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('AI suggestion')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+    await screen.findByText('AI draft')
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ thay đổi' }))
+    await waitFor(() => expect(screen.queryByText('AI draft')).not.toBeInTheDocument())
+    await editName()
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ intro: expect.objectContaining({ fullName: 'B' }) }) }), layout, 'user', undefined))
+  })
+
+  it('combines provenance for multiple accepted AI changes in one explicit save', async () => {
+    vi.spyOn(api, 'sendChat')
+      .mockResolvedValueOnce({ kind: 'patch', proposalId: 'proposal-a', summary: 'AI A', ops: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI A', rationale: 'A', grounding: { type: 'profile', ref: 'cv-1' } }], rejected: [] } as never)
+      .mockResolvedValueOnce({ kind: 'patch', proposalId: 'proposal-b', summary: 'AI B', ops: [{ op: 'replace', path: '/sections/intro/title', value: 'AI B', rationale: 'B', grounding: { type: 'profile', ref: 'cv-1' } }], rejected: [] } as never)
+    vi.spyOn(api, 'settleChatProposal')
+      .mockResolvedValueOnce({ applied: 1, status: 'accepted', accepted: [0], rejected: [], selectedOps: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI A', rationale: 'A', grounding: { type: 'profile', ref: 'cv-1' } }] })
+      .mockResolvedValueOnce({ applied: 1, status: 'accepted', accepted: [0], rejected: [], selectedOps: [{ op: 'replace', path: '/sections/intro/title', value: 'AI B', rationale: 'B', grounding: { type: 'profile', ref: 'cv-1' } }] })
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({ cv: envelope(cv) } as never)
+    renderBuilder()
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('AI A')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+    await screen.findAllByText('AI A')
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('AI B')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+    await waitFor(() => expect(screen.getAllByText('AI B').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), layout, 'ai', 'AI A\nAI B'))
   })
 
   it('saves the current draft before the actual Download button opens the shared SSR print route', async () => {

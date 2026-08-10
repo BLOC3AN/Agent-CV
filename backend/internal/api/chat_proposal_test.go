@@ -16,7 +16,7 @@ func createChatProposal(t *testing.T, db *sql.DB, fixture cvRevisionFixture, ops
 	if err := db.QueryRow(`INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant','Đề xuất AI') RETURNING id`, sessionID).Scan(&messageID); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow(`INSERT INTO proposed_patches(message_id,ops) VALUES($1,$2::jsonb) RETURNING id`, messageID, string(ops)).Scan(&proposalID); err != nil {
+	if err := db.QueryRow(`INSERT INTO proposed_patches(message_id,cv_id,draft_token,profile_snapshot,layout_snapshot,ops) VALUES($1,$2,'draft-1',$3::jsonb,$4::jsonb,$5::jsonb) RETURNING id`, messageID, fixture.cvID, string(fixture.profile), string(fixture.layout), string(ops)).Scan(&proposalID); err != nil {
 		t.Fatal(err)
 	}
 	return proposalID
@@ -57,7 +57,7 @@ func TestChatProposalSettlementAuditsDraftSelectionWithoutMutatingPersistedCV(t 
 	}
 
 	handler := NewServerWithDB(db, "").Routes()
-	w := cvRevisionRequest(t, handler, http.MethodPost, "/api/chat/proposals/"+proposalID, fixture.token, map[string]any{"profileId": fixture.profileID, "accept": []int{0}})
+	w := cvRevisionRequest(t, handler, http.MethodPost, "/api/chat/proposals/"+proposalID, fixture.token, map[string]any{"profileId": fixture.profileID, "cvId": fixture.cvID, "draftToken": "draft-1", "accept": []int{0}})
 	if w.Code != http.StatusOK {
 		t.Fatalf("settle status=%d body=%s", w.Code, w.Body)
 	}
@@ -119,7 +119,7 @@ func TestChatProposalSettlementRejectsMalformedStoredOperationVisibly(t *testing
 	fixture := createCVRevisionFixture(t, db)
 	proposalID := createChatProposal(t, db, fixture, json.RawMessage(`[{"op":"move","path":"/sections/intro/fullName","rationale":"Không hợp lệ","grounding":{"type":"user_message","ref":"x"}}]`))
 
-	w := cvRevisionRequest(t, NewServerWithDB(db, "").Routes(), http.MethodPost, "/api/chat/proposals/"+proposalID, fixture.token, map[string]any{"profileId": fixture.profileID, "accept": []int{0}})
+	w := cvRevisionRequest(t, NewServerWithDB(db, "").Routes(), http.MethodPost, "/api/chat/proposals/"+proposalID, fixture.token, map[string]any{"profileId": fixture.profileID, "cvId": fixture.cvID, "draftToken": "draft-1", "accept": []int{0}})
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body)
 	}

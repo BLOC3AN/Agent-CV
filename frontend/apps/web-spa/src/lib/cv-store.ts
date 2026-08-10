@@ -277,6 +277,7 @@ export function useCVStore(id: string) {
     status,
     error,
     profileId,
+    draftVersion: documentVersionRef.current,
     updateDraft,
     saveDraft,
     discardDraft,

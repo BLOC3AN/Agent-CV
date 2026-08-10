@@ -11,7 +11,7 @@ export function BuilderRoute() {
   const store = useCVStore(cvId ?? '')
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
-  const [pendingAISaveMessage, setPendingAISaveMessage] = useState<string>()
+  const [pendingAIProvenance, setPendingAIProvenance] = useState<string[]>([])
   const blocker = useBlocker(store.dirty)
   const dirtyRef = useRef(store.dirty)
   const savingRef = useRef(store.saving)
@@ -22,9 +22,25 @@ export function BuilderRoute() {
   }, [store.dirty, store.saving])
 
   const save = useCallback(async () => {
-    await store.saveDraft(pendingAISaveMessage ? 'ai' : 'user', pendingAISaveMessage)
-    setPendingAISaveMessage(undefined)
-  }, [pendingAISaveMessage, store.saveDraft])
+    const message = pendingAIProvenance.length ? pendingAIProvenance.join('\n') : undefined
+    await store.saveDraft(message ? 'ai' : 'user', message)
+    setPendingAIProvenance([])
+  }, [pendingAIProvenance, store.saveDraft])
+
+  const updateManualCV = useCallback((cv: Parameters<typeof store.updateDraft>[0]['cv']) => {
+    setPendingAIProvenance([])
+    store.updateDraft({ cv, layout: store.draft!.layout })
+  }, [store.updateDraft, store.draft])
+
+  const updateManualLayout = useCallback((layout: Parameters<typeof store.updateDraft>[0]['layout']) => {
+    setPendingAIProvenance([])
+    store.updateDraft({ cv: store.draft!.cv, layout })
+  }, [store.updateDraft, store.draft])
+
+  const discardDraft = useCallback(() => {
+    setPendingAIProvenance([])
+    store.discardDraft()
+  }, [store.discardDraft])
 
   const downloadPDF = useCallback(async () => {
     await save()
@@ -58,7 +74,7 @@ export function BuilderRoute() {
 
   const discardAndLeave = () => {
     if (store.saving) return
-    store.discardDraft()
+    discardDraft()
     blocker.proceed?.()
     setLeaveDialogOpen(false)
   }
@@ -97,17 +113,17 @@ export function BuilderRoute() {
       <CVEditorView
         cv={store.draft.cv}
         layout={store.draft.layout}
-        onUpdateCV={(cv) => store.updateDraft({ cv, layout: store.draft!.layout })}
-        onUpdateLayout={(layout) => store.updateDraft({ cv: store.draft!.cv, layout })}
+        onUpdateCV={updateManualCV}
+        onUpdateLayout={updateManualLayout}
         onSave={() => void save().catch(() => undefined)}
-        onDiscard={store.discardDraft}
+        onDiscard={discardDraft}
         dirty={store.dirty}
         saving={store.status === 'saving'}
         onOpenPreview={() => navigate(`/builder/${cvId}/preview`)}
         onOpenShare={() => {}}
         onDownloadPDF={downloadPDF}
       />
-      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplyAIProposal={(ops) => store.updateDraft(applyChatOpsToDraft(store.draft!, ops))} onProposalApplied={setPendingAISaveMessage} onClose={() => setAssistantOpen(false)} /></div>}
+      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} layout={store.draft.layout} draftVersion={store.draftVersion} onApplyAIProposal={(ops) => store.updateDraft(applyChatOpsToDraft(store.draft!, ops))} onProposalApplied={(summary) => setPendingAIProvenance((previous) => [...previous, summary])} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
       {leaveDialogOpen && blocker.state === 'blocked' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">

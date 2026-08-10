@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Bot, Check, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
-import type { CV } from '../types'
+import type { CV, CVLayout } from '../types'
+import { applyChatOpsToDraft } from '../lib/cv-patch'
 import { sendChat, settleChatProposal, type ChatOp, type ClarifyRequest } from '../lib/api'
 
 interface Props {
   profileId: string
   cvId: string
   cv: CV
+  layout?: CVLayout
+  draftVersion?: number
   onApplyAIProposal: (ops: ChatOp[]) => void
   onProposalApplied?: (summary: string) => void
   onClose?: () => void
@@ -45,7 +48,9 @@ function display(value: unknown): string {
   return JSON.stringify(value)
 }
 
-export function ChatPanel({ profileId, cvId, cv, onApplyAIProposal, onProposalApplied, onClose }: Props) {
+export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAIProposal, onProposalApplied, onClose }: Props) {
+  const effectiveLayout = layout ?? cv.layout ?? { version: 1 as const, nodes: [] }
+  const effectiveDraftVersion = draftVersion ?? 0
   const [modelRef, setModelRef] = useState<ModelRef>('local.reasoner')
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
   const [input, setInput] = useState('')
@@ -53,7 +58,7 @@ export function ChatPanel({ profileId, cvId, cv, onApplyAIProposal, onProposalAp
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [clarify, setClarify] = useState<{ original: string; request: ClarifyRequest }>()
-  const [proposal, setProposal] = useState<{ id: string; summary: string; ops: ChatOp[]; rejected: { path: string; reason: string }[] }>()
+  const [proposal, setProposal] = useState<{ id: string; summary: string; ops: ChatOp[]; rejected: { path: string; reason: string }[]; draftVersion: number; settledOps?: ChatOp[] }>()
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState<number[]>([])
   const controller = useRef<AbortController | undefined>(undefined)
@@ -69,8 +74,9 @@ export function ChatPanel({ profileId, cvId, cv, onApplyAIProposal, onProposalAp
     setStep('Đang chuẩn bị')
     setClarify(undefined)
     setMessages((m) => [...m, { role: 'user', text }])
+    const requestDraftVersion = effectiveDraftVersion
     try {
-      const result = await sendChat(profileId, text, suppliedAnswers, modelRef, undefined, ac.signal, setStep)
+      const result = await sendChat(profileId, text, suppliedAnswers, modelRef, undefined, ac.signal, setStep, { cvId, draft: cv, layout: effectiveLayout, draftVersion: requestDraftVersion })
       if (result.kind === 'reply') setMessages((m) => [...m, { role: 'assistant', text: result.text }])
       else if (result.kind === 'clarify') {
         setMessages((m) => [...m, { role: 'assistant', text: result.request.reason }])
@@ -78,7 +84,7 @@ export function ChatPanel({ profileId, cvId, cv, onApplyAIProposal, onProposalAp
         setAnswers({})
       } else if (result.kind === 'patch') {
         setMessages((m) => [...m, { role: 'assistant', text: result.summary }])
-        setProposal({ id: result.proposalId, summary: result.summary, ops: result.ops, rejected: result.rejected })
+        setProposal({ id: result.proposalId, summary: result.summary, ops: result.ops, rejected: result.rejected, draftVersion: requestDraftVersion })
         setChecked(result.ops.map((op, i) => op.grounding.type === 'inference' ? -1 : i).filter((i) => i >= 0))
       } else {
         setError(`${result.message}${result.requestId ? ` (requestId: ${result.requestId})` : ''}`)
@@ -95,12 +101,23 @@ export function ChatPanel({ profileId, cvId, cv, onApplyAIProposal, onProposalAp
     setBusy(true)
     setError(undefined)
     try {
-      const result = await settleChatProposal(proposal.id, profileId, accept)
-      setProposal(undefined)
+      const selectedOps = proposal.settledOps ?? proposal.ops.filter((_, index) => accept.includes(index))
+      // Preflight against the current local draft before settling. This keeps
+      // a dirty draft safe even if the user edited it while the proposal was open.
+      applyChatOpsToDraft({ cv, layout: effectiveLayout }, selectedOps)
+      const result = proposal.settledOps
+        ? { selectedOps: proposal.settledOps, applied: proposal.settledOps.length }
+        : await settleChatProposal(proposal.id, profileId, { cvId, draftVersion: proposal.draftVersion }, accept)
       if (result.selectedOps.length) {
-        onApplyAIProposal(result.selectedOps)
+        try {
+          onApplyAIProposal(result.selectedOps)
+        } catch (err) {
+          setProposal({ ...proposal, settledOps: result.selectedOps })
+          throw err
+        }
         onProposalApplied?.(proposal.summary)
       }
+      setProposal(undefined)
       setMessages((m) => [...m, { role: 'assistant', text: result.selectedOps.length ? `Đã đưa ${result.applied} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.` : 'Đã bỏ qua đề xuất.' }])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không áp dụng được đề xuất')

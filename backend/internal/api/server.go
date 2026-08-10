@@ -1653,19 +1653,39 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		ProfileID string              `json:"profileId"`
-		Message   string              `json:"message"`
-		Answers   []map[string]string `json:"answers"`
-		ModelRef  string              `json:"modelRef"`
-		Hint      string              `json:"hint"`
+		ProfileID  string              `json:"profileId"`
+		CVID       string              `json:"cvId"`
+		DraftToken string              `json:"draftToken"`
+		Draft      json.RawMessage     `json:"draft"`
+		Layout     json.RawMessage     `json:"layout"`
+		Message    string              `json:"message"`
+		Answers    []map[string]string `json:"answers"`
+		ModelRef   string              `json:"modelRef"`
+		Hint       string              `json:"hint"`
 	}
-	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || body.ProfileID == "" || len(strings.TrimSpace(body.Message)) < 2 || len(body.Message) > 2000 {
+	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || body.ProfileID == "" || body.CVID == "" || body.DraftToken == "" || len(body.Draft) == 0 || len(body.Layout) == 0 || len(strings.TrimSpace(body.Message)) < 2 || len(body.Message) > 2000 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body chat không hợp lệ"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		return
+	}
+	var cvProfileID string
+	if err := s.db.QueryRowContext(r.Context(), `SELECT profile_id FROM cv_documents WHERE id=$1 AND profile_id=$2 AND user_id=$3`, body.CVID, body.ProfileID, userID).Scan(&cvProfileID); err == sql.ErrNoRows {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được CV"})
+		return
+	}
+	if cvProfileID != body.ProfileID {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "CV không thuộc hồ sơ này"})
+		return
+	}
+	if _, err := normalizeCommittedCV(body.Draft, body.Layout); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Bản nháp không hợp lệ: " + err.Error()})
 		return
 	}
 	var sessionID string
@@ -1697,8 +1717,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	// cache so a reload can restore the last ten messages without loading the
 	// whole conversation.
 	s.cacheChatMessages(r.Context(), userID, sessionID, history)
-	profileRaw := []byte{}
-	_ = s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 AND user_id=$2`, body.ProfileID, userID).Scan(&profileRaw)
+	profileRaw := append([]byte(nil), body.Draft...)
 	// Giữ cùng UX SSE với flow Node: gửi trạng thái ngay khi đã nhận và dựng
 	// đủ context, thay vì để giao diện đứng ở "Đang kết nối" suốt lúc model chạy.
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
@@ -1742,7 +1761,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if modelOutput.Kind == "patch" {
-		if err := validateChatProposal(profileRaw, modelOutput.Ops); err != nil {
+		if err := validateChatProposalDocuments(profileRaw, body.Layout, modelOutput.Ops); err != nil {
 			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa thể tạo đề xuất an toàn từ yêu cầu này: " + err.Error()}
 			assistantContent = modelOutput.Text
 		} else {
@@ -1760,12 +1779,12 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	if modelOutput.Kind == "patch" {
 		sendStep("Đang kiểm tra đề xuất")
 		var proposalID string
-		if err := s.db.QueryRowContext(r.Context(), `INSERT INTO proposed_patches(message_id,ops) VALUES($1,$2::jsonb) RETURNING id`, assistantID, jsonRawArray(modelOutput.Ops)).Scan(&proposalID); err != nil {
+		if err := s.db.QueryRowContext(r.Context(), `INSERT INTO proposed_patches(message_id,cv_id,draft_token,profile_snapshot,layout_snapshot,ops) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb) RETURNING id`, assistantID, body.CVID, body.DraftToken, string(body.Draft), string(body.Layout), jsonRawArray(modelOutput.Ops)).Scan(&proposalID); err != nil {
 			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa lưu được đề xuất để bạn duyệt. Hồ sơ chưa thay đổi."}
 			assistantContent = modelOutput.Text
 			_, _ = s.db.ExecContext(r.Context(), `UPDATE chat_messages SET content=$2 WHERE id=$1`, assistantID, assistantContent)
 		} else {
-			payload, _ := json.Marshal(map[string]any{"kind": "patch", "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID, "proposalId": proposalID, "summary": modelOutput.Summary, "ops": modelOutput.Ops, "rejected": []any{}})
+			payload, _ := json.Marshal(map[string]any{"kind": "patch", "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID, "proposalId": proposalID, "cvId": body.CVID, "draftToken": body.DraftToken, "summary": modelOutput.Summary, "ops": modelOutput.Ops, "rejected": []any{}})
 			fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
 			return
 		}
@@ -1933,6 +1952,67 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 	return nil
 }
 
+// validateChatProposalDocuments validates the complete documents that the
+// proposal was created from. Profile and layout are separate JSON documents in
+// storage, so layout pointers are stripped before patching the layout and the
+// shared commit contract validates the resulting pair together.
+func validateChatProposalDocuments(profileRaw, layoutRaw []byte, ops []json.RawMessage) error {
+	profileOps := make([]json.RawMessage, 0, len(ops))
+	layoutOps := make([]json.RawMessage, 0, len(ops))
+	for _, raw := range ops {
+		var op struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(raw, &op) != nil || op.Path == "" {
+			return fmt.Errorf("op không hợp lệ")
+		}
+		if strings.HasPrefix(op.Path, "/layout/") {
+			var value map[string]any
+			if json.Unmarshal(raw, &value) != nil {
+				return fmt.Errorf("op không hợp lệ")
+			}
+			value["path"] = strings.TrimPrefix(op.Path, "/layout")
+			patched, err := json.Marshal(value)
+			if err != nil {
+				return fmt.Errorf("op không hợp lệ")
+			}
+			layoutOps = append(layoutOps, patched)
+		} else if op.Path == "/layout" {
+			return fmt.Errorf("không thể thay thế toàn bộ bố cục")
+		} else {
+			profileOps = append(profileOps, raw)
+		}
+	}
+	if len(ops) == 0 || len(ops) > 20 {
+		return fmt.Errorf("số lượng thay đổi không hợp lệ")
+	}
+	if len(profileOps) > 0 {
+		if err := validateChatProposal(profileRaw, profileOps); err != nil {
+			return err
+		}
+	}
+	if len(layoutOps) > 0 {
+		if err := validateChatProposal(layoutRaw, layoutOps); err != nil {
+			return err
+		}
+	}
+	updatedProfile, err := applyJSONPatch(profileRaw, jsonRawArray(profileOps))
+	if err != nil {
+		return fmt.Errorf("CV sau patch không hợp lệ: %v", err)
+	}
+	updatedLayout, err := applyJSONPatch(layoutRaw, jsonRawArray(layoutOps))
+	if err != nil {
+		return fmt.Errorf("layout sau patch không hợp lệ: %v", err)
+	}
+	if _, err := normalizeCommittedCV(updatedProfile, updatedLayout); err != nil {
+		return fmt.Errorf("CV sau patch không hợp lệ: %v", err)
+	}
+	if _, err := validateCVLayout(updatedLayout); err != nil {
+		return fmt.Errorf("layout sau patch không hợp lệ: %v", err)
+	}
+	return nil
+}
+
 func (s *Server) cacheChatMessages(ctx context.Context, userID, sessionID string, messages []map[string]string) {
 	if s.redis == nil || userID == "" || sessionID == "" {
 		return
@@ -1967,10 +2047,12 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 	}
 	proposalID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/chat/proposals/"), "/")
 	var body struct {
-		ProfileID string `json:"profileId"`
-		Accept    []int  `json:"accept"`
+		ProfileID  string `json:"profileId"`
+		CVID       string `json:"cvId"`
+		DraftToken string `json:"draftToken"`
+		Accept     []int  `json:"accept"`
 	}
-	if json.NewDecoder(io.LimitReader(r.Body, 128<<10)).Decode(&body) != nil || proposalID == "" || body.ProfileID == "" || len(body.Accept) > 20 {
+	if json.NewDecoder(io.LimitReader(r.Body, 128<<10)).Decode(&body) != nil || proposalID == "" || body.ProfileID == "" || body.CVID == "" || body.DraftToken == "" || len(body.Accept) > 20 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
 		return
 	}
@@ -1981,8 +2063,9 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	var status string
-	var opsRaw, profileRaw []byte
-	if err := tx.QueryRowContext(r.Context(), `SELECT pp.status,pp.ops,p.data FROM proposed_patches pp JOIN chat_messages cm ON cm.id=pp.message_id JOIN chat_sessions cs ON cs.id=cm.session_id JOIN profiles p ON p.id=cs.profile_id WHERE pp.id=$1 AND p.id=$2 AND p.user_id=$3 FOR UPDATE OF pp`, proposalID, body.ProfileID, userID).Scan(&status, &opsRaw, &profileRaw); err == sql.ErrNoRows {
+	var opsRaw, profileRaw, layoutRaw []byte
+	var proposalCVID, proposalToken string
+	if err := tx.QueryRowContext(r.Context(), `SELECT pp.status,pp.ops,pp.cv_id,pp.draft_token,pp.profile_snapshot,pp.layout_snapshot FROM proposed_patches pp JOIN chat_messages cm ON cm.id=pp.message_id JOIN chat_sessions cs ON cs.id=cm.session_id JOIN profiles p ON p.id=cs.profile_id JOIN cv_documents c ON c.id=pp.cv_id AND c.profile_id=p.id WHERE pp.id=$1 AND p.id=$2 AND p.user_id=$3 AND c.id=$4 FOR UPDATE OF pp`, proposalID, body.ProfileID, userID, body.CVID).Scan(&status, &opsRaw, &proposalCVID, &proposalToken, &profileRaw, &layoutRaw); err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy đề xuất"})
 		return
 	} else if err != nil {
@@ -1991,6 +2074,10 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 	}
 	if status != "pending" {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "Đề xuất này đã " + status})
+		return
+	}
+	if proposalCVID != body.CVID || proposalToken != body.DraftToken {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Bản nháp đã thay đổi. Hãy tạo lại đề xuất từ bản nháp hiện tại."})
 		return
 	}
 	var all []json.RawMessage
@@ -2020,7 +2107,7 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"applied": 0, "accepted": accepted, "rejected": rejected, "status": "rejected", "selectedOps": []any{}})
 		return
 	}
-	if err := validateChatProposal(profileRaw, selected); err != nil {
+	if err := validateChatProposalDocuments(profileRaw, layoutRaw, selected); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Đề xuất không hợp lệ: " + err.Error()})
 		return
 	}

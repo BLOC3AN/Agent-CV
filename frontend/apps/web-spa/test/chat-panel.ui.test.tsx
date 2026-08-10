@@ -55,6 +55,7 @@ describe('ChatPanel — giao diện trợ lý AI', () => {
       undefined,
       expect.any(AbortSignal),
       expect.any(Function),
+      expect.objectContaining({ cvId: 'cv-1', draftVersion: 0 }),
     ))
     expect(await screen.findByText('AI GỢI Ý')).toBeInTheDocument()
     expect(screen.getByText('Đã phân tích CV.')).toBeInTheDocument()
@@ -93,5 +94,23 @@ describe('ChatPanel — giao diện trợ lý AI', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/op json patch không được hỗ trợ/i)
     expect(screen.queryByText(/đã đưa 1 thay đổi vào bản nháp/i)).not.toBeInTheDocument()
+  })
+
+  it('preflights against the current draft and keeps the proposal when the draft has diverged', async () => {
+    sendChat.mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất trên bản cũ',
+      ops: [{ op: 'replace', path: '/sections/intro/missing', value: 'stale', rationale: 'Stale', grounding: { type: 'profile', ref: 'cv-1' } }],
+      rejected: [],
+    } as never)
+    const onApplyAIProposal = vi.fn()
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={{ ...initialCVs[0]!, schemaVersion: 2, language: 'vi', _meta: { verified: {}, source: 'manual', canonical: {} } } as never} layout={{ version: 1, nodes: [{ id: 'header', type: 'header', visible: true }] }} draftVersion={4} onApplyAIProposal={onApplyAIProposal} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('Đề xuất trên bản cũ')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/không tồn tại/i)
+    expect(settleChatProposal).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Áp dụng vào CV' })).toBeInTheDocument()
   })
 })

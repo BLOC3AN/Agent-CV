@@ -245,6 +245,31 @@ func TestValidateChatProposalUsesV2SkillShape(t *testing.T) {
 	}
 }
 
+func TestValidateChatProposalDocumentsValidatesProfileAndLayoutSeparately(t *testing.T) {
+	profile := validRevisionCV("Draft", "User")
+	layout := json.RawMessage(`{"version":1,"nodes":[{"id":"header","type":"header","visible":true},{"id":"summary","type":"summary","visible":true}]}`)
+	valid := []json.RawMessage{
+		json.RawMessage(`{"op":"replace","path":"/sections/intro/summary","value":"Updated","rationale":"Clarify summary","grounding":{"type":"user_message","ref":"request"}}`),
+		json.RawMessage(`{"op":"replace","path":"/layout/nodes/0/visible","value":false,"rationale":"Hide header","grounding":{"type":"user_message","ref":"request"}}`),
+		json.RawMessage(`{"op":"replace","path":"/layout/nodes","value":[{"id":"summary","type":"summary","visible":true},{"id":"header","type":"header","visible":false}],"rationale":"Reorder sections","grounding":{"type":"user_message","ref":"request"}}`),
+	}
+	if err := validateChatProposalDocuments(profile, layout, valid); err != nil {
+		t.Fatal(err)
+	}
+	invalidSection := []json.RawMessage{json.RawMessage(`{"op":"replace","path":"/sections/intro","value":false,"rationale":"Break intro","grounding":{"type":"user_message","ref":"request"}}`)}
+	if err := validateChatProposalDocuments(profile, layout, invalidSection); err == nil {
+		t.Fatal("expected invalid intro section to be rejected")
+	}
+	invalidItem := []json.RawMessage{json.RawMessage(`{"op":"add","path":"/sections/skills/-","value":{"id":"skills-1","category":"Data","skills":[7]},"rationale":"Break skills","grounding":{"type":"user_message","ref":"request"}}`)}
+	if err := validateChatProposalDocuments(profile, layout, invalidItem); err == nil {
+		t.Fatal("expected invalid skill item to be rejected")
+	}
+	invalidLayout := []json.RawMessage{json.RawMessage(`{"op":"replace","path":"/layout/nodes/0","value":{"id":"header","type":"unknown","visible":true},"rationale":"Break layout","grounding":{"type":"user_message","ref":"request"}}`)}
+	if err := validateChatProposalDocuments(profile, layout, invalidLayout); err == nil {
+		t.Fatal("expected invalid layout to be rejected")
+	}
+}
+
 func TestCancelJob(t *testing.T) {
 	s := NewServer()
 	s.jobs["job-1"] = &Job{ID: "job-1", Kind: "parse_cv", Status: "queued", CreatedAt: time.Now()}
