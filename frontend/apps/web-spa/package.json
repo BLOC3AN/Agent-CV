@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@hr/schema": "*",
-    "@hr/templates": "*",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",

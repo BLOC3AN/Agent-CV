@@ -191,54 +191,17 @@ func profileChunks(raw string) ([]profileChunk, map[string]any) {
 	if json.Unmarshal([]byte(raw), &p) != nil {
 		return nil, map[string]any{}
 	}
-	// Giai đoạn chuyển tiếp SP-2→SP-5: hai hình dạng cùng đi qua worker này.
-	// Nhận diện bằng sự có mặt của `sections`, không bằng cờ schemaVersion —
-	// hồ sơ thiếu cờ không được phép rơi vào nhánh sai và trả về rỗng lặng lẽ.
-	if sections, ok := p["sections"].(map[string]any); ok {
-		return profileChunksV2(sections), p
+	sections, ok := p["sections"].(map[string]any)
+	if !ok {
+		return nil, p
 	}
-	var out []profileChunk
-	basics, _ := p["basics"].(map[string]any)
-	appendChunk(&out, "/basics/headline", stringValue(basics["headline"]))
-	appendChunk(&out, "/basics/introduce", stringValue(basics["introduce"]))
-	for _, item := range []struct{ key, name string }{{"skills", "name"}, {"work", "role"}, {"projects", "name"}} {
-		items, _ := p[item.key].([]any)
-		for i, rawItem := range items {
-			m, _ := rawItem.(map[string]any)
-			base := fmt.Sprintf("/%s/%d", item.key, i)
-			appendChunk(&out, base+"/"+item.name, stringValue(m[item.name]))
-			if item.key == "work" {
-				appendChunk(&out, base+"/org", stringValue(m["org"]))
-			}
-			if item.key == "projects" {
-				appendChunk(&out, base+"/tech", strings.Join(stringArray(m["tech"]), " · "))
-			}
-			for j, h := range stringArray(m["highlights"]) {
-				appendChunk(&out, fmt.Sprintf("%s/highlights/%d", base, j), h)
-			}
-		}
-	}
-	for _, item := range []string{"languages", "certifications", "activities", "education"} {
-		items, _ := p[item].([]any)
-		for i, rawItem := range items {
-			m, _ := rawItem.(map[string]any)
-			base := fmt.Sprintf("/%s/%d", item, i)
-			parts := []string{stringValue(m["name"]), stringValue(m["school"]), stringValue(m["degree"]), stringValue(m["major"]), stringValue(m["issuer"]), stringValue(m["role"]), stringValue(m["level"])}
-			appendChunk(&out, base, strings.Join(strings.Fields(strings.Join(parts, " ")), " "))
-			for j, h := range stringArray(m["highlights"]) {
-				appendChunk(&out, fmt.Sprintf("%s/highlights/%d", base, j), h)
-			}
-		}
-	}
-	return out, p
+	return profileChunksV2(sections), p
 }
 
-// profileChunksV2 đọc hình dạng CV v2 (`sections.intro`, `sections.experience[]`,
-// `sections.projects[]`, `sections.activities[]`, `sections.education[]`,
-// `sections.certifications[]`, `sections.languages[]`, `sections.skills[]` —
-// đủ tám nhóm của CVSectionsSchema trong frontend/packages/schema/src/cv.ts)
-// và trả về cùng kiểu profileChunk như nhánh v1, để richMatchScore/
-// matchRequirement dùng chung mà không cần biết hồ sơ đến từ hình dạng nào.
+// profileChunksV2 đọc hình dạng CV production (`sections.intro`,
+// `sections.experience[]`, `sections.projects[]`, `sections.activities[]`,
+// `sections.education[]`, `sections.certifications[]`, `sections.languages[]`,
+// `sections.skills[]`).
 func profileChunksV2(sections map[string]any) []profileChunk {
 	var out []profileChunk
 	if intro, ok := sections["intro"].(map[string]any); ok {
@@ -257,7 +220,7 @@ func profileChunksV2(sections map[string]any) []profileChunk {
 			base := fmt.Sprintf("/sections/%s/%d", section.key, i)
 			appendChunk(&out, base+"/"+section.name, stringValue(m[section.name]))
 			// company/role là trường tra cứu thêm ngoài trường chính (title/organization),
-			// cùng vai trò với org (work) và tech (projects) ở nhánh v1 — thiếu thì JD hỏi
+			// để JD vẫn khớp được tên công ty hoặc chức vụ hoạt động.
 			// tên công ty hoặc chức vụ hoạt động không khớp được dù CV có ghi rõ.
 			if section.key == "experience" {
 				appendChunk(&out, base+"/company", stringValue(m["company"]))
@@ -272,7 +235,7 @@ func profileChunksV2(sections map[string]any) []profileChunk {
 	}
 	// education/certifications/languages: mỗi mục có nhiều field mang nghĩa riêng
 	// (bằng cấp, chuyên ngành, nơi cấp chứng chỉ, tên ngôn ngữ...), nên chunk theo
-	// từng field thay vì gộp thành một chuỗi như nhánh v1 (matching.go xung quanh
+	// từng field thay vì gộp thành một chuỗi như cách làm cũ (matching.go xung quanh
 	// dòng 221) — con trỏ hiển thị cho người dùng phải trỏ đúng field cụ thể
 	// (vd. /sections/education/0/school), không phải một khối gộp xấp xỉ. Thiếu
 	// ba nhóm này thì JD nhắc tới bằng cấp/chứng chỉ/ngôn ngữ sẽ lặng lẽ không
@@ -469,7 +432,7 @@ func minInt(a, b int) int {
 
 func richMatchScore(ctx context.Context, profile, rawJD string) (map[string]any, []map[string]any, []map[string]any) {
 	chunks, p := profileChunks(profile)
-	legacy := legacyProfile(p)
+	view := matchingView(p)
 	tax := loadSkillTaxonomy()
 	jd := parseJDRequirements(ctx, rawJD)
 	index := map[string][]profileChunk{}
@@ -538,12 +501,12 @@ func richMatchScore(ctx context.Context, profile, rawJD string) (map[string]any,
 			}
 		}
 	}
-	experience := estimateProfileYears(legacy)
+	experience := estimateProfileYears(view)
 	if jd.YearsRequired != nil && *jd.YearsRequired > 0 {
 		experience = minFloat(100, experience/(*jd.YearsRequired)*100)
 	}
 	education := 0.0
-	items, _ := legacy["education"].([]any)
+	items, _ := view["education"].([]any)
 	if len(items) > 0 {
 		education = 100
 	}
@@ -561,7 +524,7 @@ func richMatchScore(ctx context.Context, profile, rawJD string) (map[string]any,
 			}
 		}
 	}
-	rubric, rubricGaps := scoreProfileRubric(legacy, jd)
+	rubric, rubricGaps := scoreProfileRubric(view, jd)
 	gaps = append(gaps, rubricGaps...)
 	breakdown := map[string]any{"skills": int(keyword), "experience": int(experience), "education": int(education), "keywords": int(atsScoreFloat(atsScore)), "rubric": int(rubric)}
 	score := map[string]any{"overall": int(combineMatchBreakdown(breakdown, atsScore != nil)), "breakdown": breakdown, "missingAtsKeywords": atsMissing, "degradedReason": "Semantic/model layer chưa bật trong Go worker"}
@@ -593,10 +556,10 @@ func atsScoreFloat(v any) float64 {
 	return 0
 }
 func estimateProfileYears(p map[string]any) float64 {
-	p = legacyProfile(p)
+	p = matchingView(p)
 	years := map[int]bool{}
 	now := time.Now().Year()
-	items, _ := p["work"].([]any)
+	items, _ := p["experience"].([]any)
 	re := regexp.MustCompile(`(?:19|20)\d{2}`)
 	for _, raw := range items {
 		m, _ := raw.(map[string]any)
@@ -620,27 +583,19 @@ func estimateProfileYears(p map[string]any) float64 {
 	return float64(len(years))
 }
 
-// legacyProfile normalises CV v2 to the small v1-shaped view consumed by the
-// older rubric helpers. The matching chunks remain v2-native; this adapter is
-// deliberately local to the numeric scoring path so both schemas produce the
-// same score during SP-2→SP-5 coexistence.
-func legacyProfile(p map[string]any) map[string]any {
-	if _, ok := p["sections"].(map[string]any); !ok {
-		return p
-	}
+// matchingView normalises the v2 sections for the numeric scoring helpers.
+// It is deliberately local to scoring; persisted documents and evidence
+// pointers remain in their native v2 shape.
+func matchingView(p map[string]any) map[string]any {
 	sections, _ := p["sections"].(map[string]any)
 	intro, _ := sections["intro"].(map[string]any)
 	out := map[string]any{
-		"basics": map[string]any{
-			"name": stringValue(intro["fullName"]), "headline": stringValue(intro["title"]),
-			"introduce": stringValue(intro["summary"]), "email": stringValue(intro["email"]),
+		"intro": map[string]any{
+			"fullName": stringValue(intro["fullName"]), "title": stringValue(intro["title"]),
+			"summary": stringValue(intro["summary"]), "email": stringValue(intro["email"]),
 			"phone": stringValue(intro["phone"]), "location": stringValue(intro["location"]),
+			"website": stringValue(intro["website"]),
 		},
-	}
-	if meta, ok := p["_meta"].(map[string]any); ok {
-		if links, ok := meta["originalLinks"].([]any); ok {
-			out["basics"].(map[string]any)["links"] = links
-		}
 	}
 	copyItems := func(key string, transform func(map[string]any) map[string]any) []any {
 		raw, _ := sections[key].([]any)
@@ -653,12 +608,12 @@ func legacyProfile(p map[string]any) map[string]any {
 		return items
 	}
 	identity := func(item map[string]any) map[string]any { return item }
-	out["work"] = copyItems("experience", func(item map[string]any) map[string]any {
-		return map[string]any{"role": item["title"], "org": item["company"], "startDate": item["startDate"], "endDate": item["endDate"], "highlights": item["highlights"]}
+	out["experience"] = copyItems("experience", func(item map[string]any) map[string]any {
+		return item
 	})
 	out["projects"] = copyItems("projects", identity)
 	out["education"] = copyItems("education", func(item map[string]any) map[string]any {
-		return map[string]any{"school": item["school"], "degree": item["degree"], "major": item["fieldOfStudy"], "highlights": item["highlights"]}
+		return item
 	})
 	out["activities"] = copyItems("activities", identity)
 	out["skills"] = sections["skills"]
@@ -723,9 +678,9 @@ func selectRubric(rubrics []rubricDefinition, jd jdRequirements) *rubricDefiniti
 }
 
 func allHighlights(p map[string]any) []string {
-	p = legacyProfile(p)
+	p = matchingView(p)
 	var out []string
-	for _, key := range []string{"work", "projects", "education", "activities"} {
+	for _, key := range []string{"experience", "projects", "education", "activities"} {
 		items, _ := p[key].([]any)
 		for _, raw := range items {
 			m, _ := raw.(map[string]any)
@@ -747,16 +702,16 @@ func startsAction(s string) bool {
 }
 
 func estimatePages(p map[string]any) int {
-	p = legacyProfile(p)
-	b, _ := p["basics"].(map[string]any)
-	chars := len(stringValue(b["introduce"]))
+	p = matchingView(p)
+	intro, _ := p["intro"].(map[string]any)
+	chars := len(stringValue(intro["summary"]))
 	for _, h := range allHighlights(p) {
 		chars += len(h)
 	}
 	for _, x := range []struct {
 		key string
 		n   int
-	}{{"work", 60}, {"projects", 60}, {"education", 50}, {"skills", 12}} {
+	}{{"experience", 60}, {"projects", 60}, {"education", 50}, {"skills", 12}} {
 		items, _ := p[x.key].([]any)
 		chars += len(items) * x.n
 	}
@@ -768,19 +723,7 @@ func estimatePages(p map[string]any) int {
 }
 
 func hasProfileField(p map[string]any, field string) bool {
-	p = legacyProfile(p)
-	if strings.HasPrefix(field, "basics.links[") {
-		want := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(field, "basics.links[?(@.label=='"), "')]"))
-		b, _ := p["basics"].(map[string]any)
-		links, _ := b["links"].([]any)
-		for _, raw := range links {
-			m, _ := raw.(map[string]any)
-			if strings.Contains(strings.ToLower(stringValue(m["label"])), want) {
-				return true
-			}
-		}
-		return false
-	}
+	p = matchingView(p)
 	parts := strings.Split(field, ".")
 	var node any = p
 	for _, part := range parts {
@@ -794,7 +737,7 @@ func hasProfileField(p map[string]any, field string) bool {
 }
 
 func scoreProfileRubric(p map[string]any, jd jdRequirements) (float64, []map[string]any) {
-	p = legacyProfile(p)
+	p = matchingView(p)
 	r := selectRubric(loadRubrics(), jd)
 	if r == nil {
 		return 0, nil

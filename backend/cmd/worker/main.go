@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -182,20 +183,20 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	if name == "" {
 		name = "Chưa rõ tên"
 	}
-	basics := map[string]any{"name": name, "links": []any{}}
+	introFields := map[string]any{"name": name}
 	if email := firstMatch(seg.Text, `(?i)[\w.+-]+@[\w-]+(?:\.[\w-]+)+`); email != "" {
-		basics["email"] = email
+		introFields["email"] = email
 	}
 	if phone := firstMatch(seg.Text, `(?:\+|00)?[0-9][0-9 ()-]{7,}[0-9]`); phone != "" {
-		basics["phone"] = strings.TrimSpace(phone)
+		introFields["phone"] = strings.TrimSpace(phone)
 	}
 	if introduce := sectionText(seg.Merged["introduce"]); introduce != "" {
-		basics["introduce"] = introduce
+		introFields["introduce"] = introduce
 	}
 	profile := profileFromSegments(lang, seg.Merged, j.ID)
 	intro, _ := profile["sections"].(map[string]any)
 	introData, _ := intro["intro"].(map[string]any)
-	for key, value := range basics {
+	for key, value := range introFields {
 		switch key {
 		case "name":
 			introData["fullName"] = value
@@ -206,6 +207,9 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 		}
 	}
 	raw := jsonString(profile)
+	if err := validateImportedCV(raw); err != nil {
+		return fmt.Errorf("PROFILE_CREATE_FAILED: %w", err)
+	}
 	var profileID string
 	if err := db.QueryRowContext(ctx, `INSERT INTO profiles(user_id,data,language) VALUES($1,$2::jsonb,$3) RETURNING id`, j.UserID, raw, lang).Scan(&profileID); err != nil {
 		return fmt.Errorf("PROFILE_CREATE_FAILED: %w", err)
@@ -216,6 +220,45 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	result := jsonString(parseCVJobResult(profileID, lang, seg.Quality, seg.Reasons))
 	_, err = db.ExecContext(ctx, `UPDATE jobs SET status='done',result=$2::jsonb,error=NULL,finished_at=now() WHERE id=$1`, j.ID, result)
 	return err
+}
+
+// validateImportedCV keeps malformed parser output out of the V2-only
+// profiles table. The database constraint remains the final safety net, but a
+// parser regression should produce an actionable worker error instead of a
+// raw SQLSTATE message.
+func validateImportedCV(raw string) error {
+	var document struct {
+		SchemaVersion int `json:"schemaVersion"`
+		Sections      struct {
+			Intro struct {
+				FullName string `json:"fullName"`
+			} `json:"intro"`
+			Experience     []json.RawMessage `json:"experience"`
+			Projects       []json.RawMessage `json:"projects"`
+			Education      []json.RawMessage `json:"education"`
+			Skills         []json.RawMessage `json:"skills"`
+			Activities     []json.RawMessage `json:"activities"`
+			Certifications []json.RawMessage `json:"certifications"`
+			Languages      []json.RawMessage `json:"languages"`
+		} `json:"sections"`
+	}
+	if err := json.Unmarshal([]byte(raw), &document); err != nil {
+		return fmt.Errorf("invalid V2 JSON: %w", err)
+	}
+	if document.SchemaVersion != 2 {
+		return fmt.Errorf("import produced schemaVersion %d, want 2", document.SchemaVersion)
+	}
+	if document.Sections.Intro.FullName == "" &&
+		len(document.Sections.Experience) == 0 &&
+		len(document.Sections.Projects) == 0 &&
+		len(document.Sections.Education) == 0 &&
+		len(document.Sections.Skills) == 0 &&
+		len(document.Sections.Activities) == 0 &&
+		len(document.Sections.Certifications) == 0 &&
+		len(document.Sections.Languages) == 0 {
+		return errors.New("import produced no CV content")
+	}
+	return nil
 }
 
 func parseCVJobResult(profileID, language, quality string, warnings []string) map[string]any {
@@ -645,11 +688,7 @@ func compactProfile(raw string) string {
 	if json.Unmarshal([]byte(raw), &obj) != nil {
 		return raw
 	}
-	if basics, ok := obj["basics"].(map[string]any); ok {
-		for _, key := range pii.ProfileKeys {
-			delete(basics, key)
-		}
-	}
+	pii.RedactDocument(obj)
 	return jsonString(obj)
 }
 

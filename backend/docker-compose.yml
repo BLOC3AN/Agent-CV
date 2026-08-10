@@ -129,23 +129,6 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
-  # Rollback target: giữ Next sẵn ở cổng 3001 trong cửa sổ theo dõi cutover.
-  # Không nhận traffic production mặc định; bật bằng `--profile rollback`.
-  web-next-rollback:
-    profiles: ['rollback']
-    build:
-      context: ..
-      dockerfile: frontend/apps/web/Dockerfile
-    container_name: hr-web-next-rollback
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      GO_BACKEND_URL: http://backend:8080
-    ports:
-      - '3001:3000'
-    depends_on:
-      backend: { condition: service_started }
-
   # Go worker: parse CV, match analysis và retention
   worker:
     build:

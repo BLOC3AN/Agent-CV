@@ -14,13 +14,9 @@
     // webpack, nếu không mỗi công cụ sẽ thấy một cây phụ thuộc khác nhau.
     "paths": {
       "@hr/schema": ["./packages/schema/src/index.ts"],
-      "@hr/ai": ["./packages/ai/src/index.ts"],
-      "@hr/db": ["./packages/db/src/index.ts"],
-      "@hr/matching": ["./packages/matching/src/index.ts"],
-      "@hr/kb": ["./packages/kb/src/index.ts"],
-      "@hr/templates": ["./packages/templates/src/index.ts"]
+      "@hr/kb": ["./packages/kb/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*", "packages/*/test/**/*", "../backend/legacy-eval/**/*", "../backend/db/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/.next", "apps/web"]
+  "include": ["packages/*/src/**/*", "packages/*/test/**/*", "../backend/db/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/.next"]
 }

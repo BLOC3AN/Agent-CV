@@ -107,8 +107,8 @@ rubrics:
           vi: "Thông tin liên hệ đầy đủ"
           en: "Contact completeness"
         type: required_fields
-        fields: ["basics.email", "basics.phone"]
-        recommended: ["basics.links[?(@.label=='GitHub')]"]
+        fields: ["intro.email", "intro.phone"]
+        recommended: ["intro.website"]
         weight: 0.15
         advice_when_below:
           vi: "Với ngành phần mềm, thiếu link GitHub là mất một kênh chứng minh năng lực gần như miễn phí."
@@ -126,7 +126,7 @@ rubrics:
       - id: work_experience
         label: { vi: "Kinh nghiệm đi làm", en: "Professional experience" }
         type: count
-        path: "$.work"
+        path: "$.experience"
         min: 1
         weight: 0.30
         advice_when_below:
@@ -168,7 +168,7 @@ rubrics:
 guidelines:
 
   - id: g_bullet_formula
-    section: [work, projects, activities]
+    section: [experience, projects, activities]
     role_family: [all]
     seniority: [fresher, junior]
     priority: 90
@@ -297,7 +297,7 @@ guidelines:
         interleave the columns. Keep two versions: one for systems, one for email.
 
   - id: g_summary_when
-    section: [basics]
+    section: [intro]
     role_family: [all]
     seniority: [fresher, junior]
     priority: 65
@@ -352,7 +352,7 @@ exemplars:
       trong nhóm. Toàn bộ số liệu phải do ứng viên cung cấp, hệ thống KHÔNG được tự sinh.
 
   - id: ex_internship_qa
-    section: work
+    section: experience
     role_family: [qa_tester]
     language: vi
     before: "Thực tập tại công ty ABC, tham gia kiểm thử phần mềm."
@@ -367,7 +367,7 @@ exemplars:
       làm chủ ("tự đề xuất") — thứ nhà tuyển dụng tìm ở junior.
 
   - id: ex_summary_generic
-    section: basics
+    section: intro
     role_family: [all]
     language: vi
     before: |
@@ -403,7 +403,7 @@ red_flags:
 
   - id: rf_unprofessional_email
     severity: high
-    detector: "regex trên basics.email"
+    detector: "regex trên intro.email"
     rule: "email chứa biệt danh, năm sinh kiểu 'cutegirl99', 'boydeptrai'"
     message:
       vi: "Đổi sang email dạng họtên@gmail.com. Đây là chi tiết nhỏ nhưng gây ấn tượng xấu ngay dòng đầu tiên."
@@ -411,7 +411,7 @@ red_flags:
 
   - id: rf_photo_when_unnecessary
     severity: low
-    detector: "có basics.photo"
+    detector: "có intro.avatarUrl"
     rule: "CV nộp công ty nước ngoài / có yếu tố quốc tế"
     message:
       vi: "Nhiều công ty nước ngoài không khuyến khích ảnh trong CV để tránh thiên kiến. Công ty Việt thì ảnh vẫn phổ biến và chấp nhận được."

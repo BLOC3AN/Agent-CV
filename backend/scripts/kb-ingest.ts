@@ -7,7 +7,7 @@
 import { readdirSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { getPool, closePool } from '@hr/db'
+import { Pool } from 'pg'
 import { ingestKbFile } from '@hr/kb'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -17,7 +17,7 @@ const files = process.argv[2]
   ? [resolve(process.argv[2])]
   : readdirSync(SEED_DIR).filter((f) => f.endsWith('.yaml')).map((f) => join(SEED_DIR, f))
 
-const pool = getPool()
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 let failed = false
 
 for (const f of files) {
@@ -38,5 +38,5 @@ for (const f of files) {
   }
 }
 
-await closePool()
+await pool.end()
 process.exit(failed ? 1 : 0)

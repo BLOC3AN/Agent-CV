@@ -3,9 +3,7 @@ import { z } from 'zod'
 /**
  * CV v2 — spec 2026-08-09 §2.1.
  *
- * Sống CẠNH ProfileSchema v1 trong profile.ts, không thay thế. `apps/web` có
- * hơn 70 file bám vào v1 và phải chạy tới SP-5; xoá v1 bây giờ là làm chết bản
- * đang phục vụ production.
+ * Đây là schema duy nhất của dữ liệu CV production.
  */
 
 export const CVLanguageSchema = z.enum(['vi', 'en'])
@@ -155,28 +153,14 @@ export const ActiveSectionsSchema = z.object({
 })
 
 /**
- * `verified` — xương sống chống bịa, giữ nguyên ngữ nghĩa từ v1: mọi nội dung
+ * `verified` — xương sống chống bịa: mọi nội dung
  * do AI sinh ra là false cho tới khi người dùng xác nhận (UC-22, UC-53).
  *
- * `originalLinks` / `droppedFields` / `canonical` là kho chứa những gì v2 không
- * hiển thị nhưng không được phép mất: thiếu chúng thì đường lùi v2→v1 không
- * khôi phục được nguyên trạng, và `canonical` mất là điểm khớp JD đổi âm thầm
- * (BR-57.1).
+ * `canonical` giữ tên kỹ năng chuẩn hoá để matching ổn định (BR-57.1).
  */
 export const CVMetaSchema = z.object({
   verified: z.record(z.boolean()).default({}),
   source: z.enum(['manual', 'pdf_import', 'ai_generated']).default('manual'),
-  /**
-   * TOÀN BỘ `basics.links` của v1, không phải phần dư.
-   *
-   * v2 chỉ có một `website: string`, nên nhãn của link đầu tiên cũng không có
-   * chỗ đứng — giữ lại `links[1..]` thôi thì khứ hồi dựng lại nhãn bằng cách
-   * đoán, và đoán sai. Giữ cả mảng thì `website` chỉ là bản rút gọn để hiển
-   * thị, còn nguồn sự thật vẫn đầy đủ.
-   */
-  originalLinks: z.array(z.object({ label: z.string(), url: z.string() })).default([]),
-  /** Field v1 không có chỗ ở v2, khoá là JSON Pointer của v1. */
-  droppedFields: z.record(z.string()).default({}),
   canonical: z.record(z.string()).default({}),
 })
 

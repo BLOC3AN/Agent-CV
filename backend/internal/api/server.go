@@ -80,7 +80,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/auth/verify", s.authVerify)
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
 	mux.HandleFunc("GET /api/auth/session", s.authSession)
-	mux.HandleFunc("POST /api/profiles", s.createProfile)
 	mux.HandleFunc("PATCH /api/profiles/", s.patchProfile)
 	mux.HandleFunc("GET /api/profiles/", s.profileSubresource)
 	mux.HandleFunc("POST /api/profiles/", s.profileMutation)
@@ -116,48 +115,6 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "backend-go"})
 }
 
-func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
-	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
-		return
-	}
-	var body struct {
-		Profile json.RawMessage `json:"profile"`
-		UserID  string          `json:"userId"`
-	}
-	if json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body) != nil || len(body.Profile) == 0 || string(body.Profile) == "null" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Profile không hợp lệ"})
-		return
-	}
-	// Never trust a userId supplied by the browser. Ownership comes only from
-	// the authenticated session, just like the Node route.
-	userID := s.currentUserID(r)
-	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
-		return
-	}
-	var id, language string
-	var profile map[string]any
-	if json.Unmarshal(body.Profile, &profile) != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Profile phải là object JSON"})
-		return
-	}
-	if !hasSchemaVersion(body.Profile, 2) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Profile phải là schemaVersion 2", "code": "SCHEMA_V2_REQUIRED"})
-		return
-	}
-	language, _ = profile["language"].(string)
-	if language != "en" {
-		language = "vi"
-	}
-	err := s.db.QueryRowContext(r.Context(), `INSERT INTO profiles (user_id, data, language) VALUES ($1, $2::jsonb, $3) RETURNING id`, userID, string(body.Profile), language).Scan(&id)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không tạo được profile"})
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "profile": profile})
-}
-
 func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV cần PostgreSQL"})
@@ -183,15 +140,15 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 	if body.Language != "en" {
 		body.Language = "vi"
 	}
-	basics := map[string]any{"name": strings.TrimSpace(body.Name)}
+	intro := map[string]any{"fullName": strings.TrimSpace(body.Name)}
 	if strings.TrimSpace(body.Headline) != "" {
-		basics["headline"] = strings.TrimSpace(body.Headline)
+		intro["title"] = strings.TrimSpace(body.Headline)
 	}
 	if strings.TrimSpace(body.Email) != "" {
-		basics["email"] = strings.TrimSpace(body.Email)
+		intro["email"] = strings.TrimSpace(body.Email)
 	}
 	if strings.TrimSpace(body.Phone) != "" {
-		basics["phone"] = strings.TrimSpace(body.Phone)
+		intro["phone"] = strings.TrimSpace(body.Phone)
 	}
 	profile := map[string]any{
 		"schemaVersion": 2,
@@ -200,7 +157,7 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 		"lastModified":  time.Now().UTC().Format(time.RFC3339),
 		"language":      body.Language,
 		"sections": map[string]any{
-			"intro": basics, "experience": []any{}, "projects": []any{},
+			"intro": intro, "experience": []any{}, "projects": []any{},
 			"education": []any{}, "skills": []any{}, "activities": []any{},
 			"certifications": []any{}, "languages": []any{},
 		},
@@ -247,10 +204,10 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
 			return
 		}
-		if err := validateCVPair(body.CV); err != nil {
+		if err := validateCVV2(body.CV); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": "cv phải là schemaVersion 2",
-				"code":  "SCHEMA_PAIR_INVALID",
+				"code":  "SCHEMA_V2_INVALID",
 			})
 			return
 		}
@@ -379,8 +336,7 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 	snapshot, schemaVersion, err := cvSnapshotForResponse(v2Raw)
 	if err != nil {
 		if errors.Is(err, errV2NotBackfilled) {
-			// Không im lặng rơi về v1: client đã nói rõ nó chỉ đọc được v2.
-			// Trả v1 cho nó là đẩy lỗi sang tầng giao diện, xa nguyên nhân.
+			// Không im lặng trả dữ liệu khác schema: client chỉ đọc CV v2.
 			writeJSON(w, http.StatusConflict, map[string]string{
 				"error": "CV này chưa có bản v2. Chạy `npm run db:backfill-v2` rồi thử lại.",
 				"code":  "V2_NOT_BACKFILLED",
@@ -1235,8 +1191,8 @@ func reviewContract(profile map[string]any) ([]map[string]any, map[string]any) {
 	sections, _ := profile["sections"].(map[string]any)
 	intro, _ := sections["intro"].(map[string]any)
 	title, _ := intro["fullName"].(string)
-	items := []map[string]any{{"kind": "basics", "path": "/sections/intro", "title": valueOrString(title, "Thông tin cá nhân")}}
-	for _, spec := range []struct{ key, kind string }{{"education", "education"}, {"experience", "work"}, {"projects", "projects"}, {"certifications", "certifications"}, {"activities", "activities"}} {
+	items := []map[string]any{{"kind": "intro", "path": "/sections/intro", "title": valueOrString(title, "Thông tin cá nhân")}}
+	for _, spec := range []struct{ key, kind string }{{"education", "education"}, {"experience", "experience"}, {"projects", "projects"}, {"certifications", "certifications"}, {"activities", "activities"}} {
 		if rows, ok := sections[spec.key].([]any); ok {
 			for i := range rows {
 				items = append(items, map[string]any{"kind": spec.kind, "path": fmt.Sprintf("/sections/%s/%d", spec.key, i), "title": fmt.Sprintf("%s %d", spec.kind, i+1)})
@@ -1756,7 +1712,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	// profileRaw giữ nguyên PII cho validateChatProposal và applyJSONPatch bên
 	// dưới — hai bước đó chạy trên máy chủ. Chỉ bản gửi model mới bị che.
-	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt(profileIsV2(profileRaw))}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Answers, body.Hint, body.Message)}}
+	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Answers, body.Hint, body.Message)}}
 	sendStep("Đang hiểu yêu cầu của bạn")
 	sendStep("Đang xem lại hồ sơ để trả lời")
 	sendStep("Đang suy nghĩ")
@@ -1783,7 +1739,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if modelOutput.Kind == "patch" {
-		modelOutput.Ops = normalizeChatProposalOps(modelOutput.Ops)
 		if err := validateChatProposal(profileRaw, modelOutput.Ops); err != nil {
 			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa thể tạo đề xuất an toàn từ yêu cầu này: " + err.Error()}
 			assistantContent = modelOutput.Text
@@ -1818,8 +1773,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 
 // Bỏ PII nhưng GIỮ NGUYÊN hình dạng hồ sơ.
 //
-// Xoá hẳn khoá `basics` thì nhẹ hơn, nhưng model trả JSON Pointer trỏ vào hồ
-// sơ thật; mất `basics` là mọi con trỏ `/basics/...` trỏ vào hư không và đề
+// Xoá hẳn khoá cũ thì nhẹ hơn, nhưng model trả JSON Pointer trỏ vào hồ
+// sơ thật; mất một section là mọi con trỏ `/sections/...` trỏ vào hư không và đề
 // xuất không áp dụng được — cùng lỗi mà redactKeepShape() bên TypeScript đã
 // ghi lại sau khi đo trên model thật.
 //
@@ -1850,27 +1805,8 @@ func chatUserPrompt(profileRaw []byte, history []map[string]string, answers []ma
 		"\n\nUSER:\n" + message
 }
 
-// Nhận diện hình dạng hồ sơ bằng dữ liệu, không bằng cờ schemaVersion — trong
-// giai đoạn chuyển tiếp, cả hồ sơ v1 lẫn CV v2 cùng đi qua handler này. Dữ
-// liệu hỏng rơi về v1: nhánh sai thì prompt dạy model sinh con trỏ không tồn
-// tại, chốt chặn validateChatProposal loại sạch mọi đề xuất, và người dùng
-// chỉ thấy trợ lý "không làm được gì" mà không rõ vì sao.
-func profileIsV2(raw []byte) bool {
-	var probe struct {
-		Sections map[string]any `json:"sections"`
-	}
-	if json.Unmarshal(raw, &probe) != nil {
-		return false
-	}
-	return probe.Sections != nil
-}
-
-// chatSystemPrompt chọn prompt theo hình dạng hồ sơ thật của request, không
-// theo một hằng số toàn cục — hai hình dạng cùng sống trong giai đoạn
-// chuyển tiếp SP-2→SP-5.
-func chatSystemPrompt(v2 bool) string {
-	if v2 {
-		return `Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ và chỉ trả về DUY NHẤT một object JSON hợp lệ.
+func chatSystemPrompt() string {
+	return `Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ và chỉ trả về DUY NHẤT một object JSON hợp lệ.
 
 Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
 {"kind":"reply","text":"..."}
@@ -1883,23 +1819,8 @@ Nếu người dùng yêu cầu sửa, viết lại, nhóm, sắp xếp hoặc c
 
 Quy tắc bắt buộc: không tự ghi hồ sơ; không bịa dữ kiện; tối đa 20 ops; value bắt buộc với add/replace; mỗi op/path chỉ xuất hiện một lần.
 
+
 Đường dẫn: phần giới thiệu cá nhân luôn là /sections/intro/summary. Mỗi gạch đầu dòng của kinh nghiệm, dự án, học vấn và hoạt động là một phần tử riêng — sửa một ý thì nhắm đúng vào nó, ví dụ /sections/experience/0/highlights/2, KHÔNG ghi đè cả mảng highlights. Kỹ năng gom theo nhóm: một phần tử của /sections/skills có category và skills là mảng chuỗi; thêm một kỹ năng thì dùng /sections/skills/0/skills/-.`
-	}
-	return chatSystemPromptV1()
-}
-
-// chatSystemPromptV1 giữ NGUYÊN VĂN chuỗi cũ — apps/web chạy trên đúng prompt
-// này cho tới SP-5, và TestChatPromptUsesIntroduceForCVField canh chừng nó.
-func chatSystemPromptV1() string {
-	return `Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ và chỉ trả về DUY NHẤT một object JSON hợp lệ.
-
-Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
-{"kind":"reply","text":"..."}
-
-Nếu người dùng yêu cầu sửa, viết lại, nhóm, sắp xếp hoặc cập nhật hồ sơ, KHÔNG được nói đã cập nhật. Hãy trả đề xuất để người dùng duyệt:
-{"kind":"patch","summary":"...","ops":[{"op":"add|replace|remove","path":"/skills/0/group","value":"...","rationale":"...","grounding":{"type":"existing_field|user_message|kb|inference","ref":"..."},"kbRefs":[]}]}
-
-Quy tắc bắt buộc: không tự ghi hồ sơ; không bịa dữ kiện; tối đa 20 ops; skills luôn là mảng các object có name và chỉ được dùng name, level, canonical, group; muốn nhóm skills thì cập nhật field group tại từng /skills/N. Phần giới thiệu cá nhân luôn dùng đường dẫn /basics/introduce. value bắt buộc với add/replace. Mỗi op/path chỉ xuất hiện một lần.`
 }
 
 func parseChatModelOutput(raw string) chatModelOutput {
@@ -1959,18 +1880,7 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 		if len(op.Rationale) < 3 || op.Grounding.Type == "" || op.Grounding.Ref == "" {
 			return fmt.Errorf("op %s thiếu rationale hoặc grounding", op.Path)
 		}
-		if strings.HasPrefix(op.Path, "/skills/") {
-			tail := strings.TrimPrefix(op.Path, "/skills/")
-			if strings.Contains(tail, "/") && !strings.HasSuffix(op.Path, "/name") && !strings.HasSuffix(op.Path, "/level") && !strings.HasSuffix(op.Path, "/canonical") && !strings.HasSuffix(op.Path, "/group") {
-				return fmt.Errorf("skills chỉ được sửa name, level, canonical hoặc group")
-			}
-		}
-		// v2 gom skills theo nhóm: sections.skills[i] = {category, skills:[string]}.
-		// Quy tắc /skills/ ở trên không bao giờ khớp path v2 (tiền tố khác hẳn),
-		// nên v2 cần chốt chặn riêng — thiếu nó thì model có thể ghi field sai
-		// tên (vd "items" thay vì "skills") vào một path hợp lệ về mặt cú pháp
-		// mà không ai bắt được ở đây; nhánh kiểm tra hình dạng bên dưới, sau khi
-		// áp patch, mới bắt được lỗi đó.
+		// Skills are grouped in CV v2: sections.skills[i] = {category, skills:[string]}.
 		if strings.HasPrefix(op.Path, "/sections/skills/") {
 			tail := strings.TrimPrefix(op.Path, "/sections/skills/")
 			parts := strings.Split(tail, "/")
@@ -1987,7 +1897,6 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 		return fmt.Errorf("patch không áp dụng được: %v", err)
 	}
 	var profile struct {
-		Skills   []map[string]any `json:"skills"`
 		Sections struct {
 			Skills []map[string]any `json:"skills"`
 		} `json:"sections"`
@@ -1995,18 +1904,6 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 	if json.Unmarshal(updated, &profile) != nil {
 		return fmt.Errorf("hồ sơ sau patch không hợp lệ")
 	}
-	for _, skill := range profile.Skills {
-		if _, ok := skill["name"].(string); !ok {
-			return fmt.Errorf("mỗi skill phải có name dạng chuỗi")
-		}
-		for key := range skill {
-			if key != "name" && key != "level" && key != "canonical" && key != "group" {
-				return fmt.Errorf("field skill không được hỗ trợ: %s", key)
-			}
-		}
-	}
-	// sections.skills chỉ tồn tại ở CV v2 nên vòng lặp này rỗng lặng lẽ với hồ
-	// sơ v1 — nhận diện bằng dữ liệu, không cần cờ v2 riêng ở đây.
 	for _, group := range profile.Sections.Skills {
 		if category, ok := group["category"]; ok {
 			if _, ok := category.(string); !ok {
@@ -2031,27 +1928,6 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 		}
 	}
 	return nil
-}
-
-func normalizeChatProposalOps(ops []json.RawMessage) []json.RawMessage {
-	out := make([]json.RawMessage, 0, len(ops))
-	for _, raw := range ops {
-		var op map[string]any
-		if json.Unmarshal(raw, &op) == nil {
-			path, _ := op["path"].(string)
-			// Models often use replace for an optional group field that is not
-			// present yet. RFC 6902 add is also a replacement for an existing
-			// object member, so it is safe for both cases.
-			if op["op"] == "replace" && strings.HasPrefix(path, "/skills/") && strings.HasSuffix(path, "/group") {
-				op["op"] = "add"
-				if normalized, err := json.Marshal(op); err == nil {
-					raw = normalized
-				}
-			}
-		}
-		out = append(out, raw)
-	}
-	return out
 }
 
 func (s *Server) cacheChatMessages(ctx context.Context, userID, sessionID string, messages []map[string]string) {
@@ -2554,7 +2430,7 @@ func newID() string {
 // cvListItem dựng một dòng cho danh sách CV.
 //
 // Chỉ metadata: danh sách không đọc nội dung hồ sơ, nên nó không phụ thuộc
-// schema v1 hay v2 — SP-2 đổi schema cũng không phải sửa hàm này.
+// schema chi tiết — thay đổi schema không phải sửa hàm này.
 func cvListItem(id, title string, updated time.Time, jdTitle string) map[string]any {
 	item := map[string]any{
 		"id":        id,

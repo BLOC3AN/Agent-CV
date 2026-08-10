@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { LanguageSchema } from './profile.js'
+import { LanguageSchema } from './common.js'
 import { RoleFamilySchema, SenioritySchema } from './jd.js'
 
 /**
@@ -21,9 +21,9 @@ export type KBStatus = z.infer<typeof KBStatusSchema>
 export const KBContentTypeSchema = z.enum(['guideline', 'exemplar', 'red_flag'])
 
 export const CVSectionSchema = z.enum([
-  'basics',
+  'intro',
   'education',
-  'work',
+  'experience',
   'projects',
   'skills',
   'activities',

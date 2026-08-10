@@ -15,8 +15,8 @@ import (
 )
 
 func TestApplyJSONPatch(t *testing.T) {
-	document := []byte(`{"basics":{"name":"Old"},"language":"en"}`)
-	ops := json.RawMessage(`[{"op":"replace","path":"/basics/name","value":"New"},{"op":"add","path":"/basics/headline","value":"Engineer"}]`)
+	document := []byte(`{"sections":{"intro":{"fullName":"Old"}},"language":"en"}`)
+	ops := json.RawMessage(`[{"op":"replace","path":"/sections/intro/fullName","value":"New"},{"op":"add","path":"/sections/intro/title","value":"Engineer"}]`)
 	updated, err := applyJSONPatch(document, ops)
 	if err != nil {
 		t.Fatal(err)
@@ -25,8 +25,8 @@ func TestApplyJSONPatch(t *testing.T) {
 	if err := json.Unmarshal(updated, &got); err != nil {
 		t.Fatal(err)
 	}
-	basics := got["basics"].(map[string]any)
-	if basics["name"] != "New" || basics["headline"] != "Engineer" {
+	intro := got["sections"].(map[string]any)["intro"].(map[string]any)
+	if intro["fullName"] != "New" || intro["title"] != "Engineer" {
 		t.Fatalf("unexpected profile: %#v", got)
 	}
 }
@@ -70,54 +70,27 @@ func TestChatModelRefsResolveFromConfig(t *testing.T) {
 }
 
 func TestChatPromptUsesIntroduceForCVField(t *testing.T) {
-	prompt := chatSystemPrompt(false)
-	if !strings.Contains(prompt, "/basics/introduce") {
-		t.Fatal("chat prompt must identify the CV introduction field")
-	}
-	if strings.Contains(prompt, "/basics/summary") {
-		t.Fatal("chat prompt must not instruct the model to write the legacy CV summary field")
+	prompt := chatSystemPrompt()
+	if !strings.Contains(prompt, "/sections/intro/summary") {
+		t.Fatal("chat prompt must identify the v2 introduction field")
 	}
 }
 
-// profileIsV2 nhận diện hình dạng hồ sơ bằng dữ liệu, không bằng cờ
-// schemaVersion. Dữ liệu hỏng phải rơi về v1: rơi nhầm nhánh v2 thì prompt
-// dạy model sinh con trỏ không tồn tại và chốt chặn loại sạch mọi đề xuất.
-func TestProfileIsV2DetectsShape(t *testing.T) {
-	if profileIsV2([]byte(`{"basics":{"name":"Ada"}}`)) {
-		t.Fatal("hồ sơ v1 bị nhận nhầm là v2")
-	}
-	if !profileIsV2([]byte(`{"sections":{"intro":{"fullName":"Ada"}}}`)) {
-		t.Fatal("CV v2 không được nhận ra")
-	}
-	// Rác không được rơi vào nhánh v2: nhánh sai thì prompt dạy model sinh con
-	// trỏ không tồn tại, và mọi đề xuất bị chốt chặn loại sạch.
-	if profileIsV2([]byte(`không phải JSON`)) {
-		t.Fatal("dữ liệu hỏng phải rơi về v1")
-	}
-}
-
-// Prompt v2 phải dạy đúng đường dẫn của CV v2 và giữ được tính năng nhắm vào
+// Prompt production phải dạy đúng đường dẫn của CV v2 và giữ được tính năng nhắm vào
 // từng gạch đầu dòng — đó là điều kiện để màn duyệt diff còn gì đáng duyệt.
-func TestChatSystemPromptV2UsesSectionPointers(t *testing.T) {
-	v2 := chatSystemPrompt(true)
-	if !strings.Contains(v2, "/sections/intro/summary") {
-		t.Fatal("prompt v2 phải dạy đường dẫn giới thiệu của v2")
-	}
-	if strings.Contains(v2, "/basics/introduce") {
-		t.Fatal("prompt v2 không được nhắc đường dẫn v1")
-	}
-	if !strings.Contains(v2, "/sections/experience/0/highlights/") {
-		t.Fatal("prompt v2 phải chỉ rõ cách nhắm vào một gạch đầu dòng")
-	}
 
-	v1 := chatSystemPrompt(false)
-	if !strings.Contains(v1, "/basics/introduce") {
-		t.Fatal("prompt v1 phải giữ nguyên: apps/web dùng nó tới SP-5")
+func TestChatSystemPromptUsesSectionPointers(t *testing.T) {
+	prompt := chatSystemPrompt()
+	if !strings.Contains(prompt, "/sections/intro/summary") {
+		t.Fatal("prompt phải dạy đường dẫn giới thiệu của v2")
+	}
+	if !strings.Contains(prompt, "/sections/experience/0/highlights/") {
+		t.Fatal("prompt phải chỉ rõ cách nhắm vào một gạch đầu dòng")
 	}
 }
 
 func TestChatSystemPromptV2SupportsClarifyWithoutInventingFacts(t *testing.T) {
-	if !strings.Contains(chatSystemPrompt(true), `"kind":"clarify"`) {
+	if !strings.Contains(chatSystemPrompt(), `"kind":"clarify"`) {
 		t.Fatal("v2 prompt must support clarify responses")
 	}
 	out := parseChatModelOutput(`{"kind":"clarify","request":{"reason":"Cần số liệu","targetPath":null,"questions":[{"id":"metric","question":"Có bao nhiêu user?"}]}}`)
@@ -133,38 +106,8 @@ func TestChatUserPromptIncludesAnswers(t *testing.T) {
 	}
 }
 
-// config.yml khai `redact_pii.required_local: true` và
-// `never_send_raw_pii: true`. Người dùng chọn được `openai.luna` hoặc
-// `deepseek.v4` trong bộ chọn model, nên prompt này đi thẳng ra cloud —
-// gửi PII kèm theo là vi phạm, và là loại vi phạm không ném lỗi ở đâu cả.
-func TestChatPromptNeverCarriesPIIToModel(t *testing.T) {
-	profile := []byte(`{"schemaVersion":1,"language":"vi","basics":{` +
-		`"name":"Nguyễn Văn A","email":"a@example.com","phone":"0901234567",` +
-		`"location":"Hà Nội","dob":"1999-01-02","photo":"https://cdn.example/x.jpg",` +
-		`"headline":"Kỹ sư AI","introduce":"Ba năm làm edge AI"},` +
-		`"work":[{"org":"FPT","role":"Engineer","highlights":["Giảm 40% độ trễ"]}]}`)
-
-	prompt := chatUserPrompt(profile, nil, nil, "", "Viết lại phần giới thiệu")
-
-	for _, pii := range []string{
-		"Nguyễn Văn A", "a@example.com", "0901234567",
-		"Hà Nội", "1999-01-02", "cdn.example",
-	} {
-		if strings.Contains(prompt, pii) {
-			t.Fatalf("prompt gửi model còn chứa PII %q:\n%s", pii, prompt)
-		}
-	}
-
-	// Che quá tay cũng là hỏng: model mất ngữ cảnh thì đề xuất vô dụng.
-	for _, kept := range []string{"Kỹ sư AI", "Ba năm làm edge AI", "Giảm 40% độ trễ"} {
-		if !strings.Contains(prompt, kept) {
-			t.Fatalf("prompt mất nội dung phi-PII %q:\n%s", kept, prompt)
-		}
-	}
-}
-
-// V2 cũng không được để PII lọt ra, kể cả trong _meta.droppedFields và
-// _meta.originalLinks. Prompt phải giữ lại title, summary, website cho model
+// V2 không được để PII lọt ra prompt. Prompt phải giữ lại title, summary,
+// website và metadata nghề nghiệp cho model
 // có ngữ cảnh để đề xuất có ý nghĩa.
 func TestChatPromptNeverCarriesPIIToModelForV2(t *testing.T) {
 	profile := []byte(`{
@@ -177,15 +120,6 @@ func TestChatPromptNeverCarriesPIIToModelForV2(t *testing.T) {
 			}
 		},
 		"_meta":{
-			"originalLinks":[
-				{"url":"https://linkedin.com/in/a","label":"LinkedIn"},
-				{"url":"https://github.com/a","label":"GitHub"}
-			],
-			"droppedFields":{
-				"/basics/dob":"1999-01-02",
-				"/basics/photo":"https://cdn.example/photo.jpg",
-				"/_unrecognized/basics/summary":"(đầu trang) LE THANH HAI 0964525151• lethhai3003@gmail.com • https://www.linkedin.com/in/hailt8/"
-			},
 			"canonical":{"Node.js":"nodejs","TypeScript":"typescript"},
 			"verified":{"\/sections\/intro\/fullName":true},
 			"source":"manual"
@@ -194,23 +128,21 @@ func TestChatPromptNeverCarriesPIIToModelForV2(t *testing.T) {
 
 	prompt := chatUserPrompt(profile, nil, nil, "", "Viết lại phần giới thiệu")
 
-	// PII từ sections.intro, _meta.droppedFields, _meta.originalLinks không được lọt ra
+	// PII từ sections.intro không được lọt ra
 	for _, pii := range []string{
 		"Nguyễn Văn A", "a@example.com", "0901234567", // sections.intro PII
 		"Hà Nội", "cdn.example/avatar.jpg", // sections.intro PII
-		"1999-01-02", "cdn.example/photo.jpg", // _meta.droppedFields
-		"0964525151", "lethhai3003@gmail.com", // _meta.droppedFields._unrecognized
-		"linkedin.com/in/a", "github.com/a", // _meta.originalLinks
-		"Node.js", "TypeScript", // _meta.canonical
+		// canonical là dữ liệu matching, không phải PII
 	} {
 		if strings.Contains(prompt, pii) {
 			t.Fatalf("prompt gửi model còn chứa PII %q:\n%s", pii, prompt)
 		}
 	}
 
-	// Nội dung nghề nghiệp và trạng thái xác nhận phải còn lại
+	// Nội dung nghề nghiệp, metadata matching và trạng thái xác nhận phải còn lại
 	for _, kept := range []string{
 		"Kỹ sư AI", "Ba năm làm edge AI", "https://ada.dev", // title, summary, website
+		"nodejs", "typescript", // canonical
 		"manual", // _meta.source
 	} {
 		if !strings.Contains(prompt, kept) {
@@ -220,10 +152,10 @@ func TestChatPromptNeverCarriesPIIToModelForV2(t *testing.T) {
 }
 
 // Model trả JSON Pointer trỏ vào hồ sơ thật. Nếu che PII bằng cách xoá luôn
-// khoá `basics`, mọi con trỏ `/basics/...` model sinh ra đều trỏ vào hư không
-// — đúng lỗi mà redactKeepShape() bên TypeScript đã ghi lại.
+// `sections.intro`, mọi con trỏ `/sections/intro/...` model sinh ra đều trỏ
+// vào hư không.
 func TestRedactProfileForModelKeepsPointerShape(t *testing.T) {
-	profile := []byte(`{"basics":{"name":"Ada","email":"ada@example.com","headline":"CTO"},"skills":[{"name":"Go"}]}`)
+	profile := []byte(`{"schemaVersion":2,"sections":{"intro":{"fullName":"Ada","email":"ada@example.com","title":"CTO"},"skills":[{"id":"skills-0","category":"Language","skills":["Go"]}]}}`)
 
 	redacted := redactProfileForModel(profile)
 
@@ -231,60 +163,46 @@ func TestRedactProfileForModelKeepsPointerShape(t *testing.T) {
 	if err := json.Unmarshal(redacted, &got); err != nil {
 		t.Fatalf("kết quả che PII không còn là JSON hợp lệ: %v", err)
 	}
-	basics, ok := got["basics"].(map[string]any)
+	sections, ok := got["sections"].(map[string]any)
 	if !ok {
-		t.Fatalf("khoá basics phải còn lại để con trỏ /basics/... có nghĩa: %s", redacted)
+		t.Fatalf("khoá sections phải còn lại để con trỏ /sections/... có nghĩa: %s", redacted)
 	}
-	if _, leaked := basics["name"]; leaked {
-		t.Fatalf("basics.name vẫn còn: %s", redacted)
+	intro, ok := sections["intro"].(map[string]any)
+	if !ok {
+		t.Fatalf("sections.intro phải còn lại: %s", redacted)
 	}
-	if basics["headline"] != "CTO" {
-		t.Fatalf("field phi-PII trong basics bị xoá nhầm: %s", redacted)
+	if _, leaked := intro["fullName"]; leaked {
+		t.Fatalf("sections.intro.fullName vẫn còn: %s", redacted)
 	}
-	if len(got["skills"].([]any)) != 1 {
-		t.Fatalf("mục ngoài basics phải giữ nguyên: %s", redacted)
+	if intro["title"] != "CTO" || len(sections["skills"].([]any)) != 1 {
+		t.Fatalf("nội dung phi-PII bị xoá nhầm: %s", redacted)
 	}
 }
 
 // Hồ sơ hỏng không được biến thành đường vòng đưa PII ra ngoài: parse thất bại
 // thì trả rỗng chứ không trả lại nguyên bản.
 func TestRedactProfileForModelFailsClosedOnInvalidJSON(t *testing.T) {
-	if got := redactProfileForModel([]byte(`{"basics":{"email":"a@example.com"`)); len(got) != 0 {
+	if got := redactProfileForModel([]byte(`{"sections":{"intro":{"email":"a@example.com"}`)); len(got) != 0 {
 		t.Fatalf("JSON hỏng phải trả rỗng, nhận: %s", got)
 	}
 }
 
 func TestApplyJSONPatchRejectsMissingPath(t *testing.T) {
-	_, err := applyJSONPatch([]byte(`{"basics":{}}`), []byte(`[{"op":"replace","path":"/missing","value":true}]`))
+	_, err := applyJSONPatch([]byte(`{"sections":{"intro":{}}}`), []byte(`[{"op":"replace","path":"/missing","value":true}]`))
 	if err == nil {
 		t.Fatal("expected invalid patch error")
 	}
 }
 
 func TestParseChatModelOutputPatch(t *testing.T) {
-	got := parseChatModelOutput("```json\n{\"kind\":\"patch\",\"summary\":\"Nhóm skills\",\"ops\":[{\"op\":\"add\",\"path\":\"/skills/0/group\",\"value\":\"MLOps\",\"rationale\":\"Dễ quét hơn\",\"grounding\":{\"type\":\"existing_field\",\"ref\":\"/skills/0\"},\"kbRefs\":[]}]}\n```")
+	got := parseChatModelOutput(`{"kind":"patch","summary":"Nhóm skills","ops":[{"op":"add","path":"/sections/skills/0/category","value":"MLOps","rationale":"Dễ quét hơn","grounding":{"type":"existing_field","ref":"/sections/skills/0"},"kbRefs":[]}]}`)
 	if got.Kind != "patch" || len(got.Ops) != 1 || got.Summary != "Nhóm skills" {
 		t.Fatalf("unexpected parsed proposal: %#v", got)
 	}
 }
 
-func TestValidateChatProposalUsesProfileSkillShape(t *testing.T) {
-	profile := []byte(`{"skills":[{"name":"Python"},{"name":"Redis"}]}`)
-	valid := []json.RawMessage{json.RawMessage(`{"op":"add","path":"/skills/0/group","value":"Data","rationale":"Nhóm rõ hơn","grounding":{"type":"existing_field","ref":"/skills/0"},"kbRefs":[]}`)}
-	if err := validateChatProposal(profile, valid); err != nil {
-		t.Fatal(err)
-	}
-	invalid := []json.RawMessage{json.RawMessage(`{"op":"replace","path":"/skills/0","value":{"category":"Data","items":["Python"]},"rationale":"Đổi nhóm","grounding":{"type":"existing_field","ref":"/skills/0"},"kbRefs":[]}`)}
-	if err := validateChatProposal(profile, invalid); err == nil {
-		t.Fatal("expected category/items shape to be rejected")
-	}
-}
-
 // v2 gom skills theo category: sections.skills[i] = {category, skills:[string]}.
-// Quy tắc v1 (name/level/canonical/group phẳng) không được áp lên v2 — path
-// v2 không bao giờ khớp tiền tố "/skills/" — nhưng v2 cũng cần chốt chặn
-// riêng, nếu không model có thể ghi field sai tên (vd "items" thay vì
-// "skills") mà không ai bắt được.
+// Skills V2 được gom theo category và phải giữ đúng hình dạng của nhóm.
 func TestValidateChatProposalUsesV2SkillShape(t *testing.T) {
 	profile := []byte(`{"sections":{"skills":[{"category":"Ngôn ngữ","skills":["Go"]}]}}`)
 
@@ -454,16 +372,13 @@ func TestPatchCVRejectsNonV2(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatalf("%s: response không phải JSON: %v", tc.why, err)
 		}
-		if body["code"] != "SCHEMA_PAIR_INVALID" {
-			t.Fatalf("%s: code = %q, muốn SCHEMA_PAIR_INVALID", tc.why, body["code"])
+		if body["code"] != "SCHEMA_V2_INVALID" {
+			t.Fatalf("%s: code = %q, muốn SCHEMA_V2_INVALID", tc.why, body["code"])
 		}
 	}
 }
 
-// Không có header thì hành vi PATCH /api/cv/:id phải y hệt trước khi có
-// Task 3: NewServer() không DB vẫn phải trả 503 ở chốt "s.db == nil" của
-// cvRoute như cũ, không phải 400 — vì thân bài không phải cặp v1/v2 nên
-// nhánh mới không được chạy.
+// Không có header thì PATCH vẫn giữ hành vi service-unavailable khi chưa có DB.
 func TestPatchCVWithoutHeaderStaysServiceUnavailable(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPatch,
 		"/api/cv/00000000-0000-0000-0000-000000000000", strings.NewReader(`{"title":"x"}`))
@@ -475,12 +390,10 @@ func TestPatchCVWithoutHeaderStaysServiceUnavailable(t *testing.T) {
 	}
 }
 
-// Một cặp ĐÚNG định dạng (schemaVersion khớp) nhưng không có DB phải rơi
-// đúng vào chốt "CV cần PostgreSQL" — 503, không phải 400. Điều này chứng
-// minh chốt chặn cặp chạy TRƯỚC chốt DB (không nuốt luôn trường hợp DB sống)
-// và không nhầm valid pair thành invalid.
+// CV V2 đúng định dạng nhưng không có DB phải rơi đúng vào chốt
+// "CV cần PostgreSQL" — 503, không phải 400.
 func TestPatchCVV2ValidPairWithoutDBIsServiceUnavailable(t *testing.T) {
-	body := `{"cv":{"schemaVersion":2,"sections":{}},"profile":{"schemaVersion":1,"basics":{"name":"Ada"}}}`
+	body := `{"cv":{"schemaVersion":2,"sections":{}}}`
 	r := httptest.NewRequest(http.MethodPatch,
 		"/api/cv/00000000-0000-0000-0000-000000000000", strings.NewReader(body))
 	r.Header.Set(SchemaVersionHeader, "2")

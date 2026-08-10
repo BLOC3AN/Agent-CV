@@ -13,12 +13,9 @@ afterEach(() => {
 })
 
 describe('/cv/new', () => {
-  // Ràng buộc từ Task 3: POST /api/cv tạo CV có `data` nhưng chưa có
-  // `data_v2`. Mọi GET kèm header v2 lên hàng đó trả 409 V2_NOT_BACKFILLED.
-  // Route này chọn phương án (a): gieo data_v2 đồng bộ ngay sau khi tạo,
-  // trước khi điều hướng — kiểm bằng cách xác nhận `saveCV` được gọi với một
-  // CV khớp đúng CVSchema (parse không ném) trước khi màn "đang mở" hiện ra.
-  it('gieo data_v2 ngay sau khi tạo, để CV vừa tạo mở được ngay không đâm vào 409 V2_NOT_BACKFILLED', async () => {
+  // CV mới phải được lưu hoàn chỉnh trước khi điều hướng — kiểm bằng cách
+  // xác nhận `saveCV` được gọi với một CV khớp đúng CVSchema.
+  it('lưu CV V2 ngay sau khi tạo để có thể mở ngay', async () => {
     const created = vi.fn(async () => ({ cvId: 'cv-moi', profileId: 'profile-moi' }))
     const saved = vi.spyOn(api, 'saveCV').mockResolvedValue(undefined)
 
@@ -70,13 +67,8 @@ describe('/cv/new', () => {
     expect(btn).not.toBeDisabled()
   })
 
-  // Vòng review 1: nếu createCV thành công rồi saveCV (bước gieo) hỏng, CV đã
-  // tạo trở thành mồ côi — có `data`, không bao giờ có `data_v2`, đúng cái
-  // bẫy 409 mà phương án (a) tồn tại để tránh — và `cvId` chỉ sống trong biến
-  // cục bộ nên bấm lại sẽ tạo thêm một CV thứ hai thay vì dọn CV cũ. Route
-  // chọn xoá CV mồ côi ngay trong nhánh lỗi (không phải gieo lại) để lần bấm
-  // kế tiếp luôn khởi đầu sạch.
-  it('gieo hỏng sau khi đã tạo thì xoá CV mồ côi, báo đúng sự thật, và cho bấm lại', async () => {
+  // Nếu lưu V2 lỗi sau khi tạo, CV phải được dọn để lần bấm kế tiếp sạch.
+  it('lưu lỗi sau khi đã tạo thì xoá CV mồ côi và cho bấm lại', async () => {
     const created = vi.fn(async () => ({ cvId: 'cv-moi', profileId: 'profile-moi' }))
     vi.spyOn(api, 'saveCV').mockRejectedValue(new api.ApiError(500, 'Máy chủ trả về lỗi'))
     // Xoá dòng `await deleteCV(created.cvId)` khỏi nhánh catch trong

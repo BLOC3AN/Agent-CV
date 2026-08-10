@@ -178,8 +178,8 @@ describe('saveCV', () => {
     expect(body.profile).toBeUndefined()
   })
 
-  it('400 SCHEMA_PAIR_INVALID thành thông điệp người đọc hiểu được', async () => {
-    mockFetch(400, { error: '...', code: 'SCHEMA_PAIR_INVALID' })
+  it('400 SCHEMA_V2_INVALID thành thông điệp người đọc hiểu được', async () => {
+    mockFetch(400, { error: '...', code: 'SCHEMA_V2_INVALID' })
 
     await expect(saveCV('cv-1', sampleCV)).rejects.toThrow(/định dạng/i)
   })
@@ -270,13 +270,13 @@ describe('patchProfile', () => {
     // kiểu, route trả 400 ngay cả khi ops hợp lệ.
     const spy = mockFetch(200, { profile: { schemaVersion: 1 }, revisionId: 1, applied: 1, rejected: [] })
 
-    await patchProfile('profile-1', [{ op: 'add', path: '/basics/name', value: 'Nguyễn Văn A' }])
+    await patchProfile('profile-1', [{ op: 'add', path: '/sections/intro/fullName', value: 'Nguyễn Văn A' }])
 
     expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/profiles/profile-1')
     expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'PATCH' })
     const body = JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)
     expect(Array.isArray(body.ops)).toBe(true)
-    expect(body.ops).toEqual([{ op: 'add', path: '/basics/name', value: 'Nguyễn Văn A' }])
+    expect(body.ops).toEqual([{ op: 'add', path: '/sections/intro/fullName', value: 'Nguyễn Văn A' }])
     expect(body.author).toBe('user')
   })
 })
@@ -285,12 +285,12 @@ describe('verifyProfile', () => {
   it('gọi POST /api/profiles/:id/verify kèm danh sách path', async () => {
     const spy = mockFetch(200, { profile: { schemaVersion: 1 }, progress: { complete: true } })
 
-    const result = await verifyProfile('profile-1', ['/basics', '/education/0'])
+    const result = await verifyProfile('profile-1', ['/sections/intro', '/sections/education/0'])
 
     expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/profiles/profile-1/verify')
     expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'POST' })
     const body = JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)
-    expect(body).toEqual({ paths: ['/basics', '/education/0'], verified: true })
+    expect(body).toEqual({ paths: ['/sections/intro', '/sections/education/0'], verified: true })
     expect(result.progress.complete).toBe(true)
   })
 })

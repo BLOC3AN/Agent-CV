@@ -89,7 +89,7 @@ func TestIntegrationPatchCVPairIsAtomic(t *testing.T) {
 		_, _ = db.Exec(`DROP TRIGGER IF EXISTS test_fail_cv_update_trigger ON cv_documents`)
 		_, _ = db.Exec(`DROP FUNCTION IF EXISTS test_fail_cv_update()`)
 	})
-	body := []byte(`{"cv":{"schemaVersion":2},"profile":{"schemaVersion":1,"basics":{}}}`)
+	body := []byte(`{"cv":{"schemaVersion":2},"profile":{"schemaVersion":3,"sections":{}}}`)
 	w := integrationRequest(t, NewServerWithDB(db, "").Routes(), http.MethodPatch, "/api/cv/"+f.cvID, f.token, body)
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body)

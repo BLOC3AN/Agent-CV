@@ -18,10 +18,10 @@ export class ApiError extends Error {
 }
 
 /**
- * Header opt-in đặt ở ĐÂY, một chỗ duy nhất, và `request()` ở dưới gắn nó vào
+ * Header schema đặt ở ĐÂY, một chỗ duy nhất, và `request()` ở dưới gắn nó vào
  * MỌI lời gọi.
  *
- * Rải ra từng lời gọi thì chỉ cần một chỗ quên là endpoint đó lặng lẽ trả v1,
+ * Rải ra từng lời gọi thì chỉ cần một chỗ quên là endpoint đó thiếu schema,
  * và giao diện nhận một hình dạng nó không biết đọc — lỗi hiện ra ở tận nơi
  * render, cách xa chỗ gây ra. `GET /api/cv` (danh sách) bỏ qua header này ở
  * phía server nên gắn cả vào đó không hại gì — đơn giản hơn là nhớ loại trừ.
@@ -39,7 +39,7 @@ const SCHEMA_HEADER = { 'X-CV-Schema': '2' } as const
  */
 const ERROR_MESSAGES_BY_CODE: Record<string, string> = {
   V2_NOT_BACKFILLED: 'CV này chưa có bản v2. Vui lòng chạy backfill rồi thử lại.',
-  SCHEMA_PAIR_INVALID: 'Dữ liệu CV không đúng định dạng. Vui lòng tải lại trang và thử lại.',
+  SCHEMA_V2_INVALID: 'Dữ liệu CV không đúng định dạng. Vui lòng tải lại trang và thử lại.',
 }
 
 export interface CVSummary {
@@ -365,7 +365,7 @@ export async function getJob(id: string): Promise<Job> {
 
 /**
  * Hình dạng response của `GET /api/imports/:id` (importStatus, server.go).
- * Job chưa xong thì chỉ có `status`/`error`; xong rồi mới có hồ sơ v1 để
+ * Job chưa xong thì chỉ có `status`/`error`; xong rồi mới có hồ sơ v2 để
  * duyệt (`items`/`progress`) — hai nhánh phân biệt bằng `ready`.
  */
 export interface ImportReviewPending {
@@ -378,7 +378,7 @@ export interface ImportReviewReady {
   ready: true
   status: string
   profileId: string
-  /** Hồ sơ v1 thô — đây là màn duyệt trước khi có CV, chưa qua migrate. */
+  /** Hồ sơ v2 thô — đây là màn duyệt trước khi tạo CV document. */
   profile: unknown
   items: Array<{ kind: string; path: string; title: string }>
   progress: { done: number; total: number; complete: boolean; pending: string[] }
@@ -455,7 +455,7 @@ export interface VerifyProfileResult {
 /**
  * `POST /api/profiles/:id/verify` (verifyProfile, server.go dòng ~819) — nơi
  * `_meta.verified` thật sự được ghi. Đây là hành động "Đúng rồi" của UC-22:
- * xác nhận CẢ MỤC (`/basics`, `/work/0`, …), không phải từng field lẻ.
+ * xác nhận CẢ MỤC (`/sections/intro`, `/sections/experience/0`, …), không phải từng field lẻ.
  */
 export async function verifyProfile(
   profileId: string,

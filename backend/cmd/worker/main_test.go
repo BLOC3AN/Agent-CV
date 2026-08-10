@@ -84,14 +84,29 @@ func TestParseCVJobResultIsMetadataOnly(t *testing.T) {
 	}
 }
 
+func TestValidateImportedCVRequiresV2Document(t *testing.T) {
+	if err := validateImportedCV(`{"schemaVersion":1,"sections":{}}`); err == nil {
+		t.Fatal("expected non-production document to be rejected")
+	}
+	if err := validateImportedCV(`{"schemaVersion":2,"sections":{"intro":{"fullName":"Ada"}}}`); err != nil {
+		t.Fatalf("valid V2 document rejected: %v", err)
+	}
+}
+
+func TestValidateImportedCVRejectsContentlessDocument(t *testing.T) {
+	raw := `{"schemaVersion":2,"sections":{"intro":{"fullName":""},"experience":[],"projects":[],"education":[],"skills":[],"activities":[],"certifications":[],"languages":[]}}`
+	if err := validateImportedCV(raw); err == nil {
+		t.Fatal("contentless import must not be marked successful")
+	}
+}
+
 // compactProfile() dựng prompt gap_analysis. Nó phải che đúng sáu field PII
 // mà PII_PATHS khai — bản đầu xoá khoá "address", một khoá không hề tồn tại
 // trong hồ sơ, nên `location` cùng `name`, `dob`, `photo` vẫn đi kèm prompt.
 func TestCompactProfileRemovesEveryPIIField(t *testing.T) {
-	raw := `{"basics":{"name":"Nguyễn Văn A","email":"a@example.com",` +
-		`"phone":"0901234567","location":"Hà Nội","dob":"1999-01-02",` +
-		`"photo":"https://cdn.example/x.jpg","headline":"Kỹ sư AI"},` +
-		`"work":[{"org":"FPT","role":"Engineer"}]}`
+	raw := `{"schemaVersion":2,"sections":{"intro":{"fullName":"Nguyễn Văn A","email":"a@example.com",` +
+		`"phone":"0901234567","location":"Hà Nội","avatarUrl":"https://cdn.example/x.jpg",` +
+		`"title":"Kỹ sư AI"},"experience":[{"company":"FPT","title":"Engineer"}]}}`
 
 	compact := compactProfile(raw)
 
@@ -152,7 +167,7 @@ func TestParsedSectionsUseEmptyArraysInsteadOfNullHighlights(t *testing.T) {
 func TestMatchingUsesTaxonomyDescendantsAndIntroduce(t *testing.T) {
 	testKBRoot(t)
 	tax := loadSkillTaxonomy()
-	profile := `{"basics":{"introduce":"Backend engineer","headline":"Go"},"skills":[{"name":"Next.js"}]}`
+	profile := `{"schemaVersion":2,"sections":{"intro":{"summary":"Backend engineer","title":"Go"},"skills":[{"id":"skills-0","category":"Framework","skills":["Next.js"]}]}}`
 	chunks, _ := profileChunks(profile)
 	index := map[string][]profileChunk{}
 	for _, chunk := range chunks {
@@ -164,18 +179,18 @@ func TestMatchingUsesTaxonomyDescendantsAndIntroduce(t *testing.T) {
 	if match["matched"] != true || match["viaDescendant"] != "nextjs" {
 		t.Fatalf("taxonomy match=%#v", match)
 	}
-	if len(chunks) < 2 || chunks[0].Path != "/basics/headline" {
+	if len(chunks) < 2 || chunks[0].Path != "/sections/intro/title" {
 		t.Fatalf("profile chunks=%#v", chunks)
 	}
 }
 
 func TestRubricParityScoresAutomaticCriteriaAndGaps(t *testing.T) {
 	testKBRoot(t)
-	profile := map[string]any{
-		"basics":   map[string]any{"introduce": "Backend engineer", "email": "a@example.com", "phone": "0900000000", "links": []any{map[string]any{"label": "GitHub", "url": "https://github.com/a"}}},
-		"projects": []any{map[string]any{"highlights": []any{"Built API for 2k users"}}, map[string]any{"highlights": []any{"Worked on service"}}},
-		"work":     []any{}, "skills": []any{"Go", "Postgres"}, "education": []any{}, "activities": []any{},
-	}
+	profile := map[string]any{"schemaVersion": float64(2), "sections": map[string]any{
+		"intro":      map[string]any{"summary": "Backend engineer", "email": "a@example.com", "phone": "0900000000", "website": "https://github.com/a"},
+		"projects":   []any{map[string]any{"highlights": []any{"Built API for 2k users"}}, map[string]any{"highlights": []any{"Worked on service"}}},
+		"experience": []any{}, "skills": []any{map[string]any{"skills": []any{"Go", "Postgres"}}}, "education": []any{}, "activities": []any{},
+	}}
 	jd := jdRequirements{RoleFamily: "backend_developer", Seniority: "fresher"}
 	score, gaps := scoreProfileRubric(profile, jd)
 	if score <= 0 || score >= 100 {
@@ -192,14 +207,8 @@ func TestRubricParityScoresAutomaticCriteriaAndGaps(t *testing.T) {
 	}
 }
 
-func TestRubricScoreIsShapeIndependent(t *testing.T) {
+func TestRubricScoreUsesV2Content(t *testing.T) {
 	testKBRoot(t)
-	v1 := map[string]any{
-		"basics":    map[string]any{"introduce": "Backend engineer", "email": "a@example.com", "phone": "0900000000"},
-		"work":      []any{map[string]any{"role": "Engineer", "org": "FPT", "startDate": "2022", "endDate": "2024", "highlights": []any{"Built API for 2k users"}}},
-		"projects":  []any{map[string]any{"highlights": []any{"Built service for 100 users"}}, map[string]any{"highlights": []any{"Designed Go API"}}},
-		"education": []any{}, "activities": []any{}, "skills": []any{},
-	}
 	v2 := map[string]any{
 		"schemaVersion": float64(2),
 		"sections": map[string]any{
@@ -210,19 +219,18 @@ func TestRubricScoreIsShapeIndependent(t *testing.T) {
 		},
 	}
 	jd := jdRequirements{RoleFamily: "backend_developer", Seniority: "fresher"}
-	s1, _ := scoreProfileRubric(v1, jd)
-	s2, _ := scoreProfileRubric(v2, jd)
-	if s1 != s2 {
-		t.Fatalf("rubric score v1=%v v2=%v — cùng nội dung phải cùng điểm", s1, s2)
+	score, _ := scoreProfileRubric(v2, jd)
+	if score <= 0 {
+		t.Fatalf("rubric score v2=%v, want positive score", score)
 	}
-	if got1, got2 := estimateProfileYears(v1), estimateProfileYears(v2); got1 != got2 {
-		t.Fatalf("experience years v1=%v v2=%v — cùng nội dung phải cùng số năm", got1, got2)
+	if got := estimateProfileYears(v2); got != 3 {
+		t.Fatalf("experience years v2=%v, want 3", got)
 	}
 }
 
 func TestHasProfileFieldDoesNotPanicWithoutLinks(t *testing.T) {
-	if hasProfileField(map[string]any{"basics": map[string]any{}}, "basics.links[?(@.label=='GitHub')]") {
-		t.Fatal("missing links must not match")
+	if hasProfileField(map[string]any{"schemaVersion": float64(2), "sections": map[string]any{"intro": map[string]any{}}}, "intro.website") {
+		t.Fatal("missing website must not match")
 	}
 }
 
@@ -293,29 +301,5 @@ func TestProfileChunksReadsV2Sections(t *testing.T) {
 		if got[path] != text {
 			t.Fatalf("chunk %q = %q, want %q\ntoàn bộ: %#v", path, got[path], text, got)
 		}
-	}
-}
-
-// Hồ sơ v1 vẫn phải chạy: apps/web dùng nó tới SP-5.
-func TestProfileChunksStillReadsV1(t *testing.T) {
-	v1 := map[string]any{
-		"basics": map[string]any{"headline": "Kỹ sư AI", "introduce": "Ba năm edge AI"},
-		"work": []any{map[string]any{
-			"role": "Engineer", "org": "FPT",
-			"highlights": []any{"Giảm 40% độ trễ"},
-		}},
-	}
-	raw, err := json.Marshal(v1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	chunks, _ := profileChunks(string(raw))
-	got := map[string]string{}
-	for _, c := range chunks {
-		got[c.Path] = c.Text
-	}
-	if got["/basics/headline"] != "Kỹ sư AI" || got["/work/0/highlights/0"] != "Giảm 40% độ trễ" {
-		t.Fatalf("nhánh v1 hỏng: %#v", got)
 	}
 }

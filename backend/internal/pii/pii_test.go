@@ -2,23 +2,6 @@ package pii
 
 import "testing"
 
-func TestRedactDocumentHandlesV1Shape(t *testing.T) {
-	doc := map[string]any{
-		"basics": map[string]any{"name": "Ada", "email": "a@x.com", "headline": "CTO"},
-		"work":   []any{map[string]any{"org": "FPT"}},
-	}
-
-	RedactDocument(doc)
-
-	basics := doc["basics"].(map[string]any)
-	if _, leaked := basics["name"]; leaked {
-		t.Fatalf("basics.name còn lại: %#v", doc)
-	}
-	if basics["headline"] != "CTO" {
-		t.Fatalf("field phi-PII bị xoá nhầm: %#v", doc)
-	}
-}
-
 func TestRedactDocumentHandlesV2Shape(t *testing.T) {
 	doc := map[string]any{
 		"schemaVersion": float64(2),
@@ -59,9 +42,8 @@ func TestIntroKeysMatchSpecList(t *testing.T) {
 	}
 }
 
-// RedactDocument phải xoá _meta.originalLinks, droppedFields, canonical chứa PII.
-// Giữ lại _meta.verified và _meta.source chứ không định danh.
-func TestRedactDocumentHandlesV2MetaWithRealPII(t *testing.T) {
+// Metadata V2 được làm sạch ở migration cutover và không bị xoá khỏi prompt.
+func TestRedactDocumentPreservesV2Meta(t *testing.T) {
 	doc := map[string]any{
 		"schemaVersion": float64(2),
 		"sections": map[string]any{
@@ -72,18 +54,6 @@ func TestRedactDocumentHandlesV2MetaWithRealPII(t *testing.T) {
 			},
 		},
 		"_meta": map[string]any{
-			// originalLinks từ v1.basics.links — chứa URL có nhãn
-			"originalLinks": []any{
-				map[string]any{"url": "https://linkedin.com/in/ada", "label": "LinkedIn"},
-				map[string]any{"url": "https://github.com/ada", "label": "GitHub"},
-			},
-			// droppedFields lưu giá trị bị xoá: /basics/dob, /basics/photo, /basics/summary
-			"droppedFields": map[string]any{
-				"/basics/dob":                   "1990-05-15",
-				"/basics/photo":                 "https://cdn/photo.jpg",
-				"/_unrecognized/basics/summary": "(đầu trang) LE THANH HAI 0964525151• lethhai3003@gmail.com • https://www.linkedin.com/in/hailt8/",
-			},
-			// canonical lưu danh sách tên kỹ năng
 			"canonical": map[string]any{
 				"Node.js":    "nodejs",
 				"TypeScript": "typescript",
@@ -108,16 +78,10 @@ func TestRedactDocumentHandlesV2MetaWithRealPII(t *testing.T) {
 		}
 	}
 
-	// Kiểm tra _meta.originalLinks, droppedFields, canonical bị xoá
+	// Metadata V2 vẫn còn nguyên
 	meta := doc["_meta"].(map[string]any)
-	if _, leaked := meta["originalLinks"]; leaked {
-		t.Fatalf("_meta.originalLinks còn lại (chứa URL): %#v", doc)
-	}
-	if _, leaked := meta["droppedFields"]; leaked {
-		t.Fatalf("_meta.droppedFields còn lại (chứa dob, photo, summary với PII): %#v", doc)
-	}
-	if _, leaked := meta["canonical"]; leaked {
-		t.Fatalf("_meta.canonical còn lại: %#v", doc)
+	if _, ok := meta["canonical"]; !ok {
+		t.Fatalf("_meta.canonical bị xoá nhầm: %#v", doc)
 	}
 
 	// Kiểm tra verified và source vẫn còn

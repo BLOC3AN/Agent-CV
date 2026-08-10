@@ -2,7 +2,6 @@
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
-import nextPlugin from '@next/eslint-plugin-next'
 
 /**
  * ESLint — cưỡng chế QUY TẮC KIẾN TRÚC, không phải quy tắc trình bày.
@@ -18,19 +17,18 @@ import nextPlugin from '@next/eslint-plugin-next'
  * trúc chết chìm trong đó. Ở đây chỉ giữ những rule mà VI PHẠM = LỖI THẬT.
  */
 
-/** SDK gọi model trực tiếp — chỉ `packages/ai/src/providers/**` được đụng vào. */
+/** SDK gọi model trực tiếp — không được gọi từ code ứng dụng. */
 const MODEL_SDKS = ['@anthropic-ai/sdk', 'openai', '@google/generative-ai', 'cohere-ai', 'ollama']
 
 const NO_MODEL_SDK = MODEL_SDKS.map((name) => ({
   name,
   message:
     'TDD §3.2 A6: chỉ packages/ai/src/providers/** được gọi model trực tiếp. ' +
-    'Đi qua gateway của @hr/ai — nếu không, đổi provider sẽ phải sửa code nghiệp vụ.',
+    'Không gọi SDK model trực tiếp từ code ứng dụng.',
 }))
 
 /**
- * `@hr/ai/src/gateway` thì không: nó bám vào bố cục thư mục nội bộ của package
- * khác, nên mọi lần sắp xếp lại file sẽ gãy ở chỗ không ai ngờ.
+ * Không import vào bố cục thư mục nội bộ của package khác.
  */
 const NO_DEEP_IMPORT = {
   group: ['@hr/*/src/*', '@hr/*/test/*'],
@@ -40,12 +38,6 @@ const NO_DEEP_IMPORT = {
 }
 
 const NO_UPWARD_IMPORT = [
-  {
-    group: ['@hr/web'],
-    message:
-      'TDD §4: chiều phụ thuộc là apps/services → packages, KHÔNG có chiều ngược lại. ' +
-      'Cần dữ liệu từ tầng trên thì nhận qua tham số, đừng import ngược.',
-  },
   {
     group: ['**/apps/**', '**/services/**'],
     message: 'TDD §4: package không được với sang apps/ hay services/ bằng đường dẫn tương đối.',
@@ -85,11 +77,8 @@ export default tseslint.config(
       '**/dist/**',
       '**/coverage/**',
       'var/**',
-      'apps/web/var/**',
       'services/pdfkit/**',
       '**/*.tsbuildinfo',
-      // Next sinh lại file này mỗi lần build — sửa là mất.
-      'apps/web/next-env.d.ts',
     ],
   },
 
@@ -115,17 +104,10 @@ export default tseslint.config(
     },
   },
 
-  // ── React / Next — chỉ ở apps/web ─────────────────────────────────────────
   {
-    files: ['apps/web/**/*.{ts,tsx}'],
-    plugins: { 'react-hooks': reactHooks, '@next/next': nextPlugin },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-      ...nextPlugin.configs.recommended.rules,
-      // Rule này đi tìm thư mục `pages/` của Pages Router. Dự án dùng App
-      // Router nên nó chỉ in ra một cảnh báo về đường dẫn ở mỗi lần chạy.
-      '@next/next/no-html-link-for-pages': 'off',
-    },
+    files: ['apps/web-spa/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: { ...reactHooks.configs.recommended.rules },
   },
 
   // ── Ranh giới kiến trúc (TDD §3.2 A6, §4) ─────────────────────────────────
@@ -135,7 +117,7 @@ export default tseslint.config(
   // xoá sạch cái trước. Đây không phải lý thuyết — bản đầu của file này viết
   // thành 4 khối chồng nhau, và 2 trong 3 rule kiến trúc lặng lẽ không bao giờ
   // nổ. Vì vậy mỗi phạm vi có ĐÚNG MỘT khối, gộp bằng hàm dưới đây.
-  ...['apps/**/*.{ts,tsx}', 'eval/**/*.ts', 'scripts/**/*.ts'].map(
+  ...['apps/**/*.{ts,tsx}', 'scripts/**/*.ts'].map(
     (glob) => ({
       files: [glob],
       rules: { 'no-restricted-imports': ['error', restricted({ layer: 'top' })] },
@@ -151,14 +133,9 @@ export default tseslint.config(
     rules: { 'no-restricted-imports': ['error', restricted({ layer: 'schema' })] },
   },
   {
-    // NGOẠI LỆ DUY NHẤT của A6 — đây chính là chỗ được phép biết model ở đâu.
-    files: ['packages/ai/src/providers/**/*.ts'],
-    rules: { 'no-restricted-imports': ['error', restricted({ layer: 'provider' })] },
-  },
-
   // Test được phép thoải mái hơn: mock cần gán kiểu lỏng, fixture cần biến thừa.
   {
-    files: ['**/test/**/*.{ts,tsx}', 'eval/**/*.ts'],
+    files: ['**/test/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',

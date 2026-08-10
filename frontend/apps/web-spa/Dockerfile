@@ -11,20 +11,14 @@ FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 COPY frontend/package.json frontend/package-lock.json ./
-COPY frontend/apps/web/package.json             apps/web/
 COPY frontend/apps/web-spa/package.json         apps/web-spa/
 COPY frontend/packages/schema/package.json      packages/schema/
-COPY frontend/packages/ai/package.json          packages/ai/
-COPY frontend/packages/db/package.json          packages/db/
 COPY frontend/packages/kb/package.json          packages/kb/
-COPY frontend/packages/matching/package.json    packages/matching/
-COPY frontend/packages/templates/package.json   packages/templates/
 
 RUN npm ci --ignore-scripts
 
 COPY frontend/apps/web-spa/ apps/web-spa/
 COPY frontend/packages/schema/ packages/schema/
-COPY frontend/packages/templates/ packages/templates/
 
 WORKDIR /app/apps/web-spa
 RUN npm run build
@@ -45,7 +39,6 @@ ENV NODE_ENV=production
 COPY --from=builder /app/node_modules       ./node_modules
 COPY --from=builder /app/apps/web-spa/dist  ./dist
 COPY --from=builder /app/packages/schema    ./packages/schema
-COPY --from=builder /app/packages/templates ./packages/templates
 
 EXPOSE 3000
 ENV PORT=3000

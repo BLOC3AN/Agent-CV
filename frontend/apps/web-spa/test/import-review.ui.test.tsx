@@ -3,7 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom'
-import { buildReviewItems, reviewProgress, type Profile } from '@hr/schema'
+import { CVSchema, type CV } from '@hr/schema'
 import { ImportReviewRoute, editKindFor } from '../src/routes/ImportReviewRoute.js'
 import { ApiError } from '../src/lib/api.js'
 import type {
@@ -46,27 +46,33 @@ function renderReview(props: Props, jobId = 'job-1') {
   return { ...render(<RouterProvider router={router} />), router }
 }
 
-/**
- * Hồ sơ v1 tối giản hợp lệ — không dùng `ProfileSchema.parse` vì production
- * code (`ImportReviewRoute`) CỐ TÌNH không đòi hỏi điều đó (xem `toProfile`
- * trong component: model có thể bỏ sót `basics.name`, đúng lý do màn hình
- * này tồn tại). Test tự tay liệt kê field để độc lập với schema đó.
- */
-function sampleProfile(overrides: Partial<Profile> = {}): Profile {
-  return {
-    schemaVersion: 1,
-    language: 'vi',
-    basics: { name: 'Nguyen Van A', links: [] },
-    education: [],
-    work: [],
-    projects: [],
-    skills: [],
-    certifications: [],
-    activities: [],
-    languages: [],
-    _meta: { verified: {}, source: 'pdf_import' },
-    ...overrides,
-  } as Profile
+/** CV v2 tối giản hợp lệ cho các ca test review. */
+function sampleProfile(overrides: Record<string, any> = {}): CV {
+  const intro = { fullName: 'Nguyen Van A', ...(overrides.intro ?? {}) }
+  const verified = { ...(overrides._meta?.verified ?? {}) }
+  const mapItems = (items: any[], kind: string) => items.map((item, i) => {
+    const highlights = Array.isArray(item.highlights) ? item.highlights : []
+    if (kind === 'experience') return { id: `${kind}-${i}`, title: item.title ?? '', company: item.company ?? '', startDate: item.startDate ?? '', endDate: item.endDate ?? '', current: item.current ?? false, highlights }
+    if (kind === 'project') return { id: `${kind}-${i}`, name: item.name ?? '', role: item.role ?? '', startDate: item.startDate ?? '', endDate: item.endDate ?? '', highlights }
+    if (kind === 'education') return { id: `${kind}-${i}`, school: item.school ?? '', degree: item.degree ?? '', fieldOfStudy: item.fieldOfStudy ?? '', startDate: item.startDate ?? '', endDate: item.endDate ?? '', highlights }
+    if (kind === 'activity') return { id: `${kind}-${i}`, organization: item.organization ?? '', role: item.role ?? '', startDate: item.startDate ?? '', endDate: item.endDate ?? '', highlights }
+    if (kind === 'certification') return { id: `${kind}-${i}`, name: item.name ?? '', issuer: item.issuer ?? '', date: item.date ?? '' }
+    return { id: `${kind}-${i}`, language: item.language ?? '', proficiency: item.proficiency ?? '' }
+  })
+  return CVSchema.parse({
+    schemaVersion: 2, id: 'cv-1', title: 'CV test', lastModified: new Date().toISOString(), language: 'vi',
+    sections: {
+      intro: { fullName: intro.fullName, title: intro.title ?? '', email: intro.email ?? '', phone: intro.phone ?? '', location: intro.location ?? '', summary: intro.summary ?? '', website: intro.website, avatarUrl: intro.avatarUrl },
+      education: mapItems(overrides.education ?? [], 'education'),
+      experience: mapItems(overrides.experience ?? [], 'experience'),
+      projects: mapItems(overrides.projects ?? [], 'project'),
+      skills: (overrides.skills ?? []).map((item: any, i: number) => typeof item === 'string' ? { id: `skills-${i}`, category: 'Skills', skills: [item] } : item),
+      activities: mapItems(overrides.activities ?? [], 'activity'),
+      certifications: mapItems(overrides.certifications ?? [], 'certification'),
+      languages: mapItems(overrides.languages ?? [], 'language'),
+    },
+    _meta: { source: 'pdf_import', verified },
+  })
 }
 
 /**
@@ -74,9 +80,15 @@ function sampleProfile(overrides: Partial<Profile> = {}): Profile {
  * `buildReviewItems`/`reviewProgress` thật của `@hr/schema` thay vì tự tính
  * tay, để test không lệch khỏi ngữ nghĩa mà production code phải đọc đúng.
  */
-function reviewFor(profile: Profile, profileId = 'profile-1'): ImportReviewReady {
-  const items = buildReviewItems(profile)
-  const progress = reviewProgress(items, profile._meta.verified)
+function reviewFor(profile: CV, profileId = 'profile-1'): ImportReviewReady {
+  const sections = profile.sections
+  const paths = ['/sections/intro', ...sections.education.map((_, i) => `/sections/education/${i}`), ...sections.experience.map((_, i) => `/sections/experience/${i}`), ...sections.projects.map((_, i) => `/sections/projects/${i}`), ...sections.activities.map((_, i) => `/sections/activities/${i}`), ...sections.certifications.map((_, i) => `/sections/certifications/${i}`)]
+  if (sections.skills.length) paths.push('/sections/skills')
+  if (sections.languages.length) paths.push('/sections/languages')
+  const verified = (profile._meta as any)?.verified ?? {}
+  const pending = paths.filter((path) => verified[path] !== true)
+  const progress = { done: paths.length - pending.length, total: paths.length, complete: pending.length === 0, pending }
+  const items = paths.map((path) => ({ kind: 'test', path, title: path }))
   return {
     ready: true,
     status: 'done',
@@ -105,7 +117,7 @@ describe('/import/:jobId/review', () => {
     })
 
     const confirmButtons = await screen.findAllByRole('button', { name: /đúng rồi/i })
-    expect(confirmButtons).toHaveLength(2) // /basics + /education/0, không mục nào tick sẵn
+    expect(confirmButtons).toHaveLength(2) // /sections/intro + /sections/education/0, không mục nào tick sẵn
     expect(screen.getByText(/còn 2 mục chưa xác nhận/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /hoàn tất/i })).toBeDisabled()
   })
@@ -113,7 +125,7 @@ describe('/import/:jobId/review', () => {
   it('chưa xác nhận hết thì không sang được builder', async () => {
     const profile = sampleProfile({
       education: [{ school: 'Bách Khoa', degree: 'Kỹ sư', highlights: [] }],
-      _meta: { verified: { '/education/0': true }, source: 'pdf_import' },
+      _meta: { verified: { '/sections/education/0': true }, source: 'pdf_import' },
     })
     const completeImport = vi.fn()
 
@@ -135,9 +147,9 @@ describe('/import/:jobId/review', () => {
 
   it('xác nhận hết thì mở khoá và gọi completeImport đúng một lần', async () => {
     const profile = sampleProfile()
-    const firstReview = reviewFor(profile) // chỉ có /basics, progress.complete=false
+    const firstReview = reviewFor(profile) // chỉ có /sections/intro, progress.complete=false
     const verifiedProfile = sampleProfile({
-      _meta: { verified: { '/basics': true }, source: 'pdf_import' },
+      _meta: { verified: { '/sections/intro': true }, source: 'pdf_import' },
     })
     const secondReview = reviewFor(verifiedProfile, firstReview.profileId)
 
@@ -153,7 +165,7 @@ describe('/import/:jobId/review', () => {
     const confirmBtn = await screen.findByRole('button', { name: /đúng rồi/i })
     await userEvent.click(confirmBtn)
 
-    expect(verifyProfile).toHaveBeenCalledWith(firstReview.profileId, ['/basics'])
+    expect(verifyProfile).toHaveBeenCalledWith(firstReview.profileId, ['/sections/intro'])
 
     // Điều kiện mở khoá đọc lại từ progress mà getImportReview trả về LẦN HAI
     // (gọi lại sau khi xác nhận) — không phải một biến đếm cục bộ.
@@ -170,7 +182,7 @@ describe('/import/:jobId/review', () => {
 
   it('sửa nội dung tại chỗ rồi xác nhận thì gửi đi bản ĐÃ SỬA', async () => {
     // Nếu bản gửi đi là bản gốc của model, màn rà soát chỉ là hình thức.
-    const profile = sampleProfile({ basics: { name: 'Nguyen Van A (may doc sai)', links: [] } })
+    const profile = sampleProfile({ intro: { fullName: 'Nguyen Van A (may doc sai)' } })
     const review = reviewFor(profile)
     const getImportReview = vi.fn(async () => review)
     const patchProfile = vi.fn(
@@ -192,7 +204,7 @@ describe('/import/:jobId/review', () => {
     await waitFor(() => expect(verifyProfile).toHaveBeenCalled())
     expect(patchProfile).toHaveBeenCalledWith(
       review.profileId,
-      expect.arrayContaining([{ op: 'add', path: '/basics/name', value: 'Nguyễn Văn A' }]),
+      expect.arrayContaining([{ op: 'add', path: '/sections/intro/fullName', value: 'Nguyễn Văn A' }]),
     )
   })
 
@@ -249,15 +261,15 @@ describe('/import/:jobId/review', () => {
       completeImport: vi.fn(),
     })
 
-    // pending: [] rỗng khiến mục /basics hiện "Đã xác nhận" (client tin server
+    // pending: [] rỗng khiến mục intro hiện "Đã xác nhận" (client tin server
     // không còn gì pending) — nhưng progress.complete vẫn false, nên đây
     // chính xác là ca cần Hoàn tất khoá dù client không đếm ra mục nào pending.
-    await screen.findByTestId('review-item-/basics')
+    await screen.findByTestId('review-item-/sections/intro')
     expect(screen.getByRole('button', { name: /hoàn tất/i })).toBeDisabled()
   })
 
   it('Hoàn tất vẫn khoá nếu client dựng ra một mục mà server không biết tới (chiều lệch còn lại của Finding 1, review vòng 2)', async () => {
-    // Chiều NGƯỢC của test trên: client build 2 mục (/basics, /education/0),
+    // Chiều NGƯỢC của test trên: client build 2 mục (intro, education/0),
     // cả hai đều "đã xác nhận" theo _meta.verified — nhưng server chỉ đếm
     // được 1 mục (progress.total=1). Server không hề biết tới mục thứ hai,
     // nên path của nó không nằm trong progress.pending — riêng lẻ mục đó vẫn
@@ -265,7 +277,7 @@ describe('/import/:jobId/review', () => {
     // Hoàn tất phải khoá vì TỔNG số mục hai bên đếm được khác nhau.
     const profile = sampleProfile({
       education: [{ school: 'Bách Khoa', degree: 'Kỹ sư', highlights: [] }],
-      _meta: { verified: { '/basics': true, '/education/0': true }, source: 'pdf_import' },
+      _meta: { verified: { '/sections/intro': true, '/sections/education/0': true }, source: 'pdf_import' },
     })
     const review = reviewFor(profile) // items.length=2, nhưng ta giả lập server chỉ biết 1
     const drifted = { ...review, progress: { done: 1, total: 1, complete: true, pending: [] } }
@@ -278,7 +290,7 @@ describe('/import/:jobId/review', () => {
       completeImport: vi.fn(),
     })
 
-    await screen.findByTestId('review-item-/education/0')
+    await screen.findByTestId('review-item-/sections/education/0')
     // Xoá điều kiện so khớp `progress.total === items.length` khỏi canFinish
     // làm assertion này đỏ: pendingCount sẽ tính ra 0 (cả hai mục đều "đã xác
     // nhận" theo pending=[]) và progress.complete=true, nên nút sẽ mở nhầm.
@@ -286,13 +298,10 @@ describe('/import/:jobId/review', () => {
   })
 
   it('hiện các field KHÔNG nằm trong danh sách hiển thị của mục — kể cả PII — trước khi user bấm Đúng rồi (Finding 2)', async () => {
-    // `buildReviewItems` cho /basics chỉ hiện name/headline/email/phone/
-    // location — nhưng "Đúng rồi" xác nhận cả /basics, bao gồm dob và photo
-    // (PII_PATHS, profile.ts). Người dùng phải THẤY được hai field đó trước
-    // khi xác nhận, không phải bị xác nhận thay sight-unseen.
+    // `buildReviewItems` hiển thị avatarUrl trước khi xác nhận mục intro.
     const longPhoto = 'data:image/png;base64,' + 'A'.repeat(200)
     const profile = sampleProfile({
-      basics: { name: 'Nguyen Van A', dob: '1999-01-01', photo: longPhoto, links: [] },
+      intro: { fullName: 'Nguyen Van A', avatarUrl: longPhoto },
     })
 
     renderReview({
@@ -302,18 +311,17 @@ describe('/import/:jobId/review', () => {
       completeImport: vi.fn(),
     })
 
-    const basicsItem = await screen.findByTestId('review-item-/basics')
-    expect(within(basicsItem).getByText('1999-01-01')).toBeInTheDocument()
+    const introItem = await screen.findByTestId('review-item-/sections/intro')
+    expect(within(introItem).getByText('Có ảnh đính kèm')).toBeInTheDocument()
     // Ảnh dài không được in nguyên văn (phá bố cục) — chỉ báo có/không.
-    expect(within(basicsItem).getByText('Có ảnh đính kèm')).toBeInTheDocument()
-    expect(within(basicsItem).queryByText(longPhoto)).not.toBeInTheDocument()
+    expect(within(introItem).queryByText(longPhoto)).not.toBeInTheDocument()
   })
 
   it('sửa "Mô tả" (highlights) nhiều dòng rồi xác nhận thì gửi đi MẢNG đã sửa, không phải chuỗi nối dấu phẩy (Finding 3)', async () => {
     // review.ts nối highlights bằng ", " chỉ để HIỂN THỊ — patch lại phải là
     // mảng thật, nguồn từ profile thô, không phải tách ngược chuỗi đã nối.
     const profile = sampleProfile({
-      work: [{ org: 'Cty A', role: 'Dev', highlights: ['Dòng gốc 1', 'Dòng gốc 2'] }],
+      experience: [{ company: 'Cty A', title: 'Dev', highlights: ['Dòng gốc 1', 'Dòng gốc 2'] }],
     })
     const review = reviewFor(profile)
     const getImportReview = vi.fn(async () => review)
@@ -329,9 +337,9 @@ describe('/import/:jobId/review', () => {
     const highlightsInput = await screen.findByLabelText('Mô tả')
     fireEvent.change(highlightsInput, { target: { value: 'Sửa dòng 1\nSửa dòng 2, có dấu phẩy' } })
 
-    // Hồ sơ có cả /basics lẫn /work/0 nên có HAI nút "Đúng rồi" — bấm đúng
-    // nút của mục chứa field vừa sửa (/work/0), không phải nút đầu tiên vớ được.
-    const workItem = screen.getByTestId('review-item-/work/0')
+    // Hồ sơ có intro và experience/0 nên có HAI nút "Đúng rồi" — bấm đúng
+    // nút của mục chứa field vừa sửa.
+    const workItem = screen.getByTestId('review-item-/sections/experience/0')
     const confirmBtn = within(workItem).getByRole('button', { name: /đúng rồi/i })
     await userEvent.click(confirmBtn)
 
@@ -339,7 +347,7 @@ describe('/import/:jobId/review', () => {
     expect(patchProfile).toHaveBeenCalledWith(
       review.profileId,
       expect.arrayContaining([
-        { op: 'add', path: '/work/0/highlights', value: ['Sửa dòng 1', 'Sửa dòng 2, có dấu phẩy'] },
+        { op: 'add', path: '/sections/experience/0/highlights', value: ['Sửa dòng 1', 'Sửa dòng 2, có dấu phẩy'] },
       ]),
     )
   })
@@ -376,7 +384,7 @@ describe('/import/:jobId/review', () => {
 
     fireEvent.change(highlightsField, { target: { value: 'Tổ chức sự kiện' } })
 
-    const activityItem = screen.getByTestId('review-item-/activities/0')
+    const activityItem = screen.getByTestId('review-item-/sections/activities/0')
     const confirmBtn = within(activityItem).getByRole('button', { name: /đúng rồi/i })
     await userEvent.click(confirmBtn)
 
@@ -386,7 +394,7 @@ describe('/import/:jobId/review', () => {
     // value sẽ là chuỗi "Tổ chức sự kiện" thay vì mảng một phần tử.
     expect(patchProfile).toHaveBeenCalledWith(
       review.profileId,
-      expect.arrayContaining([{ op: 'add', path: '/activities/0/highlights', value: ['Tổ chức sự kiện'] }]),
+      expect.arrayContaining([{ op: 'add', path: '/sections/activities/0/highlights', value: ['Tổ chức sự kiện'] }]),
     )
   })
 
@@ -400,12 +408,12 @@ describe('/import/:jobId/review', () => {
     expect(editKindFor(['Dòng 1', 'Dòng 2'])).toBe('list')
     expect(editKindFor([])).toBe('list')
     expect(editKindFor([{ label: 'GitHub', url: 'https://x' }])).toBe('readonly')
-    expect(editKindFor([{ name: 'Python', level: 'advanced' }])).toBe('readonly')
+    expect(editKindFor([{ category: 'Language', skills: ['Python'] }])).toBe('readonly')
   })
 
   it('lưu xác nhận thành công nhưng tải lại tiến độ hỏng thì KHÔNG báo "lưu thất bại" — báo đúng lỗi tải lại, Hoàn tất vẫn khoá (Minor 3)', async () => {
     const profile = sampleProfile()
-    const review = reviewFor(profile) // chỉ /basics, đang pending
+    const review = reviewFor(profile) // chỉ intro, đang pending
     const getImportReview = vi
       .fn<(jobId: string) => Promise<ImportReview>>()
       .mockResolvedValueOnce(review) // tải ban đầu
@@ -427,10 +435,10 @@ describe('/import/:jobId/review', () => {
     // `itemErrors` của riêng mục đó (mất phân biệt "lưu" vs "tải lại"), nút
     // này sẽ không xuất hiện dù message text có thể trùng nhau ở cả hai chỗ.
     expect(await screen.findByRole('button', { name: /tải lại tiến độ/i })).toBeInTheDocument()
-    // Và bên trong CHÍNH mục /basics không được có lỗi riêng — patch+verify
+    // Và bên trong CHÍNH mục intro không được có lỗi riêng — patch+verify
     // của nó đã thành công thật, "lưu thất bại" là sai sự thật ở đây.
-    const basicsItem = screen.getByTestId('review-item-/basics')
-    expect(within(basicsItem).queryByText(/mất kết nối|không lưu được xác nhận/i)).not.toBeInTheDocument()
+    const introItem = screen.getByTestId('review-item-/sections/intro')
+    expect(within(introItem).queryByText(/mất kết nối|không lưu được xác nhận/i)).not.toBeInTheDocument()
     // Hoàn tất vẫn khoá vì progress của server (nguồn xác thực duy nhất cho
     // canFinish) chưa cập nhật được.
     expect(screen.getByRole('button', { name: /hoàn tất/i })).toBeDisabled()

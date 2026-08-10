@@ -14,7 +14,7 @@ func TestWantsV2OnlyOnExactOptIn(t *testing.T) {
 	}{
 		{"2", true, "opt-in đúng"},
 		{"", false, "không có header"},
-		{"1", false, "xin v1"},
+		{"1", false, "phiên bản cũ không được hỗ trợ"},
 		{"3", false, "phiên bản chưa tồn tại"},
 		{"v2", false, "sai định dạng"},
 		{" 2", true, "khoảng trắng thừa vẫn là opt-in"},

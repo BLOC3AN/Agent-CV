@@ -7,18 +7,6 @@
 // tay thì sẽ trôi, và lúc trôi thì hỏng im lặng.
 package pii
 
-// ProfileKeys là các khoá trong `basics` KHÔNG BAO GIỜ được gửi tới model.
-// Phải khớp PII_PATHS ở frontend/packages/schema/src/profile.ts và
-// `redact_pii.required_local: true` trong config.yml.
-var ProfileKeys = []string{"name", "email", "phone", "location", "dob", "photo"}
-
-// RedactBasics xoá mọi khoá PII khỏi map `basics`, sửa tại chỗ.
-func RedactBasics(basics map[string]any) {
-	for _, key := range ProfileKeys {
-		delete(basics, key)
-	}
-}
-
 // IntroKeys là các khoá PII trong `sections.intro` của CV v2.
 // Phải khớp PII_PATHS_V2 ở frontend/packages/schema/src/cv.ts.
 //
@@ -33,36 +21,14 @@ func RedactIntro(intro map[string]any) {
 	}
 }
 
-// RedactMeta xoá các khoá PII khỏi `_meta`, sửa tại chỗ.
-//
-// `_meta.originalLinks` và `_meta.droppedFields` lưu toàn bộ giá trị từ v1,
-// gồm PII như `dob`, `photo` và các field không được nhận diện. Chúng đều có
-// thể chứa tên, số điện thoại, email.
-//
-// Giữ lại `verified` (map khoá -> boolean) và `source` (enum): chúng không
-// chứa thông tin định danh. Đó là đường phân chia với `website`/`summary`:
-// xoá thông tin định danh, giữ nội dung nghề nghiệp.
-func RedactMeta(meta map[string]any) {
-	delete(meta, "originalLinks") // từng URL có nhãn từ v1.basics.links
-	delete(meta, "droppedFields") // giá trị lưu trữ của /basics/dob, /basics/photo, v.v.
-	delete(meta, "canonical")     // danh sách tên kỹ năng
-}
-
 // RedactDocument nhận diện hình dạng rồi che đúng chỗ.
 //
-// Nhận diện bằng dữ liệu chứ không bằng cờ phiên bản: trong giai đoạn chuyển
-// tiếp, hồ sơ v1 và v2 cùng đi qua một binary, và một hồ sơ thiếu
-// `schemaVersion` không được phép trở thành hồ sơ không bị che.
+// Production chỉ nhận CV v2; hồ sơ thiếu `sections` vẫn không được phép trở
+// thành đường vòng đưa PII ra ngoài.
 func RedactDocument(doc map[string]any) {
 	if sections, ok := doc["sections"].(map[string]any); ok {
 		if intro, ok := sections["intro"].(map[string]any); ok {
 			RedactIntro(intro)
 		}
-	}
-	if basics, ok := doc["basics"].(map[string]any); ok {
-		RedactBasics(basics)
-	}
-	if meta, ok := doc["_meta"].(map[string]any); ok {
-		RedactMeta(meta)
 	}
 }

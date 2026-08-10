@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Check } from 'lucide-react';
-import { buildReviewItems, CVSchema, REVIEW_LABELS, type CV, type Profile, type ReviewField, type ReviewItem } from '@hr/schema';
+import { CVSchema, REVIEW_LABELS, type CV, type ReviewField, type ReviewItem } from '@hr/schema';
 import {
   ApiError,
   type CompleteImportResult,
@@ -48,23 +48,9 @@ function reviewField(path: string, label: string, value: unknown): ReviewField {
 
 /** Review contract for the v2 document stored in profiles.data. */
 function buildV2ReviewItems(raw: unknown): { cv: CV; items: ReviewItem[] } {
-  // Kept solely for old component fixtures while they migrate to the v2
-  // contract. Production import jobs are v2 and never take this branch.
-  if ((raw as { schemaVersion?: number } | null)?.schemaVersion === 1) {
-    const legacy = raw as Profile
-    const normalized = {
-      ...legacy,
-      basics: { ...legacy.basics, links: Array.isArray(legacy.basics?.links) ? legacy.basics.links : [] },
-      education: (legacy.education ?? []).map((item) => ({ ...item, highlights: Array.isArray(item.highlights) ? item.highlights : [] })),
-      work: (legacy.work ?? []).map((item) => ({ ...item, highlights: Array.isArray(item.highlights) ? item.highlights : [] })),
-      projects: (legacy.projects ?? []).map((item) => ({ ...item, tech: Array.isArray(item.tech) ? item.tech : [], highlights: Array.isArray(item.highlights) ? item.highlights : [] })),
-      activities: (legacy.activities ?? []).map((item) => ({ ...item, highlights: Array.isArray(item.highlights) ? item.highlights : [] })),
-    }
-    return { cv: normalized as unknown as CV, items: buildReviewItems(normalized as Profile) }
-  }
   const cv = CVSchema.parse(raw)
   const items: ReviewItem[] = [{
-    kind: 'basics', path: '/sections/intro', title: cv.sections.intro.fullName || 'Thông tin cá nhân',
+    kind: 'intro', path: '/sections/intro', title: cv.sections.intro.fullName || 'Thông tin cá nhân',
     fields: [
       reviewField('/sections/intro/fullName', 'Họ tên', cv.sections.intro.fullName),
       reviewField('/sections/intro/title', 'Chức danh', cv.sections.intro.title),
@@ -73,7 +59,7 @@ function buildV2ReviewItems(raw: unknown): { cv: CV; items: ReviewItem[] } {
       reviewField('/sections/intro/location', 'Địa điểm', cv.sections.intro.location),
     ],
   }]
-  cv.sections.experience.forEach((item, i) => items.push({ kind: 'work', path: `/sections/experience/${i}`, title: `${item.title || 'Vị trí'} — ${item.company || ''}`.trim(), fields: [
+  cv.sections.experience.forEach((item, i) => items.push({ kind: 'experience', path: `/sections/experience/${i}`, title: `${item.title || 'Vị trí'} — ${item.company || ''}`.trim(), fields: [
     reviewField(`/sections/experience/${i}/company`, 'Công ty', item.company),
     reviewField(`/sections/experience/${i}/title`, 'Vị trí', item.title),
     reviewField(`/sections/experience/${i}/highlights`, 'Mô tả', item.highlights),
@@ -132,9 +118,9 @@ export type FieldEditKind = 'text' | 'list' | 'readonly';
  * vì một danh sách hậu tố đoán trước.
  *
  * Review vòng 1 (Finding, Minor 1) chỉ ra: bản trước dùng một denylist hậu tố
- * (`endsWith('/highlights')`, …) canh theo field list của `review.ts` — một
- * package KHÁC. Ai đó thêm `/basics/links` (mảng OBJECT `{label,url}`) vào
- * `review.ts` mà quên cập nhật denylist ở đây thì màn hình sẽ PATCH một chuỗi
+ * (`endsWith('/highlights')`, …) canh theo field list của review contract — một
+ * package khác. Nếu thêm field mảng mới vào contract mà quên cập nhật denylist
+ * ở đây thì màn hình sẽ PATCH một chuỗi
  * nối dấu phẩy đè lên một mảng object, hỏng dữ liệu âm thầm — không có gì báo
  * lỗi vì kiểu dữ liệu trong TypeScript ở biên `JSONPatchOp.value: unknown`.
  *
@@ -143,8 +129,8 @@ export type FieldEditKind = 'text' | 'list' | 'readonly';
  * - Mảng CHỈ CHỨA giá trị vô hướng (`highlights`, `tech`) → sửa bằng textarea
  *   một dòng/phần tử, patch lại NGUYÊN MẢNG — không đi qua chuỗi nối dấu phẩy
  *   của `review.ts` nên không cần tách ngược gì cả (Finding 3, review vòng 1).
- * - Mảng chứa OBJECT (`/skills`: name+level+canonical+group; `/languages`;
- *   `/basics/links` nếu tương lai có) → CHỈ XEM. Tái tạo lại các object đó từ
+ * - Mảng chứa OBJECT (`/sections/skills`; `/sections/languages`) → CHỈ XEM.
+ *   Tái tạo lại các object đó từ
  *   một ô nhập văn bản sẽ phải bịa giá trị cho field không hiển thị
  *   (level/canonical/group) — rủi ro mất dữ liệu thật, không phải thứ suy ra
  *   an toàn được từ hình dạng. Sửa những field đó là việc của builder.
@@ -179,6 +165,7 @@ export interface ResidualLeaf {
 const RAW_FIELD_LABELS: Record<string, string> = {
   dob: 'Ngày sinh',
   photo: 'Ảnh',
+  avatarUrl: 'Ảnh đại diện',
   introduce: 'Giới thiệu',
   startDate: 'Bắt đầu',
   endDate: 'Kết thúc',
@@ -212,8 +199,9 @@ function labelForRawPath(path: string): string {
  * xác nhận một mục, `verifyProfile` ghi `_meta.verified[item.path] = true` —
  * và theo đúng ngữ nghĩa mà `reviewContract` (server.go) đọc lại, đó là xác
  * nhận cho CẢ SUBTREE tại pointer đó, không chỉ những field đang hiển thị
- * trong `item.fields`. Trước bản vá này, một cú "Đúng rồi" cho `/work/0` âm
- * thầm xác nhận luôn `startDate`/`endDate`/`type` — và với `/basics`, âm thầm
+ * trong `item.fields`. Trước bản vá này, một cú "Đúng rồi" cho
+ * `/sections/experience/0` âm thầm xác nhận luôn `startDate`/`endDate` — và
+ * với `/sections/intro`, âm thầm
  * xác nhận cả `dob`/`photo`, hai field PII (`PII_PATHS`, `packages/schema/
  * src/profile.ts`) — mà user CHƯA TỪNG THẤY trên màn hình. Đó chính xác là
  * điều màn rà soát này tồn tại để ngăn.
@@ -251,7 +239,7 @@ function collectResidualLeaves(
   if (text === '') return;
   // Ảnh có thể là chuỗi base64 dài hàng chục KB — in nguyên văn phá bố cục,
   // và độ dài chuỗi không phải thứ user cần đọc để biết "có ảnh hay không".
-  const shown = base.endsWith('/photo') && text.length > 80 ? 'Có ảnh đính kèm' : text;
+  const shown = (base.endsWith('/photo') || base.endsWith('/avatarUrl')) && text.length > 80 ? 'Có ảnh đính kèm' : text;
   out.push({ path: base, label: labelForRawPath(base), value: shown });
 }
 

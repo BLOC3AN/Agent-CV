@@ -43,7 +43,7 @@ export interface KBContext {
   industry: string
   roleFamily: string
   seniority: string
-  /** Mục CV đang xét: work, projects, skills… Rỗng = mọi mục. */
+  /** Mục CV đang xét: experience, projects, skills… Rỗng = mọi mục. */
   sections?: string[]
   language: 'vi' | 'en'
   /** Chỉ `HybridRetrievalSelector` dùng; `SqlFilterSelector` bỏ qua. */

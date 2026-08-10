@@ -37,28 +37,9 @@ function emptyCV(id: string): CV {
  * Màn hình cho `/cv/new` (UC-23) — bấm một nút, có một CV thật, vào thẳng
  * builder của chính nó.
  *
- * Ràng buộc bắt buộc phát hiện ở Task 3: `POST /api/cv` chỉ ghi `data` (v1);
- * `data_v2` còn NULL. Theo Task 2, mọi `GET /api/cv/:id` kèm header v2 lên
- * hàng đó trả 409 `V2_NOT_BACKFILLED`. Đây là đường đi của MỌI CV tạo mới,
- * không phải ca hiếm — nếu bỏ qua, người dùng đâm vào 409 ngay trên CV họ vừa
- * tạo.
- *
- * Chọn phương án (a): gọi `saveCV` với một CV rỗng ngay sau `createCV`, đồng
- * bộ, trước khi điều hướng — để `data_v2` luôn tồn tại kể từ khoảnh khắc đầu
- * tiên. `saveCV` đã gửi cả `cv` lẫn `profile` (qua `cvToProfile`), nên một
- * lời gọi này gieo đủ cả hai cột. Chọn (a) thay vì để builder tự coi 409 là
- * "CV rỗng" (phương án b) vì giữ bất biến "mọi CV đọc được bằng v2" đúng
- * ngay từ nguồn — không màn hình v2 nào sau đây (builder, xem trước, PDF ở
- * SP-5, ...) phải biết tới trường hợp đặc biệt "CV chưa có data_v2".
- *
- * `createCV` thành công rồi `saveCV` (gieo) mới hỏng là một khe hở riêng:
- * lúc đó CV ĐÃ tồn tại với `data` nhưng vĩnh viễn không có `data_v2` — đúng
- * cái bẫy 409 mà phương án (a) tồn tại để tránh, cộng thêm CV đó vô hình với
- * người dùng (không nằm trong thông báo lỗi) trong khi `cvId` chỉ sống trong
- * biến cục bộ, nên bấm lại sẽ tạo CV THỨ HAI thay vì tiếp tục CV cũ. Xử lý
- * bằng cách xoá CV mồ côi đó ngay trong nhánh lỗi trước khi hiện thông báo —
- * chọn xoá thay vì gieo lại vì xoá làm cho "bấm lại" luôn đúng bằng cách quay
- * về vạch xuất phát sạch, không phải tự hỏi gieo lại có hỏng tiếp hay không.
+ * `POST /api/cv` đã tạo tài liệu v2 hoàn chỉnh. Gọi `saveCV` ngay sau đó để
+ * gieo nội dung khung rỗng theo đúng schema trước khi mở builder; nếu bước
+ * khởi tạo thất bại, xoá tài liệu mồ côi để lần thử sau bắt đầu sạch.
  */
 export function NewCVRoute({ createCV }: NewCVRouteProps) {
   const navigate = useNavigate();
@@ -80,8 +61,8 @@ export function NewCVRoute({ createCV }: NewCVRouteProps) {
       navigate(`/builder/${created.cvId}`);
     } catch (err) {
       if (created) {
-        // CV đã được tạo, chỉ bước gieo data_v2 hỏng — xoá ngay để không để
-        // lại một CV mồ côi (có data, không bao giờ có data_v2) mà lần bấm
+        // CV đã được tạo nhưng bước khởi tạo nội dung hỏng — xoá ngay để
+        // không để lại một CV mồ côi mà lần bấm
         // kế tiếp không hề biết tới. Lỗi xoá (nếu có) không được che mất
         // thông báo gốc — người dùng vẫn cần biết để thử lại.
         try {

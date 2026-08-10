@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { LanguageSchema } from './profile.js'
+import { LanguageSchema } from './common.js'
 
 /**
  * JDRequirementsSchema — kết quả của task `parse_jd`.

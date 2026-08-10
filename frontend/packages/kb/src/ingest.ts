@@ -15,7 +15,7 @@ import type { ContentType } from './types.js'
 const Bilingual = z.object({ vi: z.string(), en: z.string().optional() })
 
 /**
- * Chấp nhận cả `section: basics` lẫn `section: [basics]`.
+ * Chấp nhận cả `section: intro` lẫn `section: [intro]`.
  *
  * File KB do chuyên gia HR viết tay, và cùng một file thật đã có cả hai cách
  * viết. Bắt họ nhớ đúng cú pháp YAML là đặt sai gánh nặng: người biết về tuyển
