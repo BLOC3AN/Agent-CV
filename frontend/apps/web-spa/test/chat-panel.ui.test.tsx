@@ -1,21 +1,24 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ChatPanel } from '../src/components/ChatPanel'
 import { initialCVs } from '../src/mockData'
 
-const { sendChat } = vi.hoisted(() => ({
+const { sendChat, settleChatProposal } = vi.hoisted(() => ({
   sendChat: vi.fn().mockResolvedValue({ kind: 'reply', text: 'Đã phân tích CV.' }),
+  settleChatProposal: vi.fn(),
 }))
 
 vi.mock('../src/lib/api', () => ({
   sendChat,
   saveCV: vi.fn(),
-  settleChatProposal: vi.fn(),
+  settleChatProposal,
 }))
+
+afterEach(() => vi.clearAllMocks())
 
 describe('ChatPanel — giao diện trợ lý AI', () => {
   it('hiển thị đúng bố cục mẫu, ba model và sáu gợi ý', () => {
-    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplied={vi.fn()} />)
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={vi.fn()} />)
 
     expect(screen.getByRole('region', { name: 'Trợ lý AI HR-Agent' })).toBeInTheDocument()
     expect(screen.getByLabelText('MÔ HÌNH AI')).toHaveValue('local.reasoner')
@@ -39,7 +42,7 @@ describe('ChatPanel — giao diện trợ lý AI', () => {
 
   it('gửi quick action bằng model đang chọn và hiển thị phản hồi AI', async () => {
     sendChat.mockResolvedValue({ kind: 'reply', text: 'Đã phân tích CV.' })
-    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplied={vi.fn()} />)
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('MÔ HÌNH AI'), { target: { value: 'openai.luna' } })
     fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
@@ -55,5 +58,40 @@ describe('ChatPanel — giao diện trợ lý AI', () => {
     ))
     expect(await screen.findByText('AI GỢI Ý')).toBeInTheDocument()
     expect(screen.getByText('Đã phân tích CV.')).toBeInTheDocument()
+  })
+
+  it('forwards selected operations to the local draft and says they still need Save', async () => {
+    sendChat.mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất AI',
+      ops: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }],
+      rejected: [],
+    })
+    settleChatProposal.mockResolvedValue({ applied: 1, status: 'accepted', selectedOps: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }] })
+    const onApplyAIProposal = vi.fn()
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={onApplyAIProposal} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('Đề xuất AI')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+
+    await waitFor(() => expect(onApplyAIProposal).toHaveBeenCalledWith(expect.any(Array)))
+    expect(screen.getByText(/đã đưa 1 thay đổi vào bản nháp.*lưu/i)).toBeInTheDocument()
+  })
+
+  it('shows an assistant error instead of claiming malformed operations were applied', async () => {
+    sendChat.mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất AI',
+      ops: [{ op: 'move', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }],
+      rejected: [],
+    } as never)
+    settleChatProposal.mockResolvedValue({ applied: 1, status: 'accepted', selectedOps: [{ op: 'move', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }] } as never)
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={() => { throw new Error('Op JSON Patch không được hỗ trợ') }} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('Đề xuất AI')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/op json patch không được hỗ trợ/i)
+    expect(screen.queryByText(/đã đưa 1 thay đổi vào bản nháp/i)).not.toBeInTheDocument()
   })
 })

@@ -1,0 +1,142 @@
+package api
+
+import (
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"testing"
+)
+
+func createChatProposal(t *testing.T, db *sql.DB, fixture cvRevisionFixture, ops json.RawMessage) string {
+	t.Helper()
+	var sessionID, messageID, proposalID string
+	if err := db.QueryRow(`INSERT INTO chat_sessions(user_id,profile_id,title) VALUES($1,$2,'AI draft') RETURNING id`, fixture.userID, fixture.profileID).Scan(&sessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant','Đề xuất AI') RETURNING id`, sessionID).Scan(&messageID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`INSERT INTO proposed_patches(message_id,ops) VALUES($1,$2::jsonb) RETURNING id`, messageID, string(ops)).Scan(&proposalID); err != nil {
+		t.Fatal(err)
+	}
+	return proposalID
+}
+
+func TestSelectChatProposalOpsAuditsAcceptedAndRejectedIndices(t *testing.T) {
+	all := []json.RawMessage{json.RawMessage(`{"path":"/zero"}`), json.RawMessage(`{"path":"/one"}`), json.RawMessage(`{"path":"/two"}`)}
+	selected, accepted, rejected, err := selectChatProposalOps(all, []int{2, 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 2 || string(selected[0]) != string(all[2]) || string(selected[1]) != string(all[0]) {
+		t.Fatalf("selected=%s", jsonRawArray(selected))
+	}
+	if !equalIntSlices(accepted, []int{2, 0}) || !equalIntSlices(rejected, []int{1}) {
+		t.Fatalf("accepted=%v rejected=%v", accepted, rejected)
+	}
+}
+
+func TestChatProposalSettlementAuditsDraftSelectionWithoutMutatingPersistedCV(t *testing.T) {
+	db := cvRevisionDB(t)
+	fixture := createCVRevisionFixture(t, db)
+	ops := json.RawMessage(`[
+		{"op":"replace","path":"/sections/intro/fullName","value":"AI draft","rationale":"Cập nhật tên hiển thị","grounding":{"type":"user_message","ref":"Người dùng yêu cầu"}},
+		{"op":"replace","path":"/sections/intro/summary","value":"Tóm tắt mới","rationale":"Làm rõ phần giới thiệu","grounding":{"type":"user_message","ref":"Người dùng yêu cầu"}}
+	]`)
+	proposalID := createChatProposal(t, db, fixture, ops)
+	var beforeProfile []byte
+	var beforeProfileRevisions, beforeCVRevisions int
+	if err := db.QueryRow(`SELECT data FROM profiles WHERE id=$1`, fixture.profileID).Scan(&beforeProfile); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM profile_revisions WHERE profile_id=$1`, fixture.profileID).Scan(&beforeProfileRevisions); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cv_revisions WHERE cv_id=$1`, fixture.cvID).Scan(&beforeCVRevisions); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := NewServerWithDB(db, "").Routes()
+	w := cvRevisionRequest(t, handler, http.MethodPost, "/api/chat/proposals/"+proposalID, fixture.token, map[string]any{"profileId": fixture.profileID, "accept": []int{0}})
+	if w.Code != http.StatusOK {
+		t.Fatalf("settle status=%d body=%s", w.Code, w.Body)
+	}
+	var response struct {
+		Applied     int               `json:"applied"`
+		Status      string            `json:"status"`
+		SelectedOps []json.RawMessage `json:"selectedOps"`
+		Accepted    []int             `json:"accepted"`
+		Rejected    []int             `json:"rejected"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Applied != 1 || response.Status != "partial" || len(response.SelectedOps) != 1 || !equalIntSlices(response.Accepted, []int{0}) || !equalIntSlices(response.Rejected, []int{1}) {
+		t.Fatalf("unexpected settlement response: %s", w.Body)
+	}
+
+	var status string
+	var acceptedRaw, rejectedRaw, afterProfile []byte
+	if err := db.QueryRow(`SELECT status,applied_ops,rejected_ops FROM proposed_patches WHERE id=$1`, proposalID).Scan(&status, &acceptedRaw, &rejectedRaw); err != nil {
+		t.Fatal(err)
+	}
+	if status != "partial" || !jsonEqual(acceptedRaw, []byte(`[0]`)) || !jsonEqual(rejectedRaw, []byte(`[1]`)) {
+		t.Fatalf("proposal audit status=%s accepted=%s rejected=%s", status, acceptedRaw, rejectedRaw)
+	}
+	if err := db.QueryRow(`SELECT data FROM profiles WHERE id=$1`, fixture.profileID).Scan(&afterProfile); err != nil {
+		t.Fatal(err)
+	}
+	if !jsonEqual(beforeProfile, afterProfile) {
+		t.Fatalf("settlement mutated profile: before=%s after=%s", beforeProfile, afterProfile)
+	}
+	var afterProfileRevisions, afterCVRevisions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM profile_revisions WHERE profile_id=$1`, fixture.profileID).Scan(&afterProfileRevisions); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cv_revisions WHERE cv_id=$1`, fixture.cvID).Scan(&afterCVRevisions); err != nil {
+		t.Fatal(err)
+	}
+	if afterProfileRevisions != beforeProfileRevisions || afterCVRevisions != beforeCVRevisions {
+		t.Fatalf("settlement created revisions: profile=%d cv=%d", afterProfileRevisions, afterCVRevisions)
+	}
+
+	aiDraft := validRevisionCV("AI draft", "AI draft")
+	w = cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+fixture.cvID+"/commit", fixture.token, revisionCommitBody(aiDraft, fixture.layout, "ai", "Cập nhật tên hiển thị"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("AI save status=%d body=%s", w.Code, w.Body)
+	}
+	var source, message string
+	if err := db.QueryRow(`SELECT source,message FROM cv_revisions WHERE cv_id=$1`, fixture.cvID).Scan(&source, &message); err != nil {
+		t.Fatal(err)
+	}
+	if source != "ai" || message != "Cập nhật tên hiển thị" {
+		t.Fatalf("AI revision source=%q message=%q", source, message)
+	}
+}
+
+func TestChatProposalSettlementRejectsMalformedStoredOperationVisibly(t *testing.T) {
+	db := cvRevisionDB(t)
+	fixture := createCVRevisionFixture(t, db)
+	proposalID := createChatProposal(t, db, fixture, json.RawMessage(`[{"op":"move","path":"/sections/intro/fullName","rationale":"Không hợp lệ","grounding":{"type":"user_message","ref":"x"}}]`))
+
+	w := cvRevisionRequest(t, NewServerWithDB(db, "").Routes(), http.MethodPost, "/api/chat/proposals/"+proposalID, fixture.token, map[string]any{"profileId": fixture.profileID, "accept": []int{0}})
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body["error"] == "" {
+		t.Fatalf("malformed proposal error was not visible: %s", w.Body)
+	}
+}
+
+func equalIntSlices(left, right []int) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}

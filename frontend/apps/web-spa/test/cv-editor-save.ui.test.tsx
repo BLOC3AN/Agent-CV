@@ -104,7 +104,7 @@ describe('CV editor explicit save workflow', () => {
     await waitFor(() => expect(screen.getByText('Elsewhere')).toBeInTheDocument())
   })
 
-  it('applies an accepted AI result to the local draft without saveCV or reload', async () => {
+  it('applies an accepted AI result locally, then explicitly saves one AI revision', async () => {
     const updated = { ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'AI draft' } } }
     const sendChat = vi.spyOn(api, 'sendChat').mockResolvedValue({
       kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất AI',
@@ -115,7 +115,10 @@ describe('CV editor explicit save workflow', () => {
       applied: 1,
       status: 'accepted',
       selectedOps: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }],
+      accepted: [0],
+      rejected: [],
     })
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({ cv: envelope(updated) } as never)
     const legacySave = vi.spyOn(api, 'saveCV').mockResolvedValue(undefined)
     renderBuilder()
 
@@ -127,6 +130,12 @@ describe('CV editor explicit save workflow', () => {
     await waitFor(() => expect(screen.getByText('AI draft')).toBeInTheDocument())
     expect(settle).toHaveBeenCalledWith('proposal-1', 'profile-1', [0])
     expect(legacySave).not.toHaveBeenCalled()
+    expect(commit).not.toHaveBeenCalled()
+    expect(screen.getByText('Chưa lưu', { exact: true })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+
+    await waitFor(() => expect(commit).toHaveBeenCalledWith('cv-1', updated, layout, 'ai', 'Đề xuất AI'))
   })
 
   it('saves the current draft before the actual Download button opens the shared SSR print route', async () => {

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { useCVStore } from '../lib/cv-store'
-import { applyChatOps } from '../lib/cv-patch'
+import { applyChatOpsToDraft } from '../lib/cv-patch'
 import { CVEditorView } from '../components/CVEditorView'
 import { ChatPanel } from '../components/ChatPanel'
 
@@ -11,6 +11,7 @@ export function BuilderRoute() {
   const store = useCVStore(cvId ?? '')
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
+  const [pendingAISaveMessage, setPendingAISaveMessage] = useState<string>()
   const blocker = useBlocker(store.dirty)
   const dirtyRef = useRef(store.dirty)
   const savingRef = useRef(store.saving)
@@ -21,8 +22,9 @@ export function BuilderRoute() {
   }, [store.dirty, store.saving])
 
   const save = useCallback(async () => {
-    await store.saveDraft()
-  }, [store.saveDraft])
+    await store.saveDraft(pendingAISaveMessage ? 'ai' : 'user', pendingAISaveMessage)
+    setPendingAISaveMessage(undefined)
+  }, [pendingAISaveMessage, store.saveDraft])
 
   const downloadPDF = useCallback(async () => {
     await save()
@@ -87,7 +89,7 @@ export function BuilderRoute() {
   return (
     <>
       <div className="fixed top-[88px] right-4 z-40 text-xs font-medium" aria-live="polite">
-        {store.status === 'dirty' && <span className="text-amber-600">Chưa lưu thay đổi</span>}
+        {store.status === 'dirty' && <span className="text-amber-600">Chưa lưu</span>}
         {store.status === 'saving' && <span className="text-amber-600">Đang lưu…</span>}
         {store.status === 'saved' && <span className="text-emerald-600">Đã lưu</span>}
         {store.status === 'error' && <span className="text-rose-600">{store.error ?? 'Lưu thất bại'}</span>}
@@ -105,7 +107,7 @@ export function BuilderRoute() {
         onOpenShare={() => {}}
         onDownloadPDF={downloadPDF}
       />
-      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplied={(ops) => store.updateDraft({ cv: applyChatOps(store.draft!.cv, ops), layout: store.draft!.layout })} onClose={() => setAssistantOpen(false)} /></div>}
+      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplyAIProposal={(ops) => store.updateDraft(applyChatOpsToDraft(store.draft!, ops))} onProposalApplied={setPendingAISaveMessage} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
       {leaveDialogOpen && blocker.state === 'blocked' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">

@@ -37,12 +37,15 @@ func TestSelectChatProposalOpsReturnsStructuredOpsWithoutApplyingThem(t *testing
 		json.RawMessage(`{"op":"add","path":"/sections/intro/title","value":"Engineer"}`),
 	}
 
-	selected, err := selectChatProposalOps(all, []int{1})
+	selected, accepted, rejected, err := selectChatProposalOps(all, []int{1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(selected) != 1 || string(selected[0]) != string(all[1]) {
 		t.Fatalf("unexpected selected ops: %s", jsonRawArray(selected))
+	}
+	if !equalIntSlices(accepted, []int{1}) || !equalIntSlices(rejected, []int{0}) {
+		t.Fatalf("unexpected audit indices: accepted=%v rejected=%v", accepted, rejected)
 	}
 	// Selection is deliberately only serialization/validation. Applying the
 	// returned ops is the SPA draft's responsibility; this helper must not need

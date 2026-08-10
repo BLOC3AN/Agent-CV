@@ -7,7 +7,8 @@ interface Props {
   profileId: string
   cvId: string
   cv: CV
-  onApplied: (ops: ChatOp[]) => void
+  onApplyAIProposal: (ops: ChatOp[]) => void
+  onProposalApplied?: (summary: string) => void
   onClose?: () => void
 }
 
@@ -44,7 +45,7 @@ function display(value: unknown): string {
   return JSON.stringify(value)
 }
 
-export function ChatPanel({ profileId, cvId, cv, onApplied, onClose }: Props) {
+export function ChatPanel({ profileId, cvId, cv, onApplyAIProposal, onProposalApplied, onClose }: Props) {
   const [modelRef, setModelRef] = useState<ModelRef>('local.reasoner')
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
   const [input, setInput] = useState('')
@@ -96,8 +97,11 @@ export function ChatPanel({ profileId, cvId, cv, onApplied, onClose }: Props) {
     try {
       const result = await settleChatProposal(proposal.id, profileId, accept)
       setProposal(undefined)
-      setMessages((m) => [...m, { role: 'assistant', text: accept.length ? `Đã áp dụng ${result.applied} thay đổi.` : 'Đã bỏ qua đề xuất.' }])
-      if (result.selectedOps.length) onApplied(result.selectedOps)
+      if (result.selectedOps.length) {
+        onApplyAIProposal(result.selectedOps)
+        onProposalApplied?.(proposal.summary)
+      }
+      setMessages((m) => [...m, { role: 'assistant', text: result.selectedOps.length ? `Đã đưa ${result.applied} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.` : 'Đã bỏ qua đề xuất.' }])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không áp dụng được đề xuất')
     } finally {

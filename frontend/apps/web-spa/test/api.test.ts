@@ -253,12 +253,16 @@ describe('settleChatProposal', () => {
       applied: 1,
       status: 'accepted',
       selectedOps: [{ op: 'replace', path: '/sections/intro/fullName', value: 'New', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }],
+      accepted: [0],
+      rejected: [],
     })
 
     await expect(settleChatProposal('proposal/1', 'profile-1', [0])).resolves.toEqual(expect.objectContaining({
       applied: 1,
       status: 'accepted',
       selectedOps: expect.any(Array),
+      accepted: [0],
+      rejected: [],
     }))
     expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/chat/proposals/proposal%2F1')
     expect(JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)).toEqual({ profileId: 'profile-1', accept: [0] })

@@ -151,6 +151,8 @@ export interface SettledChatProposal {
   applied: number
   status: 'accepted' | 'partial' | 'rejected'
   selectedOps: ChatOp[]
+  accepted: number[]
+  rejected: number[]
 }
 
 export interface ClarifyRequest {

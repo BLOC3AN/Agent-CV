@@ -1981,8 +1981,8 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	var status string
-	var opsRaw []byte
-	if err := tx.QueryRowContext(r.Context(), `SELECT pp.status,pp.ops FROM proposed_patches pp JOIN chat_messages cm ON cm.id=pp.message_id JOIN chat_sessions cs ON cs.id=cm.session_id JOIN profiles p ON p.id=cs.profile_id WHERE pp.id=$1 AND p.id=$2 AND p.user_id=$3 FOR UPDATE OF pp`, proposalID, body.ProfileID, userID).Scan(&status, &opsRaw); err == sql.ErrNoRows {
+	var opsRaw, profileRaw []byte
+	if err := tx.QueryRowContext(r.Context(), `SELECT pp.status,pp.ops,p.data FROM proposed_patches pp JOIN chat_messages cm ON cm.id=pp.message_id JOIN chat_sessions cs ON cs.id=cm.session_id JOIN profiles p ON p.id=cs.profile_id WHERE pp.id=$1 AND p.id=$2 AND p.user_id=$3 FOR UPDATE OF pp`, proposalID, body.ProfileID, userID).Scan(&status, &opsRaw, &profileRaw); err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy đề xuất"})
 		return
 	} else if err != nil {
@@ -1998,38 +1998,37 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Ops proposal hỏng"})
 		return
 	}
-	invalid := []int{}
-	for _, i := range body.Accept {
-		if i < 0 || i >= len(all) {
-			invalid = append(invalid, i)
-		}
-	}
-	if len(invalid) > 0 {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "Chỉ số op không hợp lệ", "invalid": invalid})
+	selected, accepted, rejected, err := selectChatProposalOps(all, body.Accept)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Chỉ số op không hợp lệ: " + err.Error()})
 		return
 	}
 	if len(body.Accept) == 0 {
-		if _, err := tx.ExecContext(r.Context(), `UPDATE proposed_patches SET status='rejected',applied_ops='[]'::jsonb WHERE id=$1`, proposalID); err != nil {
+		result, err := tx.ExecContext(r.Context(), `UPDATE proposed_patches SET status='rejected',applied_ops='[]'::jsonb,rejected_ops=$2::jsonb WHERE id=$1 AND status='pending'`, proposalID, jsonString(rejected))
+		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không settle được proposal"})
+			return
+		}
+		if affected, err := result.RowsAffected(); err != nil || affected != 1 {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "Đề xuất này đã được settle"})
 			return
 		}
 		if err := tx.Commit(); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được proposal"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"applied": 0, "status": "rejected", "selectedOps": []any{}})
+		writeJSON(w, http.StatusOK, map[string]any{"applied": 0, "accepted": accepted, "rejected": rejected, "status": "rejected", "selectedOps": []any{}})
 		return
 	}
-	selected, err := selectChatProposalOps(all, body.Accept)
-	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+	if err := validateChatProposal(profileRaw, selected); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Đề xuất không hợp lệ: " + err.Error()})
 		return
 	}
 	nextStatus := "partial"
-	if len(body.Accept) == len(all) {
+	if len(rejected) == 0 {
 		nextStatus = "accepted"
 	}
-	result, err := tx.ExecContext(r.Context(), `UPDATE proposed_patches SET status=$2,applied_ops=$3::jsonb WHERE id=$1 AND status='pending'`, proposalID, nextStatus, jsonString(body.Accept))
+	result, err := tx.ExecContext(r.Context(), `UPDATE proposed_patches SET status=$2,applied_ops=$3::jsonb,rejected_ops=$4::jsonb WHERE id=$1 AND status='pending'`, proposalID, nextStatus, jsonString(accepted), jsonString(rejected))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không settle được proposal"})
 		return
@@ -2042,18 +2041,31 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được proposal"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"applied": len(selected), "rejected": []any{}, "selectedOps": selected, "status": nextStatus})
+	writeJSON(w, http.StatusOK, map[string]any{"applied": len(selected), "accepted": accepted, "rejected": rejected, "selectedOps": selected, "status": nextStatus})
 }
 
-func selectChatProposalOps(all []json.RawMessage, accept []int) ([]json.RawMessage, error) {
+func selectChatProposalOps(all []json.RawMessage, accept []int) ([]json.RawMessage, []int, []int, error) {
 	selected := make([]json.RawMessage, 0, len(accept))
+	accepted := make([]int, 0, len(accept))
+	seen := make(map[int]bool, len(accept))
 	for _, i := range accept {
 		if i < 0 || i >= len(all) {
-			return nil, fmt.Errorf("op index %d is out of range", i)
+			return nil, nil, nil, fmt.Errorf("op index %d is out of range", i)
 		}
+		if seen[i] {
+			return nil, nil, nil, fmt.Errorf("op index %d is duplicated", i)
+		}
+		seen[i] = true
 		selected = append(selected, all[i])
+		accepted = append(accepted, i)
 	}
-	return selected, nil
+	rejected := make([]int, 0, len(all)-len(accepted))
+	for i := range all {
+		if !seen[i] {
+			rejected = append(rejected, i)
+		}
+	}
+	return selected, accepted, rejected, nil
 }
 
 func jsonRawArray(values []json.RawMessage) []byte {
