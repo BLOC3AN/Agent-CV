@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { useCVStore } from '../lib/cv-store'
 import { CVEditorView } from '../components/CVEditorView'
@@ -11,6 +11,13 @@ export function BuilderRoute() {
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
   const blocker = useBlocker(store.dirty)
+  const dirtyRef = useRef(store.dirty)
+  const savingRef = useRef(store.saving)
+
+  useEffect(() => {
+    dirtyRef.current = store.dirty
+    savingRef.current = store.saving
+  }, [store.dirty, store.saving])
 
   const save = useCallback(async () => {
     await store.saveDraft()
@@ -20,7 +27,7 @@ export function BuilderRoute() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== 's' || (!event.ctrlKey && !event.metaKey)) return
       event.preventDefault()
-      if (store.status !== 'saving') void save()
+      if (!store.saving) void save().catch(() => undefined)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -42,6 +49,7 @@ export function BuilderRoute() {
   }
 
   const discardAndLeave = () => {
+    if (store.saving) return
     store.discardDraft()
     blocker.proceed?.()
     setLeaveDialogOpen(false)
@@ -50,6 +58,7 @@ export function BuilderRoute() {
   const saveAndLeave = async () => {
     try {
       await save()
+      if (dirtyRef.current || savingRef.current) return
       blocker.proceed?.()
       setLeaveDialogOpen(false)
     } catch {
@@ -80,7 +89,7 @@ export function BuilderRoute() {
       <CVEditorView
         cv={store.draft.cv}
         onUpdateCV={(cv) => store.updateDraft({ cv, layout: store.draft!.layout })}
-        onSave={() => void save()}
+        onSave={() => void save().catch(() => undefined)}
         onDiscard={store.discardDraft}
         dirty={store.dirty}
         saving={store.status === 'saving'}
@@ -88,7 +97,7 @@ export function BuilderRoute() {
         onOpenShare={() => {}}
         onDownloadPDF={() => { window.location.assign(`/api/cv/${encodeURIComponent(cvId)}/export?variant=presentation`) }}
       />
-      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplied={() => void store.reload()} onClose={() => setAssistantOpen(false)} /></div>}
+      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplied={(cv) => store.updateDraft({ cv, layout: store.draft!.layout })} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
       {leaveDialogOpen && blocker.state === 'blocked' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">
@@ -97,7 +106,7 @@ export function BuilderRoute() {
             <p className="mt-2 text-sm text-slate-600">Bạn muốn lưu bản nháp trước khi rời trình soạn thảo?</p>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={cancelLeave} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Hủy</button>
-              <button type="button" onClick={discardAndLeave} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50">Bỏ thay đổi</button>
+              <button type="button" onClick={discardAndLeave} disabled={store.saving} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">Bỏ thay đổi</button>
               <button type="button" onClick={() => void saveAndLeave()} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Lưu và rời đi</button>
             </div>
           </div>

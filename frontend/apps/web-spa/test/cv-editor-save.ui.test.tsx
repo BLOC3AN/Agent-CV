@@ -14,7 +14,13 @@ const cv = {
   activeSections: { intro: true, experience: true, projects: true, education: true, skills: true, activities: true, certifications: true, languages: true },
 } as CV
 const layout: CVLayout = { version: 1, nodes: [{ id: 'header', type: 'header', visible: true }] }
-const envelope = (profileSnapshot = cv) => ({ id: 'cv-1', profileId: '', layout, profileSnapshot } as never)
+const envelope = (profileSnapshot = cv) => ({ id: 'cv-1', profileId: 'profile-1', layout, profileSnapshot } as never)
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
+  return { promise, resolve }
+}
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -73,5 +79,49 @@ describe('CV editor explicit save workflow', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /bỏ thay đổi/i }))
 
     await waitFor(() => expect(screen.getByText('Elsewhere')).toBeInTheDocument())
+  })
+
+  it('keeps leave blocked while Save is pending instead of discarding a committable draft', async () => {
+    const pending = deferred<{ cv: ReturnType<typeof envelope> }>()
+    const commit = vi.spyOn(api, 'commitCV').mockReturnValue(pending.promise as never)
+    const router = renderBuilder()
+    await editName()
+
+    const event = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, cancelable: true })
+    act(() => window.dispatchEvent(event))
+    await waitFor(() => expect(commit).toHaveBeenCalledTimes(1))
+    await act(async () => { await router.navigate('/elsewhere') })
+
+    const dialog = screen.getByRole('dialog')
+    const discard = within(dialog).getByRole('button', { name: /bỏ thay đổi/i })
+    expect(discard).toBeDisabled()
+    fireEvent.click(discard)
+    expect(screen.getByTestId('cv-editor')).toBeInTheDocument()
+
+    pending.resolve({ cv: envelope({ ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'B' } } }) })
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: /bỏ thay đổi/i })).not.toBeDisabled())
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /bỏ thay đổi/i }))
+    await waitFor(() => expect(screen.getByText('Elsewhere')).toBeInTheDocument())
+  })
+
+  it('applies an accepted AI result to the local draft without saveCV or reload', async () => {
+    const updated = { ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'AI draft' } } }
+    const sendChat = vi.spyOn(api, 'sendChat').mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất AI',
+      ops: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }],
+      rejected: [],
+    } as never)
+    const settle = vi.spyOn(api, 'settleChatProposal').mockResolvedValue({ applied: 1, profile: updated } as never)
+    const legacySave = vi.spyOn(api, 'saveCV').mockResolvedValue(undefined)
+    renderBuilder()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo tóm tắt' }))
+    expect(sendChat).toHaveBeenCalled()
+    await screen.findAllByText('Đề xuất AI')
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vào CV' }))
+
+    await waitFor(() => expect(screen.getByText('AI draft')).toBeInTheDocument())
+    expect(settle).toHaveBeenCalledWith('proposal-1', 'profile-1', [0])
+    expect(legacySave).not.toHaveBeenCalled()
   })
 })

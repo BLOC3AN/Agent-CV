@@ -50,6 +50,9 @@ export function useCVStore(id: string) {
   const [profileId, setProfileId] = useState<string>()
   const [status, setStatus] = useState<CVStoreStatus>('loading')
   const [error, setError] = useState<string | undefined>()
+  const [savePending, setSavePending] = useState(false)
+  const documentVersionRef = useRef(0)
+  const pendingSaveRef = useRef<Promise<void> | undefined>(undefined)
 
   const replaceDocuments = useCallback((next: DocumentState) => {
     documentsRef.current = next
@@ -57,6 +60,9 @@ export function useCVStore(id: string) {
   }, [])
 
   const reload = useCallback(async () => {
+    const pendingSave = pendingSaveRef.current
+    if (pendingSave) await pendingSave.catch(() => undefined)
+    documentVersionRef.current += 1
     setStatus('loading')
     setError(undefined)
     try {
@@ -84,40 +90,56 @@ export function useCVStore(id: string) {
     if (!current.committed) return
 
     const draft = cloneDocument(next)
+    documentVersionRef.current += 1
     replaceDocuments({ committed: current.committed, draft })
     setError(undefined)
     setStatus(documentsEqual(current.committed, draft) ? 'ready' : 'dirty')
   }, [replaceDocuments])
 
   const discardDraft = useCallback(() => {
+    if (pendingSaveRef.current) return
     const committed = documentsRef.current.committed
     if (!committed) return
+    documentVersionRef.current += 1
     replaceDocuments({ committed, draft: cloneDocument(committed) })
     setError(undefined)
     setStatus('ready')
   }, [replaceDocuments])
 
-  const saveDraft = useCallback(async (source: 'user' | 'ai' = 'user', message?: string) => {
+  const saveDraft = useCallback((source: 'user' | 'ai' = 'user', message?: string): Promise<void> => {
+    if (pendingSaveRef.current) return pendingSaveRef.current
     const snapshot = documentsRef.current.draft
-    if (!snapshot || documentsEqual(documentsRef.current.committed, snapshot)) return
+    if (!snapshot || documentsEqual(documentsRef.current.committed, snapshot)) return Promise.resolve()
 
+    const saveVersion = documentVersionRef.current
+    setSavePending(true)
     setStatus('saving')
     setError(undefined)
-    try {
-      const result = await commitCV(id, snapshot.cv, snapshot.layout, source, message)
-      const committed = cloneDocument({
-        cv: result.cv.profileSnapshot as CV,
-        layout: result.cv.layout as CVLayout,
-      })
-      const current = documentsRef.current
-      const draft = documentsEqual(current.draft, snapshot) ? cloneDocument(committed) : current.draft
-      replaceDocuments({ committed, draft })
-      setStatus(documentsEqual(committed, draft) ? 'saved' : 'dirty')
-    } catch (err) {
-      setStatus('error')
-      setError(err instanceof ApiError ? err.message : 'Không lưu được CV')
-      throw err
-    }
+
+    const pending = (async () => {
+      try {
+        const result = await commitCV(id, snapshot.cv, snapshot.layout, source, message)
+        const committed = cloneDocument({
+          cv: result.cv.profileSnapshot as CV,
+          layout: result.cv.layout as CVLayout,
+        })
+        const current = documentsRef.current
+        const draft = documentVersionRef.current === saveVersion
+          ? cloneDocument(committed)
+          : current.draft
+        replaceDocuments({ committed, draft })
+        setStatus(documentsEqual(committed, draft) ? 'saved' : 'dirty')
+      } catch (err) {
+        setStatus(documentVersionRef.current === saveVersion ? 'error' : 'dirty')
+        setError(err instanceof ApiError ? err.message : 'Không lưu được CV')
+        throw err
+      } finally {
+        if (pendingSaveRef.current === pending) pendingSaveRef.current = undefined
+        setSavePending(false)
+      }
+    })()
+    pendingSaveRef.current = pending
+    return pending
   }, [id, replaceDocuments])
 
   const dirty = !documentsEqual(documents.committed, documents.draft)
@@ -126,6 +148,7 @@ export function useCVStore(id: string) {
     committed: documents.committed,
     draft: documents.draft,
     dirty,
+    saving: savePending,
     status,
     error,
     profileId,

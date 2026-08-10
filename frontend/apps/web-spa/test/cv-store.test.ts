@@ -20,6 +20,16 @@ function envelope(profileSnapshot = cv, savedLayout = layout) {
   return { id: 'cv-1', profileId: 'profile-1', layout: savedLayout, profileSnapshot } as never
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 afterEach(() => vi.restoreAllMocks())
 
 describe('useCVStore', () => {
@@ -81,5 +91,68 @@ describe('useCVStore', () => {
 
     expect(result.current.dirty).toBe(false)
     expect(result.current.status).toBe('ready')
+  })
+
+  it('shares one in-flight promise when saveDraft is called twice synchronously', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const pending = deferred<{ cv: ReturnType<typeof envelope> }>()
+    const commit = vi.spyOn(api, 'commitCV').mockReturnValue(pending.promise as never)
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft?.cv).toEqual(cv))
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Một lần' }, layout }))
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.saveDraft()
+      second = result.current.saveDraft()
+    })
+    expect(first).toBe(second)
+    expect(commit).toHaveBeenCalledTimes(1)
+
+    pending.resolve({ cv: envelope({ ...cv, title: 'Một lần' }) })
+    await act(async () => { await first })
+  })
+
+  it('keeps edits made while saving in the draft after the first save resolves', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const pending = deferred<{ cv: ReturnType<typeof envelope> }>()
+    vi.spyOn(api, 'commitCV').mockReturnValue(pending.promise as never)
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft?.cv).toEqual(cv))
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Bản đầu' }, layout }))
+
+    let save!: Promise<void>
+    act(() => {
+      save = result.current.saveDraft()
+      result.current.updateDraft({ cv: { ...cv, title: 'Bản mới hơn' }, layout })
+    })
+    pending.resolve({ cv: envelope({ ...cv, title: 'Bản đầu' }) })
+    await act(async () => { await save })
+
+    expect(result.current.committed?.cv.title).toBe('Bản đầu')
+    expect(result.current.draft?.cv.title).toBe('Bản mới hơn')
+    expect(result.current.dirty).toBe(true)
+  })
+
+  it('does not discard or report completion while a save that can commit is pending', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const pending = deferred<{ cv: ReturnType<typeof envelope> }>()
+    vi.spyOn(api, 'commitCV').mockReturnValue(pending.promise as never)
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft?.cv).toEqual(cv))
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Không được bỏ' }, layout }))
+
+    let save!: Promise<void>
+    act(() => {
+      save = result.current.saveDraft()
+      result.current.discardDraft()
+    })
+
+    expect(result.current.saving).toBe(true)
+    expect(result.current.draft?.cv.title).toBe('Không được bỏ')
+    pending.resolve({ cv: envelope({ ...cv, title: 'Không được bỏ' }) })
+    await act(async () => { await save })
+    expect(result.current.dirty).toBe(false)
   })
 })

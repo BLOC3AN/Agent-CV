@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Bot, Check, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
 import type { CV } from '../types'
-import { saveCV, sendChat, settleChatProposal, type ChatOp, type ClarifyRequest } from '../lib/api'
+import { sendChat, settleChatProposal, type ChatOp, type ClarifyRequest } from '../lib/api'
 
 interface Props {
   profileId: string
   cvId: string
   cv: CV
-  onApplied: () => void
+  onApplied: (cv: CV) => void
   onClose?: () => void
 }
 
@@ -95,10 +95,9 @@ export function ChatPanel({ profileId, cvId, cv, onApplied, onClose }: Props) {
     setError(undefined)
     try {
       const result = await settleChatProposal(proposal.id, profileId, accept)
-      if (accept.length && result.profile) await saveCV(cvId, result.profile as CV)
       setProposal(undefined)
       setMessages((m) => [...m, { role: 'assistant', text: accept.length ? `Đã áp dụng ${result.applied} thay đổi.` : 'Đã bỏ qua đề xuất.' }])
-      if (accept.length) onApplied()
+      if (accept.length && result.profile) onApplied(result.profile as CV)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không áp dụng được đề xuất')
     } finally {
