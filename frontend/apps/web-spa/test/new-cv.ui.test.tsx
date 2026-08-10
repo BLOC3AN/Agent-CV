@@ -69,4 +69,35 @@ describe('/cv/new', () => {
     const btn = screen.getByRole('button', { name: /tạo cv/i })
     expect(btn).not.toBeDisabled()
   })
+
+  // Vòng review 1: nếu createCV thành công rồi saveCV (bước gieo) hỏng, CV đã
+  // tạo trở thành mồ côi — có `data`, không bao giờ có `data_v2`, đúng cái
+  // bẫy 409 mà phương án (a) tồn tại để tránh — và `cvId` chỉ sống trong biến
+  // cục bộ nên bấm lại sẽ tạo thêm một CV thứ hai thay vì dọn CV cũ. Route
+  // chọn xoá CV mồ côi ngay trong nhánh lỗi (không phải gieo lại) để lần bấm
+  // kế tiếp luôn khởi đầu sạch.
+  it('gieo hỏng sau khi đã tạo thì xoá CV mồ côi, báo đúng sự thật, và cho bấm lại', async () => {
+    const created = vi.fn(async () => ({ cvId: 'cv-moi', profileId: 'profile-moi' }))
+    vi.spyOn(api, 'saveCV').mockRejectedValue(new api.ApiError(500, 'Máy chủ trả về lỗi'))
+    // Xoá dòng `await deleteCV(created.cvId)` khỏi nhánh catch trong
+    // NewCVRoute.tsx là dòng khiến assertion `deleted` dưới đây đỏ.
+    const deleted = vi.spyOn(api, 'deleteCV').mockResolvedValue(undefined)
+
+    render(<NewCVRoute createCV={created} />, { wrapper: MemoryRouter })
+    await userEvent.click(screen.getByRole('button', { name: /tạo cv/i }))
+
+    // CV mồ côi phải bị dọn, đúng bằng cvId vừa tạo — không phải một cvId
+    // khác hay không xoá gì cả.
+    expect(await screen.findByText(/thất bại giữa chừng/i)).toBeInTheDocument()
+    expect(deleted).toHaveBeenCalledWith('cv-moi')
+
+    // Thông báo không được nói CV chưa được tạo — điều đó không đúng sự thật,
+    // createCV đã thành công.
+    expect(screen.queryByText('Không tạo được CV')).not.toBeInTheDocument()
+
+    // Nút phải dùng lại được — bấm lại là khởi đầu sạch, không phải màn hình
+    // treo.
+    const btn = screen.getByRole('button', { name: /tạo cv/i })
+    expect(btn).not.toBeDisabled()
+  })
 })
