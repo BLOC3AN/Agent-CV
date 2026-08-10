@@ -34,6 +34,18 @@ const url =
 const client = new Client({ connectionString: url })
 await client.connect()
 
+// SP-5 đã xoá cột v1/data_v2 và dùng profiles.data làm v2 duy nhất. Giữ
+// command idempotent để các runbook cũ không cố query một cột đã bị cutover.
+const { rows: cutoverColumns } = await client.query<{ column_name: string }>(
+  `SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'profiles' AND column_name = 'data_v2'`,
+)
+if (cutoverColumns.length === 0) {
+  console.log('Backfill không cần chạy: database đã ở schema v2 production.')
+  await client.end()
+  process.exit(0)
+}
+
 // `profiles` có trigger `profiles_touch` (BEFORE UPDATE) tự set
 // `updated_at = now()` trên MỌI update, kể cả update chỉ đụng `data_v2`.
 // Backfill đọc `updated_at` để suy ra `lastModified` (idempotent — xem

@@ -356,27 +356,17 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 	cv["title"] = title
 	cv["updatedAt"] = updated
 
-	wantV2 := wantsV2(r)
+	// SP-5 cutover: profile_snapshot and profiles.data are both v2.
+	// Keep the ownership join on the live profile read as a defense-in-depth
+	// check; cv_documents.user_id is not a database-enforced invariant.
 	var v2Raw []byte
-	if wantV2 {
-		// Nguồn v2 là profiles.data_v2 qua cv_documents.profile_id — KHÔNG phải
-		// cv_documents.snapshot_v2, cột đó SP-2 cố tình để trống chưa backfill.
-		// Lỗi truy vấn (kể cả không tìm thấy hàng) coi như "chưa có v2" và để
-		// cvSnapshotForResponse quyết định — hàm đó là nơi duy nhất biết cách
-		// dịch "rỗng" thành lỗi phân biệt được.
-		// AND p.user_id = $2 là phòng thủ có chủ đích, không phải điều kiện thừa:
-		// cv_documents.user_id == profiles.user_id (qua profile_id) là bất biến ở
-		// tầng ứng dụng, KHÔNG có ràng buộc DB nào ép nó (xem 001_core.sql).
-		// exportCV đã không tin bất biến này (kiểm tra cả p.user_id); nhánh v2
-		// đọc nguyên hồ sơ CV nên phải cẩn trọng như vậy, không được kém hơn.
-		if err := s.db.QueryRowContext(r.Context(),
-			`SELECT p.data_v2 FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
-			 WHERE c.id = $1 AND c.user_id = $2 AND p.user_id = $2`, id, userID).Scan(&v2Raw); err != nil {
-			v2Raw = nil
-		}
+	if err := s.db.QueryRowContext(r.Context(),
+		`SELECT p.data FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
+		 WHERE c.id = $1 AND c.user_id = $2 AND p.user_id = $2`, id, userID).Scan(&v2Raw); err != nil {
+		v2Raw = nil
 	}
 
-	snapshot, schemaVersion, err := cvSnapshotForResponse(profileRaw, v2Raw, wantV2)
+	snapshot, schemaVersion, err := cvSnapshotForResponse(nil, v2Raw, true)
 	if err != nil {
 		if errors.Is(err, errV2NotBackfilled) {
 			// Không im lặng rơi về v1: client đã nói rõ nó chỉ đọc được v2.
@@ -387,15 +377,13 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 			})
 			return
 		}
-		// data_v2 có mặt nhưng hỏng JSON: lỗi dữ liệu, không phải lỗi client —
+		// data có mặt nhưng hỏng JSON: lỗi dữ liệu, không phải lỗi client —
 		// nhưng vẫn không được trả response nửa vời.
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được dữ liệu CV"})
 		return
 	}
 	cv["profileSnapshot"] = snapshot
-	if wantV2 {
-		cv["schemaVersion"] = schemaVersion
-	}
+	cv["schemaVersion"] = schemaVersion
 
 	writeJSON(w, http.StatusOK, map[string]any{"cv": cv})
 }
@@ -461,10 +449,7 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 // đã được validateCVPair() (gọi từ cvRoute) xác nhận đúng schemaVersion —
 // hàm này không kiểm lại, chỉ ghi.
 //
-// Ghi được một nửa là trạng thái tệ nhất: data và data_v2 mô tả cùng một CV
-// theo hai cách khác nhau, không cột nào tự nhận là sai, và lần đọc sau trả
-// kết quả nào tuỳ theo client gửi header gì (xem cvSnapshotForResponse ở
-// cv_snapshot.go).
+// Sau SP-5, data là bản v2 duy nhất và ghi vẫn nằm trong một transaction.
 func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, cvV2, profileV1 json.RawMessage) {
 	userID := s.currentUserID(r)
 	if userID == "" {
@@ -491,17 +476,14 @@ func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, 
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(),
-		`UPDATE profiles SET data=$2::jsonb, data_v2=$3::jsonb, updated_at=now() WHERE id=$1 AND user_id=$4`,
-		profileID, string(profileV1), string(cvV2), userID); err != nil {
+		`UPDATE profiles SET data=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3`,
+		profileID, string(cvV2), userID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không ghi được hồ sơ"})
 		return
 	}
-	// profile_snapshot giữ dạng v1: apps/web đọc thẳng cột này và phục vụ
-	// production tới lúc cutover SP-5. cv_documents.snapshot_v2 KHÔNG được
-	// đụng tới ở đây — SP-2 cố tình để trống, backfill nó là việc khác.
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE cv_documents SET profile_snapshot=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3`,
-		id, string(profileV1), userID); err != nil {
+		id, string(cvV2), userID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không ghi được CV"})
 		return
 	}
@@ -1739,12 +1721,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	// whole conversation.
 	s.cacheChatMessages(r.Context(), userID, sessionID, history)
 	profileRaw := []byte{}
-	var profileV1, profileV2 []byte
-	_ = s.db.QueryRowContext(r.Context(), `SELECT data,data_v2 FROM profiles WHERE id=$1 AND user_id=$2`, body.ProfileID, userID).Scan(&profileV1, &profileV2)
-	profileRaw = profileV1
-	if wantsV2(r) && len(profileV2) > 0 {
-		profileRaw = profileV2
-	}
+	_ = s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 AND user_id=$2`, body.ProfileID, userID).Scan(&profileRaw)
 	// Giữ cùng UX SSE với flow Node: gửi trạng thái ngay khi đã nhận và dựng
 	// đủ context, thay vì để giao diện đứng ở "Đang kết nối" suốt lúc model chạy.
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
@@ -2144,14 +2121,10 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	var old, oldV2 []byte
-	if err = tx.QueryRowContext(r.Context(), `SELECT data,data_v2 FROM profiles WHERE id=$1 AND user_id=$2 FOR UPDATE`, body.ProfileID, userID).Scan(&old, &oldV2); err != nil {
+	var old []byte
+	if err = tx.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 AND user_id=$2 FOR UPDATE`, body.ProfileID, userID).Scan(&old); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
 		return
-	}
-	v2 := wantsV2(r) && len(oldV2) > 0
-	if v2 {
-		old = oldV2
 	}
 	updated, err := applyJSONPatch(old, patchRaw)
 	if err != nil {
@@ -2159,11 +2132,7 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var revisionID int64
-	column := "data"
-	if v2 {
-		column = "data_v2"
-	}
-	if err = tx.QueryRowContext(r.Context(), `UPDATE profiles SET `+column+`=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3 RETURNING id`, body.ProfileID, string(updated), userID).Scan(new(string)); err != nil {
+	if err = tx.QueryRowContext(r.Context(), `UPDATE profiles SET data=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3 RETURNING id`, body.ProfileID, string(updated), userID).Scan(new(string)); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được hồ sơ"})
 		return
 	}

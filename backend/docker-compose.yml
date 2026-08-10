@@ -87,7 +87,6 @@ services:
       resources:
         limits:
           memory: 768M
-
   # Trích text + toạ độ từ PDF có text layer (TDD §8.1 bước [1]).
   # Chỉ service Python duy nhất — pdfplumber/PyMuPDF vượt trội thư viện JS
   # về layout extraction.
