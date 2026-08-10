@@ -108,11 +108,11 @@ services:
         limits:
           memory: 1G
 
-  web:
+  web-spa:
     build:
       context: ..
       dockerfile: frontend/apps/web-spa/Dockerfile
-    container_name: hr-web
+    container_name: hr-web-spa
     restart: unless-stopped
     environment:
       <<: *env
