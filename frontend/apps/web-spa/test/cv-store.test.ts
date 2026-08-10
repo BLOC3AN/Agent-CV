@@ -699,4 +699,18 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
     expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Manual' }), layout, 'user', undefined, 0)
   })
+
+  it.each([
+    ['baseline truncation', 'Senior Engineer', 'Engineer'],
+    ['baseline blanking', 'CV', ''],
+  ])('attributes standalone AI scalar removal: %s', async (_label, baselineTitle, proposedTitle) => {
+    const source = CVSchema.parse({ ...cv, schemaVersion: 2, language: 'vi', title: baselineTitle }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    act(() => result.current.applyAIDraft({ cv: { ...source, title: proposedTitle }, layout }, 'AI scalar removal'))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: proposedTitle }), layout, 'ai', 'AI scalar removal', 0)
+  })
 })

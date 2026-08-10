@@ -458,12 +458,13 @@ export function useCVStore(id: string) {
     documentVersionRef.current += 1
     const changes = current.draft ? collectChanges(current.draft, draft) : []
     const netChanges = collectChanges(current.committed, draft)
+    const priorAIPaths = new Set(provenanceRef.current.flatMap((entry) => entry.changes.map((change) => change.path)))
     provenanceRef.current = reconcileProvenance(provenanceRef.current, draft)
     const survivingChanges = changes.filter((change) => {
       if (!changeMatchesNetChange(change, netChanges)) return false
       const immediateBefore = current.draft ? valueAtPath(current.draft, change.path).value : undefined
       const committedValue = valueAtPath(current.committed, change.path).value
-      return introducesNewScalarContent(change, immediateBefore, committedValue)
+      return !priorAIPaths.has(change.path) || introducesNewScalarContent(change, immediateBefore, committedValue)
     })
     if (survivingChanges.length) provenanceRef.current = [...provenanceRef.current, { id: ++provenanceIDRef.current, summary, changes: survivingChanges }]
     setPendingAIProvenance(provenanceRef.current)

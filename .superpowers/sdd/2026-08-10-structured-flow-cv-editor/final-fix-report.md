@@ -85,3 +85,11 @@ The findings in `FINAL-MERGE-REVIEW-7.md` are resolved:
 - Same-path consecutive AI changes now require newly introduced scalar content beyond the immediate draft and committed value. A proposal that only removes an earlier AI fragment from a manual residual is not recorded as AI provenance; genuinely new AI text and in-flight save provenance remain supported.
 
 Added regressions cover duplicate reorder survival, exact restoration, count reduction, and same-path scalar cancellation. Verification passed: focused store 45/45, full frontend 26 files / 229 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.
+
+## Round 13 follow-up
+
+The finding in `FINAL-MERGE-REVIEW-8.md` is resolved:
+
+- Same-path scalar cancellation filtering now checks whether an earlier AI provenance entry existed on that exact path before suppressing substring-only changes. Standalone AI truncation and blanking therefore remain AI-attributed, while the earlier AI-fragment/manual-residual/AI-cancellation sequence still clears.
+
+Added AI-only truncation and blanking regressions while retaining the cancellation regression. Verification passed: focused store 47/47, full frontend 26 files / 231 tests, frontend typecheck, `go test ./...`, and real Playwright/PDF print integration 2/2. `git diff --check` is clean.
