@@ -1,6 +1,7 @@
 import React from 'react';
 import { CV } from '../types';
 import { X, Printer, Download } from 'lucide-react';
+import { PaginatedA4Document } from './PaginatedA4Document';
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -53,11 +54,11 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
 
       {/* Middle A4 Display Area */}
       <div className="flex-1 overflow-y-auto my-4 w-full flex justify-center custom-scrollbar">
-        <div
-          className="bg-white shadow-2xl p-10 relative my-auto rounded-sm"
+        <PaginatedA4Document
+          id="a4-cv-paper"
+          className="my-auto"
+          contentClassName="p-10"
           style={{
-            width: '210mm',
-            minHeight: '297mm',
             fontFamily: cv.design.font,
             fontSize: `${cv.design.fontSize}px`,
           }}
@@ -122,7 +123,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </PaginatedA4Document>
       </div>
     </div>
   );

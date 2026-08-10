@@ -37,7 +37,7 @@ services:
     ports:
       - '8080:8080'
     volumes:
-      - uploads:/app/var/storage
+      - /home/hailt/Desktop/HR-agent/data-deploy/uploads:/app/var/storage
       - ../config.yml:/app/config.yml:ro
     depends_on:
       postgres: { condition: service_healthy }
@@ -54,7 +54,7 @@ services:
     ports:
       - '5433:5432'
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - /home/hailt/Desktop/HR-agent/data-deploy/postgres:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres -d hragent']
@@ -77,7 +77,7 @@ services:
     ports:
       - '6380:6379'
     volumes:
-      - redisdata:/data
+      - /home/hailt/Desktop/HR-agent/data-deploy/redis:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -123,7 +123,7 @@ services:
     ports:
       - '3000:3000'
     volumes:
-      - uploads:/app/var/storage
+      - /home/hailt/Desktop/HR-agent/data-deploy/uploads:/app/var/storage
     depends_on:
       backend: { condition: service_started }
       postgres: { condition: service_healthy }
@@ -141,7 +141,7 @@ services:
       DATABASE_URL: postgres://postgres:${PG_PASSWORD:-hragent_dev}@postgres:5432/hragent
       PDFKIT_URL: http://pdfkit:8000
     volumes:
-      - uploads:/app/var/storage
+      - /home/hailt/Desktop/HR-agent/data-deploy/uploads:/app/var/storage
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -150,10 +150,3 @@ services:
       resources:
         limits:
           memory: 2G
-
-volumes:
-  pgdata:
-  redisdata:
-  # File upload — web GHI, worker ĐỌC. Không dùng chung thì worker báo
-  # FILE_MISSING với mọi file, và log không chỉ ra nguyên nhân.
-  uploads:

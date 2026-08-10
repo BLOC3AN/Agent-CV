@@ -41,6 +41,8 @@ eval/manual-log.md
 # ── File upload của user — CHỨA CV THẬT, tuyệt đối không commit (TDD §15) ──
 storage/
 var/
+# Docker bind-mounted PostgreSQL, Redis and user-upload data — local PII/state.
+data-deploy/
 # Thư mục tạm của test e2e
 .tmp/
 

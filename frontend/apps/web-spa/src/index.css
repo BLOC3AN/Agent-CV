@@ -58,18 +58,20 @@
     visibility: visible;
   }
   #a4-cv-paper {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: static;
     width: 210mm !important;
-    min-height: 297mm !important;
-    padding: 20mm !important;
+    min-height: 0 !important;
+    height: auto !important;
     margin: 0 !important;
     box-shadow: none !important;
+    border: 0 !important;
+    overflow: visible !important;
+  }
+  #a4-cv-paper > .pointer-events-none {
+    display: none !important;
   }
   @page {
     size: A4;
     margin: 0;
   }
 }
-

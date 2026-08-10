@@ -5,6 +5,7 @@ import { AppLayout } from './AppLayout';
 import { LoginPage } from './LoginPage';
 import { DashboardRoute } from './DashboardRoute';
 import { BuilderRoute } from './BuilderRoute';
+import { PreviewRoute } from './PreviewRoute';
 import { MyCVsRoute } from './MyCVsRoute';
 import { NewCVRoute } from './NewCVRoute';
 import { ImportRoute } from './ImportRoute';
@@ -94,7 +95,10 @@ const protectedChildren: RouteObject[] = [
   { path: '*', element: <NotFound /> },
 ];
 
-const builderChildren: RouteObject[] = [{ path: 'builder/:cvId', element: <div data-testid="view-editor"><BuilderRoute /></div> }];
+const builderChildren: RouteObject[] = [
+  { path: 'builder/:cvId', element: <div data-testid="view-editor"><BuilderRoute /></div> },
+  { path: 'builder/:cvId/preview', element: <PreviewRoute /> },
+];
 
 /**
  * Route gốc không có `path` chỉ để bọc toàn cây trong `SessionProvider` —

@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { appRoutes } from '../src/routes/routes.js'
 import * as api from '../src/lib/api.js'
+import { initialCVs } from '../src/mockData'
 
 function renderAt(path: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
@@ -68,5 +69,27 @@ describe('bản đồ URL', () => {
     expect(await screen.findByTestId('view-editor')).toBeInTheDocument()
     expect(screen.queryByTestId('sidebar-item-cv')).not.toBeInTheDocument()
     expect(screen.queryByTestId('sidebar-item-dashboard')).not.toBeInTheDocument()
+  })
+
+  it('/builder/:cvId/preview mở preview nhiều trang thay vì 404', async () => {
+    const envelope = {
+      id: 'cv-1',
+      profileId: 'profile-1',
+      title: initialCVs[0]!.title,
+      templateId: 'modern',
+      theme: {},
+      layout: {},
+      language: 'en',
+      updatedAt: initialCVs[0]!.lastModified,
+      profileSnapshot: initialCVs[0]!,
+      schemaVersion: 2,
+    } as const
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ cv: envelope }), { status: 200 }),
+    )
+    renderAt('/builder/cv-1/preview')
+    expect(await screen.findByText(/xem trước cv a4/i)).toBeInTheDocument()
+    expect(screen.getByTestId('a4-document')).toBeInTheDocument()
+    fetchMock.mockRestore()
   })
 })

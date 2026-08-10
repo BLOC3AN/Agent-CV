@@ -10,6 +10,7 @@ import {
   Layers,
   Check,
 } from 'lucide-react';
+import { PaginatedA4Document } from './PaginatedA4Document';
 
 interface CVEditorViewProps {
   cv: CV;
@@ -488,13 +489,11 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
       {/* 2. Middle - A4 Live Paper Preview */}
       <div className="flex-1 overflow-y-auto p-6 md:p-10 flex justify-center bg-slate-100/90 custom-scrollbar">
-        <div
+        <PaginatedA4Document
           id="a4-cv-paper"
-          className="bg-white border border-slate-200 shadow-lg rounded-xs transition-all duration-300 relative print:shadow-none print:m-0"
+          className="transition-all duration-300 print:shadow-none print:m-0"
+          contentClassName="px-[20mm] py-[24mm]"
           style={{
-            width: '210mm',
-            minHeight: '297mm',
-            padding: '24mm 20mm',
             fontFamily:
               cv.design.font === 'Roboto'
                 ? 'Roboto, sans-serif'
@@ -709,7 +708,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </PaginatedA4Document>
       </div>
 
     </div>
