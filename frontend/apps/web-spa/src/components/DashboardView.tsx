@@ -15,12 +15,14 @@ import {
 
 interface DashboardViewProps {
   cvs: CV[];
+  cvCount?: number;
   onOpenUploadModal: () => void;
   userEmail?: string;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   cvs,
+  cvCount = cvs.length,
   onOpenUploadModal,
   userEmail = 'tester',
 }) => {
@@ -28,6 +30,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [showCompletionDetails, setShowCompletionDetails] = useState(false);
   const userName = userEmail.split('@')[0];
   const activeCV = cvs[0] || null;
+  const hasCV = cvCount > 0;
 
   return (
     <div className="p-6 md:p-8 max-w-[1216px] mx-auto space-y-8 animate-fade-in">
@@ -87,23 +90,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 CV đang chỉnh sửa
               </span>
               <h3 className="text-xl font-bold text-slate-900 mt-0.5">
-                {activeCV ? activeCV.sections.intro.fullName || activeCV.title : 'LE THANH HAI'}
+                {activeCV ? activeCV.sections.intro.fullName || activeCV.title : 'Bạn chưa có CV nào'}
               </h3>
               <p className="text-xs font-medium text-slate-600">
-                {activeCV ? activeCV.sections.intro.title || 'Hồ sơ chuyên nghiệp' : 'Hồ sơ chuyên nghiệp'}
+                {activeCV ? activeCV.sections.intro.title || 'Hồ sơ chuyên nghiệp' : 'Tạo CV đầu tiên để bắt đầu'}
               </p>
               <p className="text-[11px] text-slate-400 mt-1">
-                Lần sửa gần nhất: {activeCV ? activeCV.lastModified : 'Vừa mới đây'}
+                {activeCV ? `Lần sửa gần nhất: ${activeCV.lastModified}` : 'Tạo CV trắng hoặc tải CV hiện có lên.'}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 pt-1">
               <button
-                onClick={() => activeCV && navigate(`/builder/${activeCV.id}`)}
+                onClick={() => activeCV ? navigate(`/builder/${activeCV.id}`) : navigate('/cv/new')}
                 id="btn-tiep-tuc-chinh-cv"
                 className="inline-flex items-center space-x-2 px-4 py-2 bg-violet-700 hover:bg-violet-800 text-white font-semibold text-xs rounded-xl shadow-xs transition"
               >
-                <span>Sửa CV ngay</span>
+                <span>{hasCV ? 'Sửa CV ngay' : 'Tạo CV đầu tiên'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
 
@@ -137,7 +140,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="relative w-20 h-20 shrink-0 flex items-center justify-center bg-emerald-50/80 border border-emerald-100 rounded-2xl">
               <div className="flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-extrabold text-emerald-700 leading-none">
-                  85%
+                  {hasCV ? '85%' : '0%'}
                 </span>
                 <span className="text-[9px] font-semibold text-emerald-600 uppercase tracking-wider mt-1">
                   ĐẠT CHUẨN
@@ -151,7 +154,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="flex items-center space-x-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span className="font-semibold text-slate-800">
-                  Hồ sơ đã đầy đủ thông tin cốt lõi
+                  {hasCV ? `${cvCount} CV đang được quản lý` : 'Chưa có hồ sơ để đánh giá'}
                 </span>
               </div>
               <button
@@ -168,7 +171,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
               <div
                 className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                style={{ width: '85%' }}
+                style={{ width: hasCV ? '85%' : '0%' }}
               ></div>
             </div>
 

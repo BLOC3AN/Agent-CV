@@ -41,6 +41,7 @@ export function DashboardRoute() {
     <div data-testid="view-dashboard">
       <DashboardView
         cvs={active ? [active] : []}
+        cvCount={items.length}
         userEmail={email}
         onOpenUploadModal={() => navigate('/import')}
       />
