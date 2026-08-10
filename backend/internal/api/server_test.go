@@ -366,17 +366,20 @@ func TestUploadCreatesFreshJobForEachUploadID(t *testing.T) {
 
 func TestReviewContractMatchesVerifiedPaths(t *testing.T) {
 	profile := map[string]any{
-		"basics":    map[string]any{"name": "Ada"},
-		"education": []any{map[string]any{"school": "MIT"}},
-		"skills":    []any{map[string]any{"name": "Go"}},
-		"languages": []any{map[string]any{"name": "English"}},
-		"_meta":     map[string]any{"verified": map[string]any{"/basics": true, "/education/0": true}},
+		"schemaVersion": 2,
+		"sections": map[string]any{
+			"intro":     map[string]any{"fullName": "Ada"},
+			"education": []any{map[string]any{"school": "MIT"}},
+			"skills":    []any{map[string]any{"category": "Skills"}},
+			"languages": []any{map[string]any{"language": "English"}},
+		},
+		"_meta": map[string]any{"verified": map[string]any{"/sections/intro": true, "/sections/education/0": true}},
 	}
 	items, progress := reviewContract(profile)
 	if len(items) != 4 || progress["done"] != 2 || progress["complete"] != false {
 		t.Fatalf("items=%d progress=%#v", len(items), progress)
 	}
-	if got := progress["pending"].([]string); len(got) != 2 || got[0] != "/skills" || got[1] != "/languages" {
+	if got := progress["pending"].([]string); len(got) != 2 || got[0] != "/sections/skills" || got[1] != "/sections/languages" {
 		t.Fatalf("pending=%#v", got)
 	}
 }
@@ -409,12 +412,8 @@ func TestCVListRouteIsRegistered(t *testing.T) {
 	}
 }
 
-// Không có header X-CV-Schema thì phải là v1 kể cả khi data_v2 đã có sẵn:
-// apps/web đọc endpoint này và không có cách nào tự bảo vệ khỏi hình dạng lạ.
-// Chưa có PostgreSQL trong test này nên cách quan sát được là mã trạng thái
-// 503 không đổi — nếu nhánh header vô tình chạy trước cả việc kiểm tra s.db,
-// test sẽ fail vì lộ ra một mã trạng thái khác.
-func TestGetCVDefaultsToV1WithoutHeader(t *testing.T) {
+// Không có header vẫn giữ mã trạng thái ổn định khi PostgreSQL chưa có.
+func TestGetCVWithoutHeaderKeepsServiceUnavailable(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/cv/00000000-0000-0000-0000-000000000000", nil)
 	w := httptest.NewRecorder()
 	NewServer().Routes().ServeHTTP(w, r)
@@ -435,17 +434,11 @@ func TestCVListRouteAcceptsSchemaHeader(t *testing.T) {
 	}
 }
 
-// Cặp không hợp lệ phải bị từ chối TRƯỚC khi chạm DB. Ghi được một nửa nghĩa
-// là data và data_v2 nói hai chuyện khác nhau về cùng một CV, và không ai
-// biết bên nào đúng. NewServer() không có DB: nếu chốt chặn nằm sau bước
-// chạm DB (hoặc sau chốt "s.db == nil" ở cvRoute) thì test này nhận 503 —
-// đúng ý đồ, nó ép chốt chặn phải nằm trước cả bước đó.
-func TestPatchCVV2RejectsMismatchedPair(t *testing.T) {
+// CV không phải v2 phải bị từ chối trước khi chạm DB.
+func TestPatchCVRejectsNonV2(t *testing.T) {
 	cases := []struct{ body, why string }{
-		{`{"cv":{"schemaVersion":2},"profile":{"schemaVersion":2}}`, "profile phải là v1"},
-		{`{"cv":{"schemaVersion":1},"profile":{"schemaVersion":1}}`, "cv phải là v2"},
-		{`{"cv":{"schemaVersion":2}}`, "thiếu hẳn profile"},
-		{`{"profile":{"schemaVersion":1}}`, "thiếu hẳn cv"},
+		{`{"cv":{"schemaVersion":1}}`, "cv phải là v2"},
+		{`{}`, "thiếu cv"},
 	}
 	for _, tc := range cases {
 		r := httptest.NewRequest(http.MethodPatch,

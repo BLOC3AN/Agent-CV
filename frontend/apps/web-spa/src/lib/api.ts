@@ -6,7 +6,7 @@
  * lỗi đó không thể lặp lại ở mười chỗ khác nhau.
  */
 
-import { cvToProfile, type CV, type Profile } from '@hr/schema'
+import type { CV } from '@hr/schema'
 
 export class ApiError extends Error {
   readonly status: number
@@ -277,21 +277,12 @@ export async function getCV(id: string): Promise<CVEnvelope> {
   return body.cv
 }
 
-/**
- * Gửi PATCH kèm CẢ HAI biểu diễn: server chốt schemaVersion của từng bên
- * trước khi chạm DB (validateCVPair, cv_pair.go) và từ chối cặp lệch bằng
- * 400 SCHEMA_PAIR_INVALID.
- *
- * `cvToProfile` chạy ngay tại biên gửi đi, dùng đúng bộ chuyển đổi đã được
- * chứng minh không mất dữ liệu trên 24 hồ sơ thật (frontend/packages/schema/
- * src/cv-migrate.ts) — không có bản thứ hai của logic này ở đây.
- */
+/** Lưu trực tiếp tài liệu CV v2 duy nhất của production. */
 export async function saveCV(id: string, cv: CV): Promise<void> {
-  const profile: Profile = cvToProfile(cv)
   await request<unknown>(`/api/cv/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ cv, profile }),
+    body: JSON.stringify({ cv }),
   })
 }
 

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Check } from 'lucide-react';
-import { buildReviewItems, REVIEW_LABELS, type Profile, type ReviewItem } from '@hr/schema';
+import { CVSchema, REVIEW_LABELS, type CV, type ReviewField, type ReviewItem } from '@hr/schema';
 import {
   ApiError,
   type CompleteImportResult,
@@ -41,63 +41,53 @@ type Phase = 'loading' | 'pending' | 'ready' | 'error';
  * `[]`. Đây là dữ liệu THẬT sẽ tới, không phải ca dựng — không chờ backend tự
  * sửa (việc đó được ghi nhận riêng), màn hình này phải tự đứng vững trước nó.
  */
-function arrayOrEmpty<T>(value: unknown): T[] {
-  return Array.isArray(value) ? (value as T[]) : [];
+function reviewField(path: string, label: string, value: unknown): ReviewField {
+  const text = Array.isArray(value) ? value.join(', ') : String(value ?? '')
+  return { path, label, value: text, empty: text.trim() === '' }
 }
 
-/**
- * Ép hồ sơ v1 thô (JSON tuỳ ý từ server, `unknown`) thành đủ hình dạng để
- * `buildReviewItems` chạy được — KHÔNG dùng `ProfileSchema.parse()`.
- *
- * Vì sao: `ProfileSchema` đòi `basics.name` không rỗng (`min(1)`). Đây CHÍNH
- * LÀ màn hình để user điền cái tên model bỏ sót — parse chặt sẽ ném lỗi ngay
- * tại đúng bản ghi cần sửa nhất, làm trắng cả màn hình lẽ ra phải giúp sửa nó.
- * `buildReviewItems` tự nó không validate gì (chỉ đọc field), nên chỉ cần bảo
- * đảm các mảng không bị `undefined` — rủi ro duy nhất là một mảng thiếu hẳn,
- * không phải field bên trong rỗng.
- *
- * Không chỉ mảng ở TẦNG NGOÀI (`education`, `work`, …) — các mảng NẰM TRONG
- * từng phần tử (`work[i].highlights`, `projects[i].tech`, `basics.links`, …)
- * cũng phải qua `arrayOrEmpty` ở ĐÂY, TRƯỚC khi `buildReviewItems`/
- * `editKindFor` nhìn thấy chúng (review vòng 2, Finding 7). Nếu không: một
- * field mảng mang giá trị `null` (worker parse thật sinh ra, xem
- * `arrayOrEmpty` ở trên) khiến `editKindFor` — vốn CHỈ suy từ hình dạng, đúng
- * như thiết kế — kết luận "không phải mảng" và render một ô nhập MỘT DÒNG.
- * Sửa rồi xác nhận thì `patchProfile` gửi lên một CHUỖI đè lên field
- * `z.array(z.string())` — `patchProfile` (server.go) áp patch không kiểm lại
- * schema, nên chuỗi sai kiểu đó được lưu thẳng, và tầng matching JD
- * (`stringArray`, matching.go) đọc một chuỗi ở chỗ đợi mảng thành rỗng — nội
- * dung biến mất khỏi so khớp JD mà không có gì báo lỗi.
- */
-function toProfile(raw: unknown): Profile {
-  const p = (raw ?? {}) as Partial<Profile>;
-  const basics = (p.basics ?? {}) as Partial<Profile['basics']>;
-  return {
-    schemaVersion: 1,
-    language: p.language ?? 'vi',
-    basics: { name: '', ...basics, links: arrayOrEmpty(basics.links) },
-    education: arrayOrEmpty<Profile['education'][number]>(p.education).map((e) => ({
-      ...e,
-      highlights: arrayOrEmpty(e.highlights),
-    })),
-    work: arrayOrEmpty<Profile['work'][number]>(p.work).map((w) => ({
-      ...w,
-      highlights: arrayOrEmpty(w.highlights),
-    })),
-    projects: arrayOrEmpty<Profile['projects'][number]>(p.projects).map((pr) => ({
-      ...pr,
-      tech: arrayOrEmpty(pr.tech),
-      highlights: arrayOrEmpty(pr.highlights),
-    })),
-    skills: p.skills ?? [],
-    certifications: p.certifications ?? [],
-    activities: arrayOrEmpty<Profile['activities'][number]>(p.activities).map((a) => ({
-      ...a,
-      highlights: arrayOrEmpty(a.highlights),
-    })),
-    languages: p.languages ?? [],
-    _meta: p._meta ?? { verified: {}, source: 'pdf_import' },
-  };
+/** Review contract for the v2 document stored in profiles.data. */
+function buildV2ReviewItems(raw: unknown): { cv: CV; items: ReviewItem[] } {
+  const cv = CVSchema.parse(raw)
+  const items: ReviewItem[] = [{
+    kind: 'basics', path: '/sections/intro', title: cv.sections.intro.fullName || 'Thông tin cá nhân',
+    fields: [
+      reviewField('/sections/intro/fullName', 'Họ tên', cv.sections.intro.fullName),
+      reviewField('/sections/intro/title', 'Chức danh', cv.sections.intro.title),
+      reviewField('/sections/intro/email', 'Email', cv.sections.intro.email),
+      reviewField('/sections/intro/phone', 'Điện thoại', cv.sections.intro.phone),
+      reviewField('/sections/intro/location', 'Địa điểm', cv.sections.intro.location),
+    ],
+  }]
+  cv.sections.experience.forEach((item, i) => items.push({ kind: 'work', path: `/sections/experience/${i}`, title: `${item.title || 'Vị trí'} — ${item.company || ''}`.trim(), fields: [
+    reviewField(`/sections/experience/${i}/company`, 'Công ty', item.company),
+    reviewField(`/sections/experience/${i}/title`, 'Vị trí', item.title),
+    reviewField(`/sections/experience/${i}/highlights`, 'Mô tả', item.highlights),
+  ] }))
+  cv.sections.education.forEach((item, i) => items.push({ kind: 'education', path: `/sections/education/${i}`, title: item.school || `Học vấn ${i + 1}`, fields: [
+    reviewField(`/sections/education/${i}/school`, 'Trường', item.school),
+    reviewField(`/sections/education/${i}/degree`, 'Bằng cấp', item.degree),
+    reviewField(`/sections/education/${i}/fieldOfStudy`, 'Ngành', item.fieldOfStudy),
+    reviewField(`/sections/education/${i}/gpa`, 'GPA', item.gpa),
+  ] }))
+  cv.sections.projects.forEach((item, i) => items.push({ kind: 'projects', path: `/sections/projects/${i}`, title: item.name || `Dự án ${i + 1}`, fields: [
+    reviewField(`/sections/projects/${i}/name`, 'Tên dự án', item.name),
+    reviewField(`/sections/projects/${i}/role`, 'Vai trò', item.role),
+    reviewField(`/sections/projects/${i}/highlights`, 'Mô tả', item.highlights),
+  ] }))
+  if (cv.sections.skills.length) items.push({ kind: 'skills', path: '/sections/skills', title: `Kỹ năng (${cv.sections.skills.length})`, fields: [] })
+  cv.sections.activities.forEach((item, i) => items.push({ kind: 'activities', path: `/sections/activities/${i}`, title: item.organization || `Hoạt động ${i + 1}`, fields: [
+    reviewField(`/sections/activities/${i}/organization`, 'Tổ chức', item.organization),
+    reviewField(`/sections/activities/${i}/role`, 'Vai trò', item.role),
+    reviewField(`/sections/activities/${i}/highlights`, 'Mô tả', item.highlights),
+  ] }))
+  cv.sections.certifications.forEach((item, i) => items.push({ kind: 'certifications', path: `/sections/certifications/${i}`, title: item.name || `Chứng chỉ ${i + 1}`, fields: [
+    reviewField(`/sections/certifications/${i}/name`, 'Tên', item.name),
+    reviewField(`/sections/certifications/${i}/issuer`, 'Nơi cấp', item.issuer),
+    reviewField(`/sections/certifications/${i}/date`, 'Ngày', item.date),
+  ] }))
+  if (cv.sections.languages.length) items.push({ kind: 'languages', path: '/sections/languages', title: `Ngoại ngữ (${cv.sections.languages.length})`, fields: [] })
+  return { cv, items }
 }
 
 function apiErrorMessage(err: unknown, fallback: string): string {
@@ -289,7 +279,7 @@ export function ImportReviewRoute({
   const [loadError, setLoadError] = useState<string | undefined>();
 
   const [profileId, setProfileId] = useState<string | undefined>();
-  const [profileData, setProfileData] = useState<Profile | undefined>();
+  const [profileData, setProfileData] = useState<CV | undefined>();
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [progress, setProgress] = useState<
     { done: number; total: number; complete: boolean; pending: string[] } | undefined
@@ -326,12 +316,11 @@ export function ImportReviewRoute({
         setPhase('pending');
         return;
       }
-      const profile = toProfile(review.profile);
-      const builtItems = buildReviewItems(profile);
+      const { cv, items: builtItems } = buildV2ReviewItems(review.profile);
       const initialValues: Record<string, string> = {};
       for (const item of builtItems) {
         for (const field of item.fields) {
-          const raw = rawValueAt(profile, field.path);
+          const raw = rawValueAt(cv, field.path);
           initialValues[field.path] = editKindFor(raw) === 'list' ? arrayToLines(raw) : field.value;
         }
       }
@@ -340,7 +329,7 @@ export function ImportReviewRoute({
       setSavedValues(initialValues);
       setOptimisticVerified(new Set());
       setProfileId(review.profileId);
-      setProfileData(profile);
+      setProfileData(cv);
       setProgress(review.progress);
       setPhase('ready');
     } catch (err) {

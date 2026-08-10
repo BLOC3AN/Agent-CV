@@ -142,6 +142,10 @@ func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Profile phải là object JSON"})
 		return
 	}
+	if !hasSchemaVersion(body.Profile, 2) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Profile phải là schemaVersion 2", "code": "SCHEMA_V2_REQUIRED"})
+		return
+	}
 	language, _ = profile["language"].(string)
 	if language != "en" {
 		language = "vi"
@@ -230,19 +234,11 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/cv/"), "/")
 
-	// Chốt chặn cặp v1/v2 phải chạy TRƯỚC "s.db == nil" ở dưới, không chỉ
-	// trước truy vấn DB thật: server không dựng lại được cặp lệch (bộ chuyển
-	// đổi là TypeScript, cv-migrate.ts), nên đây là phòng thủ duy nhất còn
-	// lại. Nếu chốt "cần PostgreSQL" chạy trước, một cặp lệch tới lúc DB đang
-	// down sẽ nhận 503 thay vì 400 — sai nghĩa lỗi, và test dựng server không
-	// DB (đúng ý đồ: nó không nên cần DB để phát hiện lỗi input) sẽ không
-	// bao giờ thấy 400. Chỉ đọc body khi PATCH + có header: mọi request khác
-	// (kể cả PATCH không header) không chạm nhánh này, giữ y hệt hành vi cũ.
-	var cvV2, profileV1 json.RawMessage
+	// Validate the v2 document before touching PostgreSQL.
+	var cvV2 json.RawMessage
 	if r.Method == http.MethodPatch && wantsV2(r) {
 		var body struct {
-			CV      json.RawMessage `json:"cv"`
-			Profile json.RawMessage `json:"profile"`
+			CV json.RawMessage `json:"cv"`
 		}
 		// io.LimitReader khớp mức patchProfile dùng cho body lớn nhất khác
 		// trong file (2MB): thiếu nó, chốt chặn rẻ đặt sớm để từ chối input
@@ -251,14 +247,14 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
 			return
 		}
-		if err := validateCVPair(body.CV, body.Profile); err != nil {
+		if err := validateCVPair(body.CV); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "Cần cả hai biểu diễn: cv là schemaVersion 2 và profile là schemaVersion 1",
+				"error": "cv phải là schemaVersion 2",
 				"code":  "SCHEMA_PAIR_INVALID",
 			})
 			return
 		}
-		cvV2, profileV1 = body.CV, body.Profile
+		cvV2 = body.CV
 	}
 
 	if s.db == nil {
@@ -278,7 +274,7 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 		s.getCV(w, r, id)
 	case http.MethodPatch:
 		if cvV2 != nil {
-			s.patchCVPair(w, r, id, cvV2, profileV1)
+			s.patchCVPair(w, r, id, cvV2)
 		} else {
 			s.patchCV(w, r, id)
 		}
@@ -459,12 +455,10 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 	s.getCV(w, r, cvID)
 }
 
-// patchCVPair ghi CV v2 và hồ sơ v1 trong MỘT transaction. cvV2 và profileV1
-// đã được validateCVPair() (gọi từ cvRoute) xác nhận đúng schemaVersion —
-// hàm này không kiểm lại, chỉ ghi.
+// patchCVPair ghi tài liệu CV v2 duy nhất trong một transaction.
 //
 // Sau SP-5, data là bản v2 duy nhất và ghi vẫn nằm trong một transaction.
-func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, cvV2, profileV1 json.RawMessage) {
+func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, cvV2 json.RawMessage) {
 	userID := s.currentUserID(r)
 	if userID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
@@ -1238,19 +1232,22 @@ func reviewContract(profile map[string]any) ([]map[string]any, map[string]any) {
 			verified = v
 		}
 	}
-	items := []map[string]any{{"kind": "basics", "path": "/basics", "title": "Thông tin cá nhân"}}
-	for _, spec := range []struct{ key, kind string }{{"education", "education"}, {"work", "work"}, {"projects", "projects"}, {"certifications", "certifications"}, {"activities", "activities"}} {
-		if rows, ok := profile[spec.key].([]any); ok {
+	sections, _ := profile["sections"].(map[string]any)
+	intro, _ := sections["intro"].(map[string]any)
+	title, _ := intro["fullName"].(string)
+	items := []map[string]any{{"kind": "basics", "path": "/sections/intro", "title": valueOrString(title, "Thông tin cá nhân")}}
+	for _, spec := range []struct{ key, kind string }{{"education", "education"}, {"experience", "work"}, {"projects", "projects"}, {"certifications", "certifications"}, {"activities", "activities"}} {
+		if rows, ok := sections[spec.key].([]any); ok {
 			for i := range rows {
-				items = append(items, map[string]any{"kind": spec.kind, "path": fmt.Sprintf("/%s/%d", spec.key, i), "title": fmt.Sprintf("%s %d", spec.kind, i+1)})
+				items = append(items, map[string]any{"kind": spec.kind, "path": fmt.Sprintf("/sections/%s/%d", spec.key, i), "title": fmt.Sprintf("%s %d", spec.kind, i+1)})
 			}
 		}
 	}
-	if rows, ok := profile["skills"].([]any); ok && len(rows) > 0 {
-		items = append(items, map[string]any{"kind": "skills", "path": "/skills", "title": fmt.Sprintf("Kỹ năng (%d)", len(rows))})
+	if rows, ok := sections["skills"].([]any); ok && len(rows) > 0 {
+		items = append(items, map[string]any{"kind": "skills", "path": "/sections/skills", "title": fmt.Sprintf("Kỹ năng (%d)", len(rows))})
 	}
-	if rows, ok := profile["languages"].([]any); ok && len(rows) > 0 {
-		items = append(items, map[string]any{"kind": "languages", "path": "/languages", "title": fmt.Sprintf("Ngoại ngữ (%d)", len(rows))})
+	if rows, ok := sections["languages"].([]any); ok && len(rows) > 0 {
+		items = append(items, map[string]any{"kind": "languages", "path": "/sections/languages", "title": fmt.Sprintf("Ngoại ngữ (%d)", len(rows))})
 	}
 	done := 0
 	pending := []string{}
@@ -1263,6 +1260,13 @@ func reviewContract(profile map[string]any) ([]map[string]any, map[string]any) {
 		}
 	}
 	return items, map[string]any{"done": done, "total": len(items), "complete": len(pending) == 0, "pending": pending}
+}
+
+func valueOrString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func valueOr(v any, fallback any) any {
@@ -1392,7 +1396,7 @@ func (s *Server) importComplete(w http.ResponseWriter, r *http.Request) {
 	}
 	var profileRaw []byte
 	var language, title string
-	if err := s.db.QueryRowContext(r.Context(), `SELECT data, language, COALESCE(data->'basics'->>'name','CV của tôi') FROM profiles WHERE id = $1`, profileID).Scan(&profileRaw, &language, &title); err != nil {
+	if err := s.db.QueryRowContext(r.Context(), `SELECT data, language, COALESCE(data->'sections'->'intro'->>'fullName','CV của tôi') FROM profiles WHERE id = $1`, profileID).Scan(&profileRaw, &language, &title); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
 		return
 	}

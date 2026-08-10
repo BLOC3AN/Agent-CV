@@ -6,26 +6,19 @@ import (
 	"testing"
 )
 
-// Bốn ca khớp đúng bốn ca route-contract ở TestPatchCVV2RejectsMismatchedPair
-// trong server_test.go, nhưng test ở đây gọi thẳng hàm thuần — không qua
-// HTTP, không cần server, không cần DB. Đây là lưới an toàn thật cho logic,
-// giống cvSnapshotForResponse ở cv_snapshot_test.go (Task 2).
-func TestValidateCVPairRejectsMismatch(t *testing.T) {
+func TestValidateCVRejectsNonV2(t *testing.T) {
 	cases := []struct {
-		name    string
-		cv      json.RawMessage
-		profile json.RawMessage
+		name string
+		cv   json.RawMessage
 	}{
-		{"profile phải là v1, không phải v2", json.RawMessage(`{"schemaVersion":2}`), json.RawMessage(`{"schemaVersion":2}`)},
-		{"cv phải là v2, không phải v1", json.RawMessage(`{"schemaVersion":1}`), json.RawMessage(`{"schemaVersion":1}`)},
-		{"thiếu hẳn profile", json.RawMessage(`{"schemaVersion":2}`), nil},
-		{"thiếu hẳn cv", nil, json.RawMessage(`{"schemaVersion":1}`)},
-		{"cv không có schemaVersion", json.RawMessage(`{"foo":"bar"}`), json.RawMessage(`{"schemaVersion":1}`)},
-		{"profile không phải JSON hợp lệ", json.RawMessage(`{"schemaVersion":2}`), json.RawMessage(`không phải JSON`)},
+		{"v1", json.RawMessage(`{"schemaVersion":1}`)},
+		{"missing", nil},
+		{"missing version", json.RawMessage(`{"foo":"bar"}`)},
+		{"invalid json", json.RawMessage(`không phải JSON`)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validateCVPair(tc.cv, tc.profile); err == nil {
+			if err := validateCVPair(tc.cv); err == nil {
 				t.Fatalf("%s: muốn lỗi, nhận nil", tc.name)
 			} else if !errors.Is(err, errSchemaPairInvalid) {
 				t.Fatalf("%s: lỗi %v không phải errSchemaPairInvalid", tc.name, err)
@@ -34,12 +27,10 @@ func TestValidateCVPairRejectsMismatch(t *testing.T) {
 	}
 }
 
-// Cặp đúng — cv là v2, profile là v1 — phải qua được, không báo lỗi.
-func TestValidateCVPairAcceptsMatchingVersions(t *testing.T) {
+func TestValidateCVAcceptsV2(t *testing.T) {
 	cv := json.RawMessage(`{"schemaVersion":2,"sections":{}}`)
-	profile := json.RawMessage(`{"schemaVersion":1,"basics":{"name":"Ada"}}`)
-	if err := validateCVPair(cv, profile); err != nil {
-		t.Fatalf("cặp hợp lệ bị từ chối: %v", err)
+	if err := validateCVPair(cv); err != nil {
+		t.Fatalf("CV v2 hợp lệ bị từ chối: %v", err)
 	}
 }
 

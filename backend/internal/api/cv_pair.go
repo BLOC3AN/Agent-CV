@@ -5,10 +5,7 @@ import (
 	"errors"
 )
 
-// errSchemaPairInvalid đánh dấu cặp cv/profile gửi từ client không đúng
-// schemaVersion mong đợi. Ở package-level, giống errV2NotBackfilled trong
-// cv_snapshot.go, để nơi gọi phân biệt được bằng errors.Is nếu sau này có
-// nhiều loại lỗi khác cùng đi qua cùng một đường trả 400.
+// errSchemaPairInvalid marks a non-v2 CV document.
 var errSchemaPairInvalid = errors.New("cặp cv/profile không đúng schemaVersion")
 
 // validateCVPair kiểm cv là schemaVersion 2 và profile là schemaVersion 1 —
@@ -26,8 +23,8 @@ var errSchemaPairInvalid = errors.New("cặp cv/profile không đúng schemaVers
 // DUNG là một kiểm tra chỉ-đọc chạy sau khi ghi (Task 9 của kế hoạch), không
 // phải một chốt chặn trước khi ghi — vì chốt chặn đó cần đúng bộ chuyển đổi
 // mà server không có.
-func validateCVPair(cvRaw, profileRaw json.RawMessage) error {
-	if !hasSchemaVersion(cvRaw, 2) || !hasSchemaVersion(profileRaw, 1) {
+func validateCVPair(cvRaw json.RawMessage) error {
+	if !hasSchemaVersion(cvRaw, 2) {
 		return errSchemaPairInvalid
 	}
 	return nil
