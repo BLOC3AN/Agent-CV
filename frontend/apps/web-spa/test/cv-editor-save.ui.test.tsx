@@ -111,7 +111,11 @@ describe('CV editor explicit save workflow', () => {
       ops: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }],
       rejected: [],
     } as never)
-    const settle = vi.spyOn(api, 'settleChatProposal').mockResolvedValue({ applied: 1, profile: updated } as never)
+    const settle = vi.spyOn(api, 'settleChatProposal').mockResolvedValue({
+      applied: 1,
+      status: 'accepted',
+      selectedOps: [{ op: 'replace', path: '/sections/intro/fullName', value: 'AI draft', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }],
+    })
     const legacySave = vi.spyOn(api, 'saveCV').mockResolvedValue(undefined)
     renderBuilder()
 

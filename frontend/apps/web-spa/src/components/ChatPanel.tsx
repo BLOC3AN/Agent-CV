@@ -7,7 +7,7 @@ interface Props {
   profileId: string
   cvId: string
   cv: CV
-  onApplied: (cv: CV) => void
+  onApplied: (ops: ChatOp[]) => void
   onClose?: () => void
 }
 
@@ -97,7 +97,7 @@ export function ChatPanel({ profileId, cvId, cv, onApplied, onClose }: Props) {
       const result = await settleChatProposal(proposal.id, profileId, accept)
       setProposal(undefined)
       setMessages((m) => [...m, { role: 'assistant', text: accept.length ? `Đã áp dụng ${result.applied} thay đổi.` : 'Đã bỏ qua đề xuất.' }])
-      if (accept.length && result.profile) onApplied(result.profile as CV)
+      if (result.selectedOps.length) onApplied(result.selectedOps)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không áp dụng được đề xuất')
     } finally {

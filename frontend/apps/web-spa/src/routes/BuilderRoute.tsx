@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { useCVStore } from '../lib/cv-store'
+import { applyChatOps } from '../lib/cv-patch'
 import { CVEditorView } from '../components/CVEditorView'
 import { ChatPanel } from '../components/ChatPanel'
 
@@ -97,7 +98,7 @@ export function BuilderRoute() {
         onOpenShare={() => {}}
         onDownloadPDF={() => { window.location.assign(`/api/cv/${encodeURIComponent(cvId)}/export?variant=presentation`) }}
       />
-      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplied={(cv) => store.updateDraft({ cv, layout: store.draft!.layout })} onClose={() => setAssistantOpen(false)} /></div>}
+      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplied={(ops) => store.updateDraft({ cv: applyChatOps(store.draft!.cv, ops), layout: store.draft!.layout })} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
       {leaveDialogOpen && blocker.state === 'blocked' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">

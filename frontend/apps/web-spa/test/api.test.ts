@@ -20,6 +20,7 @@ import {
   restoreCVRevision,
   saveCV,
   sendChat,
+  settleChatProposal,
   uploadCV,
   verifyProfile,
 } from '../src/lib/api.js'
@@ -243,6 +244,24 @@ describe('chat SSE', () => {
     const init = spy.mock.calls[0]?.[1] as RequestInit
     expect(JSON.parse(init.body as string)).toMatchObject({ profileId: 'profile-1', answers: [{ answer: 'Không có' }] })
     expect(new Headers(init.headers).get('X-CV-Schema')).toBe('2')
+  })
+})
+
+describe('settleChatProposal', () => {
+  it('returns selected operations without a persisted profile', async () => {
+    const spy = mockFetch(200, {
+      applied: 1,
+      status: 'accepted',
+      selectedOps: [{ op: 'replace', path: '/sections/intro/fullName', value: 'New', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }],
+    })
+
+    await expect(settleChatProposal('proposal/1', 'profile-1', [0])).resolves.toEqual(expect.objectContaining({
+      applied: 1,
+      status: 'accepted',
+      selectedOps: expect.any(Array),
+    }))
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/chat/proposals/proposal%2F1')
+    expect(JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)).toEqual({ profileId: 'profile-1', accept: [0] })
   })
 })
 

@@ -147,6 +147,12 @@ export interface ChatOp {
   kbRefs?: string[]
 }
 
+export interface SettledChatProposal {
+  applied: number
+  status: 'accepted' | 'partial' | 'rejected'
+  selectedOps: ChatOp[]
+}
+
 export interface ClarifyRequest {
   reason: string
   targetPath: string | null
@@ -208,8 +214,8 @@ export async function sendChat(
   return result as unknown as ChatResult
 }
 
-export async function settleChatProposal(proposalId: string, profileId: string, accept: number[]) {
-  return request<{ applied: number; status: string; profile?: unknown }>(`/api/chat/proposals/${encodeURIComponent(proposalId)}`, {
+export async function settleChatProposal(proposalId: string, profileId: string, accept: number[]): Promise<SettledChatProposal> {
+  return request<SettledChatProposal>(`/api/chat/proposals/${encodeURIComponent(proposalId)}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profileId, accept }),
   })
 }

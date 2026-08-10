@@ -31,6 +31,24 @@ func TestApplyJSONPatch(t *testing.T) {
 	}
 }
 
+func TestSelectChatProposalOpsReturnsStructuredOpsWithoutApplyingThem(t *testing.T) {
+	all := []json.RawMessage{
+		json.RawMessage(`{"op":"replace","path":"/sections/intro/fullName","value":"New"}`),
+		json.RawMessage(`{"op":"add","path":"/sections/intro/title","value":"Engineer"}`),
+	}
+
+	selected, err := selectChatProposalOps(all, []int{1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 1 || string(selected[0]) != string(all[1]) {
+		t.Fatalf("unexpected selected ops: %s", jsonRawArray(selected))
+	}
+	// Selection is deliberately only serialization/validation. Applying the
+	// returned ops is the SPA draft's responsibility; this helper must not need
+	// or mutate a profile document.
+}
+
 func TestChatModelRefsResolveFromConfig(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
