@@ -1,6 +1,5 @@
-import React, { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { ApiError } from '../lib/api'
+import React, { useCallback, useEffect, useState } from 'react'
+import { useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { useCVStore } from '../lib/cv-store'
 import { CVEditorView } from '../components/CVEditorView'
 import { ChatPanel } from '../components/ChatPanel'
@@ -10,10 +9,58 @@ export function BuilderRoute() {
   const navigate = useNavigate()
   const store = useCVStore(cvId ?? '')
   const [assistantOpen, setAssistantOpen] = useState(true)
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
+  const blocker = useBlocker(store.dirty)
+
+  const save = useCallback(async () => {
+    await store.saveDraft()
+  }, [store.saveDraft])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 's' || (!event.ctrlKey && !event.metaKey)) return
+      event.preventDefault()
+      if (store.status !== 'saving') void save()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [save, store.status])
+
+  useBeforeUnload(useCallback((event) => {
+    if (!store.dirty) return
+    event.preventDefault()
+    event.returnValue = ''
+  }, [store.dirty]))
+
+  useEffect(() => {
+    if (blocker.state === 'blocked') setLeaveDialogOpen(true)
+  }, [blocker.state])
+
+  const cancelLeave = () => {
+    blocker.reset?.()
+    setLeaveDialogOpen(false)
+  }
+
+  const discardAndLeave = () => {
+    store.discardDraft()
+    blocker.proceed?.()
+    setLeaveDialogOpen(false)
+  }
+
+  const saveAndLeave = async () => {
+    try {
+      await save()
+      blocker.proceed?.()
+      setLeaveDialogOpen(false)
+    } catch {
+      // The store exposes the error beside the editor; keep this dialog open
+      // so a failed save can never silently discard the pending navigation.
+    }
+  }
 
   if (!cvId) return <div className="p-10 text-center text-sm text-rose-600">Mã CV không hợp lệ</div>
   if (store.status === 'loading') return <div data-testid="builder-loading" className="p-10 text-center text-sm text-slate-500">Đang tải CV…</div>
-  if (!store.cv) {
+  if (!store.draft) {
     return (
       <div className="p-10 text-center space-y-3">
         <p className="text-sm font-semibold text-rose-600">{store.error ?? 'Không tìm thấy CV'}</p>
@@ -25,19 +72,37 @@ export function BuilderRoute() {
   return (
     <>
       <div className="fixed top-[88px] right-4 z-40 text-xs font-medium" aria-live="polite">
+        {store.status === 'dirty' && <span className="text-amber-600">Chưa lưu thay đổi</span>}
         {store.status === 'saving' && <span className="text-amber-600">Đang lưu…</span>}
         {store.status === 'saved' && <span className="text-emerald-600">Đã lưu</span>}
         {store.status === 'error' && <span className="text-rose-600">{store.error ?? 'Lưu thất bại'}</span>}
       </div>
       <CVEditorView
-        cv={store.cv}
-        onUpdateCV={store.update}
+        cv={store.draft.cv}
+        onUpdateCV={(cv) => store.updateDraft({ cv, layout: store.draft!.layout })}
+        onSave={() => void save()}
+        onDiscard={store.discardDraft}
+        dirty={store.dirty}
+        saving={store.status === 'saving'}
         onOpenPreview={() => navigate(`/builder/${cvId}/preview`)}
         onOpenShare={() => {}}
         onDownloadPDF={() => { window.location.assign(`/api/cv/${encodeURIComponent(cvId)}/export?variant=presentation`) }}
       />
-      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.cv} onApplied={() => void store.reload()} onClose={() => setAssistantOpen(false)} /></div>}
+      {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} onApplied={() => void store.reload()} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
+      {leaveDialogOpen && blocker.state === 'blocked' && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">
+          <div role="dialog" aria-modal="true" aria-label="Thay đổi chưa lưu" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-base font-bold text-slate-900">Thay đổi chưa lưu</h2>
+            <p className="mt-2 text-sm text-slate-600">Bạn muốn lưu bản nháp trước khi rời trình soạn thảo?</p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={cancelLeave} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Hủy</button>
+              <button type="button" onClick={discardAndLeave} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50">Bỏ thay đổi</button>
+              <button type="button" onClick={() => void saveAndLeave()} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">Lưu và rời đi</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
