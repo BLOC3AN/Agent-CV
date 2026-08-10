@@ -389,4 +389,88 @@ describe('useCVStore', () => {
     await act(async () => result.current.saveDraft())
     expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'user', undefined, 0)
   })
+
+  it('keeps AI reorder provenance when a manual append preserves relative AI order', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '', techStack: ['Go', 'React'] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'replace', path: '/sections/experience/0/techStack', value: ['React', 'Go'], rationale: 'Reorder stack', grounding: { type: 'user_message', ref: 'Reorder' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Reorder stack'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, techStack: ['React', 'Go', 'Vue'] }] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ techStack: ['React', 'Go', 'Vue'] })] }) }), expect.anything(), 'ai', 'Reorder stack', 0)
+  })
+
+  it('decomposes an AI-created optional array before a manual append', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '' }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'add', path: '/sections/experience/0/techStack', value: ['Go'], rationale: 'Add stack', grounding: { type: 'user_message', ref: 'Stack' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Add stack'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, sections: { ...manual.cv.sections, experience: [{ ...manual.cv.sections.experience[0]!, techStack: ['Go', 'React'] }] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.anything(), expect.anything(), 'ai', 'Add stack', 0)
+  })
+
+  it('follows an AI nested array add after stable-ID item reorder', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '' }, { id: 'exp-2', title: 'Designer', company: '' }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'add', path: '/sections/experience/0/techStack', value: ['Go'], rationale: 'Add stack', grounding: { type: 'user_message', ref: 'Stack' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Add nested stack'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, sections: { ...manual.cv.sections, experience: [manual.cv.sections.experience[1]!, manual.cv.sections.experience[0]!] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ id: 'exp-2' }), expect.objectContaining({ id: 'exp-1', techStack: ['Go'] })] }) }), expect.anything(), 'ai', 'Add nested stack', 0)
+  })
+
+  it('follows an AI nested array add after an earlier item is removed', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, experience: [{ id: 'exp-1', title: 'Engineer', company: '' }, { id: 'exp-2', title: 'Designer', company: '', highlights: [] }] },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'add', path: '/sections/experience/1/highlights/-', value: 'AI bullet', rationale: 'Add bullet', grounding: { type: 'user_message', ref: 'Bullet' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Add nested bullet'))
+    const manual = result.current.getDraft()!
+    act(() => result.current.updateDraft({ cv: { ...manual.cv, sections: { ...manual.cv.sections, experience: [manual.cv.sections.experience[1]!] } }, layout: manual.layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ sections: expect.objectContaining({ experience: [expect.objectContaining({ id: 'exp-2', highlights: ['AI bullet'] })] }) }), expect.anything(), 'ai', 'Add nested bullet', 0)
+  })
+
+  it('clears string provenance when a baseline-containing value is restored', async () => {
+    const source = CVSchema.parse({
+      schemaVersion: 2, id: 'cv-1', title: 'CV', lastModified: '', language: 'vi',
+      sections: { ...cv.sections, intro: { ...cv.sections.intro, summary: 'Senior Engineer' } },
+    }) as CV
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope(source))
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult(source, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+    const proposal = applyChatOpsToDraft(result.current.draft!, [{ op: 'replace', path: '/sections/intro/summary', value: 'Engineer', rationale: 'Shorten summary', grounding: { type: 'user_message', ref: 'Summary' } }])
+    act(() => result.current.applyAIDraft(proposal, 'Shorten summary'))
+    act(() => result.current.updateDraft({ cv: { ...source, title: 'Manual title', sections: { ...source.sections, intro: { ...source.sections.intro, summary: 'Senior Engineer' } } }, layout }))
+    await act(async () => result.current.saveDraft())
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Manual title' }), expect.anything(), 'user', undefined, 0)
+  })
 })

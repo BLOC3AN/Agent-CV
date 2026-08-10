@@ -115,6 +115,7 @@ interface DocumentState {
 
 interface ProvenanceChange {
   path: string
+  before?: unknown
   after?: unknown
   exists: boolean
   arrayParentPath?: string
@@ -142,6 +143,12 @@ function cloneValue(value: unknown): unknown {
 
 function collectChanges(before: unknown, after: unknown, path = '', arrayParentPath?: string, arrayItemId?: string, arrayItemRootPath?: string, arrayItemCollectionPath?: string): ProvenanceChange[] {
   if (deepEqual(before, after)) return []
+  if (Array.isArray(after) && !Array.isArray(before)) {
+    return after.map((value, index) => ({ path: `${path}/${index}`, after: cloneValue(value), exists: true, arrayParentPath: path, arrayKind: 'add' as const, arrayValue: cloneValue(value), arrayBaselineCount: 0, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
+  }
+  if (Array.isArray(before) && !Array.isArray(after)) {
+    return before.map((value) => ({ path, before: cloneValue(value), exists: false, arrayParentPath: path, arrayKind: 'remove' as const, arrayValue: cloneValue(value), arrayBaselineCount: before.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
+  }
   if (Array.isArray(before) && Array.isArray(after)) {
     const beforeArray = before
     const afterArray = after
@@ -210,12 +217,12 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
     return [...keys].flatMap((key) => {
       const childPath = `${path}/${key}`
       if (!Object.prototype.hasOwnProperty.call(afterRecord, key)) {
-        return [{ path: childPath, exists: false, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && childPath.startsWith(arrayItemRootPath) ? childPath.slice(arrayItemRootPath.length) : undefined }]
+        return [{ path: childPath, before: cloneValue(beforeRecord[key]), exists: false, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && childPath.startsWith(arrayItemRootPath) ? childPath.slice(arrayItemRootPath.length) : undefined }]
       }
       return collectChanges(beforeRecord[key], afterRecord[key], childPath, arrayParentPath, arrayItemId, arrayItemRootPath, arrayItemCollectionPath)
     })
   }
-  return [{ path, after: cloneValue(after), exists: true, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }]
+  return [{ path, before: cloneValue(before), after: cloneValue(after), exists: true, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }]
 }
 
 function valueAtPath(value: unknown, path: string): { exists: boolean; value?: unknown } {
@@ -231,9 +238,7 @@ function valueAtPath(value: unknown, path: string): { exists: boolean; value?: u
 function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): ProvenanceEntry[] {
   return entries.map((entry) => ({ ...entry, changes: entry.changes.filter((change) => {
     if (change.arrayKind && change.arrayParentPath) {
-      const parent = valueAtPath(draft, change.arrayParentPath)
-      if (!parent.exists || !Array.isArray(parent.value)) return false
-      let target = parent.value as unknown[]
+      let target: unknown[] | undefined
       if (change.arrayItemId && change.arrayItemCollectionPath) {
         const collection = valueAtPath(draft, change.arrayItemCollectionPath)
         if (!collection.exists || !Array.isArray(collection.value)) return false
@@ -243,8 +248,22 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
         const nested = valueAtPath(item, change.arrayItemParentPath)
         if (!nested.exists || !Array.isArray(nested.value)) return false
         target = nested.value
+      } else {
+        const parent = valueAtPath(draft, change.arrayParentPath)
+        if (!parent.exists || !Array.isArray(parent.value)) return false
+        target = parent.value
       }
-      if (change.arrayKind === 'reorder') return target.length === change.arrayOrder?.length && target.every((value, index) => deepEqual(value && typeof value === 'object' && change.arrayOrder?.[index] && typeof change.arrayOrder[index] === 'string' ? (value as { id?: unknown }).id : value, change.arrayOrder?.[index]))
+      if (!target) return false
+      if (change.arrayKind === 'reorder') {
+        let orderIndex = 0
+        return target.every((value) => {
+          if (orderIndex >= (change.arrayOrder?.length ?? 0)) return true
+          const expected = change.arrayOrder?.[orderIndex]
+          const comparable = value && typeof value === 'object' && typeof expected === 'string' ? (value as { id?: unknown }).id : value
+          if (deepEqual(comparable, expected)) orderIndex += 1
+          return true
+        }) && orderIndex === change.arrayOrder?.length
+      }
       const count = target.filter((value) => deepEqual(value, change.arrayValue)).length
       return change.arrayKind === 'add' ? count > (change.arrayBaselineCount ?? 0) : count < (change.arrayBaselineCount ?? 1)
     }
@@ -254,7 +273,7 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
       const item = parent.value.find((value) => Boolean(value && typeof value === 'object' && (value as { id?: unknown }).id === change.arrayItemId))
       if (!item) return false
       const currentField = valueAtPath(item, change.arrayItemFieldPath)
-      return change.exists ? currentField.exists && deepEqual(currentField.value, change.after) : !currentField.exists
+      return change.exists ? currentField.exists && valueContributionSurvives(currentField.value, change) : !currentField.exists
     }
     const current = valueAtPath(draft, change.path)
     if (change.arrayParentPath && change.exists && change.after !== undefined) {
@@ -262,9 +281,14 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
       if (parent.exists && Array.isArray(parent.value) && parent.value.some((value) => deepEqual(value, change.after))) return true
     }
     return change.exists
-      ? current.exists && (deepEqual(current.value, change.after) || (change.after !== '' && typeof current.value === 'string' && typeof change.after === 'string' && current.value.includes(change.after)))
+      ? current.exists && valueContributionSurvives(current.value, change)
       : !current.exists
   }) })).filter((entry) => entry.changes.length > 0)
+}
+
+function valueContributionSurvives(current: unknown, change: ProvenanceChange): boolean {
+  if (deepEqual(current, change.after)) return true
+  return typeof current === 'string' && typeof change.after === 'string' && change.after !== '' && !deepEqual(current, change.before) && current.includes(change.after)
 }
 
 function normalizeDocument(document: DraftDocument, legacyVisibility = false): DraftDocument {
