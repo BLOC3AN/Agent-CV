@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { Bot, Check, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
 import type { CV } from '../types'
 import { saveCV, sendChat, settleChatProposal, type ChatOp, type ClarifyRequest } from '../lib/api'
 
@@ -7,7 +8,25 @@ interface Props {
   cvId: string
   cv: CV
   onApplied: () => void
+  onClose?: () => void
 }
+
+type ModelRef = 'local.reasoner' | 'deepseek.v4' | 'openai.luna'
+
+const models: { ref: ModelRef; label: string }[] = [
+  { ref: 'local.reasoner', label: 'Neura Flash' },
+  { ref: 'deepseek.v4', label: 'Neura Plus' },
+  { ref: 'openai.luna', label: 'Neura Pro' },
+]
+
+const quickActions = [
+  'Tối ưu kinh nghiệm',
+  'Rút gọn giới thiệu',
+  'Sửa lỗi chính tả',
+  'Viết lại kỹ năng',
+  'Tạo tóm tắt',
+  'Gợi ý cải thiện',
+] as const
 
 function readAt(root: unknown, pointer: string): unknown {
   let node = root
@@ -25,7 +44,8 @@ function display(value: unknown): string {
   return JSON.stringify(value)
 }
 
-export function ChatPanel({ profileId, cvId, cv, onApplied }: Props) {
+export function ChatPanel({ profileId, cvId, cv, onApplied, onClose }: Props) {
+  const [modelRef, setModelRef] = useState<ModelRef>('local.reasoner')
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
   const [input, setInput] = useState('')
   const [step, setStep] = useState<string>()
@@ -37,24 +57,19 @@ export function ChatPanel({ profileId, cvId, cv, onApplied }: Props) {
   const [checked, setChecked] = useState<number[]>([])
   const controller = useRef<AbortController | undefined>(undefined)
 
-  const suggestions = useMemo(() => {
-    const out: string[] = []
-    if (cv.sections.experience.length) out.push('Làm gọn mục kinh nghiệm')
-    if (cv.sections.projects.length) out.push('Thêm số liệu cho dự án đầu tiên')
-    if (cv.sections.intro.summary) out.push('Viết lại phần giới thiệu cho gọn hơn')
-    return out.length ? out : ['CV của tôi còn thiếu gì?']
-  }, [cv])
-
   useEffect(() => () => controller.current?.abort(), [])
 
   async function send(text: string, suppliedAnswers: { question: string; answer: string }[] = []) {
     if (!text.trim() || busy) return
     const ac = new AbortController()
     controller.current = ac
-    setBusy(true); setError(undefined); setStep('Đang chuẩn bị'); setClarify(undefined)
+    setBusy(true)
+    setError(undefined)
+    setStep('Đang chuẩn bị')
+    setClarify(undefined)
     setMessages((m) => [...m, { role: 'user', text }])
     try {
-      const result = await sendChat(profileId, text, suppliedAnswers, 'local.reasoner', undefined, ac.signal, setStep)
+      const result = await sendChat(profileId, text, suppliedAnswers, modelRef, undefined, ac.signal, setStep)
       if (result.kind === 'reply') setMessages((m) => [...m, { role: 'assistant', text: result.text }])
       else if (result.kind === 'clarify') {
         setMessages((m) => [...m, { role: 'assistant', text: result.request.reason }])
@@ -76,7 +91,8 @@ export function ChatPanel({ profileId, cvId, cv, onApplied }: Props) {
 
   async function applyProposal(accept: number[]) {
     if (!proposal) return
-    setBusy(true); setError(undefined)
+    setBusy(true)
+    setError(undefined)
     try {
       const result = await settleChatProposal(proposal.id, profileId, accept)
       if (accept.length && result.profile) await saveCV(cvId, result.profile as CV)
@@ -85,21 +101,65 @@ export function ChatPanel({ profileId, cvId, cv, onApplied }: Props) {
       if (accept.length) onApplied()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không áp dụng được đề xuất')
-    } finally { setBusy(false) }
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <section aria-label="Trợ lý CV" className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-      <h2 className="text-sm font-bold text-slate-900">Trợ lý CV</h2>
-      <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto text-xs">
-        {!messages.length && <div className="space-y-1 text-slate-500"><p>Bạn muốn sửa gì trong CV?</p>{suggestions.map((s) => <button key={s} onClick={() => void send(s)} className="block text-left text-indigo-700 underline">{s}</button>)}</div>}
-        {messages.map((m, i) => <div key={i} className={`rounded-xl px-3 py-2 ${m.role === 'user' ? 'ml-6 bg-indigo-600 text-white' : 'mr-4 bg-slate-100 text-slate-800'}`}>{m.text}</div>)}
-        {busy && <p role="status" className="text-slate-500">{step ?? 'Đang xử lý'}…</p>}
-        {clarify && <form onSubmit={(e) => { e.preventDefault(); void send(clarify.original, clarify.request.questions.map((q) => ({ question: q.question, answer: answers[q.id] ?? '' })).filter((a) => a.answer.trim())) }} className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 space-y-2"><p className="font-medium">{clarify.request.reason}</p>{clarify.request.questions.map((q) => <label key={q.id} className="block">{q.question}<input value={answers[q.id] ?? ''} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} placeholder={q.placeholder} className="mt-1 w-full rounded border px-2 py-1" /></label>)}<button disabled={busy || !Object.values(answers).some(Boolean)} className="rounded bg-indigo-600 px-3 py-1.5 text-white">Gửi câu trả lời</button><button type="button" onClick={() => void send(clarify.original, [{ question: 'Có số liệu không?', answer: 'Không có số liệu cụ thể' }])} className="ml-2 underline">Không có số liệu</button></form>}
-        {proposal && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2"><p className="font-semibold">Duyệt đề xuất</p><p>{proposal.summary}</p>{proposal.ops.map((op, i) => <label key={`${op.path}-${i}`} className="flex gap-2"><input type="checkbox" checked={checked.includes(i)} onChange={() => setChecked((c) => c.includes(i) ? c.filter((x) => x !== i) : [...c, i])} /><span><code>{op.path}</code><br />{op.op !== 'add' && <del>{display(readAt(cv, op.path))}</del>} → {display(op.value)}</span></label>)}<button disabled={busy || !checked.length} onClick={() => void applyProposal(checked)} className="rounded bg-indigo-600 px-3 py-1.5 text-white">Áp dụng mục đã chọn</button><button disabled={busy} onClick={() => void applyProposal([])} className="ml-2 underline">Bỏ qua</button></div>}
+    <section aria-label="Trợ lý AI HR-Agent" className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-xl">
+      <header className="flex shrink-0 items-center justify-between bg-[#10132d] px-4 py-4 text-white">
+        <div className="flex items-center gap-2">
+          <Bot aria-hidden="true" className="h-5 w-5 text-violet-400" />
+          <h2 className="text-sm font-bold">Trợ lý AI HR-Agent</h2>
+        </div>
+        <button type="button" aria-label="Đóng trợ lý AI" onClick={onClose} className="rounded-lg p-1 text-slate-400 transition hover:bg-white/10 hover:text-white">
+          <X className="h-4 w-4" />
+        </button>
+      </header>
+
+      <div className="shrink-0 space-y-3 border-b border-slate-200 bg-slate-50 px-3.5 py-3.5">
+        <div>
+          <label htmlFor="ai-model" className="mb-1 block text-[10px] font-semibold tracking-wider text-slate-500">MÔ HÌNH AI</label>
+          <div className="relative">
+            <select id="ai-model" aria-label="MÔ HÌNH AI" value={modelRef} onChange={(e) => setModelRef(e.target.value as ModelRef)} className="w-full appearance-none rounded-xl border border-violet-600 bg-white px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-violet-200">
+              {models.map((model) => <option key={model.ref} value={model.ref}>{model.label}</option>)}
+            </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-2 h-4 w-4 text-slate-400" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {quickActions.map((action) => (
+            <button key={action} type="button" disabled={busy} onClick={() => void send(action)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50">
+              {action}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4 text-xs">
+        {!messages.length && <p className="text-slate-500">Chọn một gợi ý hoặc nhập yêu cầu để bắt đầu.</p>}
+        {messages.map((message, i) => (
+          <div key={`${message.role}-${i}`} className={`flex flex-col gap-1 ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+            <div className={message.role === 'user' ? 'max-w-[90%] rounded-2xl rounded-br-md bg-violet-600 px-3 py-3 leading-relaxed text-white shadow-sm' : 'max-w-[95%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-3 leading-relaxed text-slate-700 shadow-sm'}>
+              {message.role === 'assistant' && <div className="mb-2 flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />AI GỢI Ý</div>}
+              <span className="whitespace-pre-line">{message.text}</span>
+            </div>
+            <span className="px-1 text-[10px] text-slate-400">Vừa xong</span>
+          </div>
+        ))}
+        {busy && <p role="status" className="animate-pulse rounded-xl border border-violet-100 bg-violet-50 p-3 font-medium text-violet-700">{step ?? 'AI đang phân tích'}…</p>}
+        {clarify && <form onSubmit={(e) => { e.preventDefault(); void send(clarify.original, clarify.request.questions.map((q) => ({ question: q.question, answer: answers[q.id] ?? '' })).filter((a) => a.answer.trim())) }} className="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3"><p className="font-medium">{clarify.request.reason}</p>{clarify.request.questions.map((q) => <label key={q.id} className="block">{q.question}<input value={answers[q.id] ?? ''} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} placeholder={q.placeholder} className="mt-1 w-full rounded border px-2 py-1" /></label>)}<button disabled={busy || !Object.values(answers).some(Boolean)} className="rounded bg-violet-600 px-3 py-1.5 text-white">Gửi câu trả lời</button><button type="button" onClick={() => void send(clarify.original, [{ question: 'Có số liệu không?', answer: 'Không có số liệu cụ thể' }])} className="ml-2 underline">Không có số liệu</button></form>}
+        {proposal && <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm"><div className="flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />AI GỢI Ý</div><p className="font-medium">{proposal.summary}</p>{proposal.ops.map((op, i) => <label key={`${op.path}-${i}`} className="flex gap-2"><input type="checkbox" checked={checked.includes(i)} onChange={() => setChecked((c) => c.includes(i) ? c.filter((x) => x !== i) : [...c, i])} /><span><code>{op.path}</code>{op.op !== 'add' && <><br /><del>{display(readAt(cv, op.path))}</del> → </>}{display(op.value)}</span></label>)}<div className="mt-3 border-t border-slate-100 pt-2"><button disabled={busy || !checked.length} onClick={() => void applyProposal(checked)} className="flex w-full items-center justify-center gap-1 rounded-lg bg-violet-600 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"><Zap className="h-3.5 w-3.5" />Áp dụng vào CV</button><button disabled={busy} onClick={() => void applyProposal([])} className="mt-2 w-full text-xs text-slate-500 underline">Bỏ qua</button></div></div>}
         {error && <p role="alert" className="rounded bg-rose-50 p-2 text-rose-700">{error}</p>}
       </div>
-      <form onSubmit={(e) => { e.preventDefault(); const value = input; setInput(''); void send(value) }} className="mt-3 flex gap-2"><input aria-label="Tin nhắn cho trợ lý" value={input} onChange={(e) => setInput(e.target.value)} disabled={busy} className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-xs" placeholder="Bạn muốn sửa gì?" /><button disabled={busy || !input.trim()} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">Gửi</button></form>
+
+      <form onSubmit={(e) => { e.preventDefault(); const value = input; setInput(''); void send(value) }} className="shrink-0 border-t border-slate-200 bg-white p-3">
+        <div className="relative flex items-center">
+          <input aria-label="Tin nhắn cho trợ lý" value={input} onChange={(e) => setInput(e.target.value)} disabled={busy} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-3 pr-20 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500" placeholder="Yêu cầu AI chỉnh sửa CV..." />
+          <div className="absolute right-1.5 flex items-center gap-1"><button type="button" aria-label="Nhập bằng giọng nói" className="rounded-lg p-1 text-slate-400 hover:text-slate-600"><Mic className="h-3.5 w-3.5" /></button><button aria-label="Gửi yêu cầu" disabled={busy || !input.trim()} className="rounded-lg bg-violet-600 p-1.5 text-white transition hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400"><Send className="h-3.5 w-3.5" /></button></div>
+        </div>
+      </form>
     </section>
   )
 }

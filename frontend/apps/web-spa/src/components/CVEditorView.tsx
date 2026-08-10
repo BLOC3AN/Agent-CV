@@ -1,20 +1,14 @@
 import React, { useState } from 'react';
-import { CV, CVDesign, ChatMessage } from '../types';
+import { CV, CVDesign } from '../types';
 import {
   CheckCircle2,
   Edit2,
   Plus,
   ArrowUpDown,
-  Sparkles,
-  Send,
   X,
-  Mic,
-  Bot,
   SlidersHorizontal,
   Layers,
-  ChevronDown,
   Check,
-  Zap,
 } from 'lucide-react';
 
 interface CVEditorViewProps {
@@ -64,15 +58,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const [activeTab, setActiveTab] = useState<'SECTIONS' | 'DESIGN'>('SECTIONS');
   const [editingSection, setEditingSection] = useState<string | null>(null);
 
-  // Right AI Assistant State
-  // AI lives in the authenticated ChatPanel mounted by BuilderRoute. Keep
-  // this legacy editor shell free of a second, mock assistant.
-  const [showAIPanel, setShowAIPanel] = useState(false);
-  const [aiModel, setAiModel] = useState('standard');
-  const [aiMessages, setAiMessages] = useState<ChatMessage[]>([]);
-  const [aiInputText, setAiInputText] = useState('');
-  const [isAiLoading, setIsAiLoading] = useState(false);
-
   // Toggle active sections in CV
   const toggleSectionActive = (sectionKey: keyof typeof cv.activeSections) => {
     onUpdateCV({
@@ -93,94 +78,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
         [field]: value,
       },
     });
-  };
-
-  // Handle Quick Action Pill click
-  const handleQuickAction = async (actionType: string) => {
-    setIsAiLoading(true);
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      sender: 'user',
-      text: `Yêu cầu AI: ${actionType}`,
-      timestamp: 'Vừa xong',
-    };
-    setAiMessages((prev) => [...prev, userMsg]);
-
-    try {
-      const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        text: `Yêu cầu “${actionType}” đã được chuyển sang Trợ lý CV bên phải.`,
-        timestamp: 'Vừa xong',
-      };
-      setAiMessages((prev) => [...prev, aiMsg]);
-    } catch (err) {
-      console.error(err);
-      const errorMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        text: 'Đã tối ưu hoá thành công nội dung CV theo chuẩn tuyển dụng!',
-        timestamp: 'Vừa xong',
-      };
-      setAiMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
-  // Send Chat message to AI endpoint
-  const handleSendAiMessage = async () => {
-    if (!aiInputText.trim() || isAiLoading) return;
-
-    const userText = aiInputText;
-    setAiInputText('');
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      sender: 'user',
-      text: userText,
-      timestamp: 'Vừa xong',
-    };
-    setAiMessages((prev) => [...prev, userMsg]);
-    setIsAiLoading(true);
-
-    try {
-      const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        text: 'Hãy dùng Trợ lý CV bên phải để nhận trả lời SSE và duyệt thay đổi.',
-        timestamp: 'Vừa xong',
-      };
-      setAiMessages((prev) => [...prev, aiMsg]);
-    } catch (err) {
-      console.error(err);
-      const errorMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        text: 'Đã hoàn tất phân tích yêu cầu từ phía AI Trợ lý.',
-        timestamp: 'Vừa xong',
-      };
-      setAiMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
-  // Apply AI Suggestion to CV
-  const handleApplyAISuggestion = (action: any) => {
-    if (action.targetSection === 'experience' && cv.sections.experience.length > 0) {
-      const updatedExp = [...cv.sections.experience];
-      // Gợi ý AI vẫn tới dưới dạng một khối văn bản nhiều dòng ở demo này;
-      // tách theo dòng để không ghi đè nguyên khối vào mảng highlights.
-      updatedExp[0] = { ...updatedExp[0]!, highlights: action.content.split('\n') };
-      onUpdateCV({
-        ...cv,
-        sections: {
-          ...cv.sections,
-          experience: updatedExp,
-        },
-      });
-      alert('Đã cập nhật gợi ý AI vào phần Kinh nghiệm làm việc!');
-    }
   };
 
   // Color options
@@ -815,151 +712,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Right Sidebar - AI Assistant Panel */}
-      {showAIPanel ? (
-        <div className="w-80 bg-white border-l border-slate-200/80 flex flex-col shrink-0 z-10 shadow-xs animate-fade-in">
-          {/* Header */}
-          <div className="p-4 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Bot className="w-5 h-5 text-indigo-400" />
-              <h3 className="font-bold text-white text-sm">Trợ lý AI HR-Agent</h3>
-            </div>
-            <button
-              onClick={() => setShowAIPanel(false)}
-              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="p-3.5 border-b border-slate-200 bg-slate-50/70 space-y-3">
-            {/* Model Selection */}
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                MÔ HÌNH AI
-              </label>
-              <div className="relative">
-                <select
-                  value={aiModel}
-                  onChange={(e) => setAiModel(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-medium text-slate-800 appearance-none focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="standard">Chuẩn (Nhanh)</option>
-                  <option value="deep">Chuyên sâu</option>
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-2 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Quick Action Pills */}
-            <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-              {[
-                { label: 'Tối ưu kinh nghiệm', key: 'optimize_experience' },
-                { label: 'Rút gọn giới thiệu', key: 'shorten_intro' },
-                { label: 'Sửa lỗi chính tả', key: 'check_grammar' },
-                { label: 'Viết lại kỹ năng', key: 'rewrite_skills' },
-                { label: 'Tạo tóm tắt', key: 'generate_summary' },
-                { label: 'Gợi ý cải thiện', key: 'suggest_improvements' },
-              ].map((pill) => (
-                <button
-                  key={pill.key}
-                  onClick={() => handleQuickAction(pill.key)}
-                  disabled={isAiLoading}
-                  className="px-2 py-1.5 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-[10px] font-semibold rounded-lg transition text-center truncate disabled:opacity-50"
-                >
-                  {pill.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Chat Transcript Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs bg-slate-50/50">
-            {aiMessages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex flex-col space-y-1 ${
-                  msg.sender === 'user' ? 'items-end' : 'items-start'
-                }`}
-              >
-                <div
-                  className={`max-w-[90%] p-3 rounded-xl whitespace-pre-line leading-relaxed text-xs ${
-                    msg.sender === 'user'
-                      ? 'bg-indigo-600 text-white font-medium shadow-2xs'
-                      : 'bg-white text-slate-800 border border-slate-200/80 shadow-2xs'
-                  }`}
-                >
-                  {msg.sender === 'ai' && (
-                    <div className="flex items-center space-x-1 text-[10px] font-semibold text-indigo-700 uppercase tracking-wider mb-1 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded w-max">
-                      <Sparkles className="w-3 h-3 text-indigo-600" />
-                      <span>AI GỢI Ý</span>
-                    </div>
-                  )}
-                  {msg.text}
-
-                  {msg.suggestedAction && (
-                    <div className="mt-3 pt-2 border-t border-slate-100">
-                      <button
-                        onClick={() => handleApplyAISuggestion(msg.suggestedAction)}
-                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition flex items-center justify-center space-x-1 shadow-2xs"
-                      >
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>Áp dụng vào CV</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <span className="text-[10px] text-slate-400 font-medium px-1">{msg.timestamp}</span>
-              </div>
-            ))}
-
-            {isAiLoading && (
-              <div className="flex items-center space-x-2 text-xs text-indigo-700 bg-indigo-50 p-3 rounded-xl border border-indigo-100 animate-pulse font-medium">
-                <Sparkles className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-                <span>AI đang phân tích và tối ưu hóa CV...</span>
-              </div>
-            )}
-          </div>
-
-          {/* Input Box */}
-          <div className="p-3 border-t border-slate-200 bg-white">
-            <div className="relative flex items-center">
-              <input
-                type="text"
-                placeholder="Yêu cầu AI chỉnh sửa CV..."
-                value={aiInputText}
-                onChange={(e) => setAiInputText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendAiMessage()}
-                className="w-full pr-20 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
-              />
-              <div className="absolute right-1.5 flex items-center space-x-1">
-                <button
-                  type="button"
-                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-                  title="Voice input"
-                >
-                  <Mic className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={handleSendAiMessage}
-                  disabled={!aiInputText.trim() || isAiLoading}
-                  className="p-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg transition"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowAIPanel(true)}
-          className="fixed right-6 bottom-8 bg-indigo-600 hover:bg-indigo-700 text-white p-3.5 rounded-2xl shadow-lg z-20 flex items-center space-x-2 text-xs font-semibold transition"
-        >
-          <Bot className="w-5 h-5" />
-          <span>Mở Trợ lý AI</span>
-        </button>
-      )}
     </div>
   );
 };
