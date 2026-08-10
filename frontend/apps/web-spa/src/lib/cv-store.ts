@@ -118,9 +118,14 @@ interface ProvenanceChange {
   after?: unknown
   exists: boolean
   arrayParentPath?: string
-  arrayKind?: 'add' | 'remove'
+  arrayKind?: 'add' | 'remove' | 'reorder'
   arrayValue?: unknown
   arrayBaselineCount?: number
+  arrayOrder?: unknown[]
+  arrayItemId?: string
+  arrayItemCollectionPath?: string
+  arrayItemParentPath?: string
+  arrayItemFieldPath?: string
 }
 interface ProvenanceEntry { id: number; summary: string; changes: ProvenanceChange[] }
 
@@ -135,11 +140,45 @@ function cloneValue(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value))
 }
 
-function collectChanges(before: unknown, after: unknown, path = '', arrayParentPath?: string): ProvenanceChange[] {
+function collectChanges(before: unknown, after: unknown, path = '', arrayParentPath?: string, arrayItemId?: string, arrayItemRootPath?: string, arrayItemCollectionPath?: string): ProvenanceChange[] {
   if (deepEqual(before, after)) return []
   if (Array.isArray(before) && Array.isArray(after)) {
     const beforeArray = before
     const afterArray = after
+    const beforeItems = beforeArray.filter((value): value is { id: string } => Boolean(value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string'))
+    const afterItems = afterArray.filter((value): value is { id: string } => Boolean(value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string'))
+    const stableItems = beforeItems.length === beforeArray.length && afterItems.length === afterArray.length && beforeItems.every((item) => item.id) && afterItems.every((item) => item.id)
+    if (stableItems) {
+      const beforeIDs = beforeItems.map((item) => item.id)
+      const afterIDs = afterItems.map((item) => item.id)
+      const beforeByID = new Map(beforeItems.map((item) => [item.id, item]))
+      const afterByID = new Map(afterItems.map((item) => [item.id, item]))
+      const changes: ProvenanceChange[] = []
+      const commonBefore = beforeIDs.filter((id) => afterByID.has(id))
+      const commonAfter = afterIDs.filter((id) => beforeByID.has(id))
+      if (commonBefore.length === commonAfter.length && commonBefore.some((id, index) => id !== commonAfter[index])) {
+        changes.push({ path, exists: true, arrayParentPath: path, arrayKind: 'reorder', arrayOrder: cloneValue(commonAfter) as unknown[] })
+      }
+      for (const id of afterIDs) {
+        const currentIndex = afterIDs.indexOf(id)
+        const previous = beforeByID.get(id)
+        if (!previous) {
+          changes.push({ path: `${path}/${currentIndex}`, after: cloneValue(afterByID.get(id)), exists: true, arrayParentPath: path, arrayKind: 'add', arrayValue: cloneValue(afterByID.get(id)), arrayBaselineCount: 0, arrayItemId: id, arrayItemCollectionPath: path })
+          continue
+        }
+        changes.push(...collectChanges(previous, afterByID.get(id), `${path}/${currentIndex}`, path, id, `${path}/${currentIndex}`, path))
+      }
+      for (const id of beforeIDs) {
+        if (!afterByID.has(id)) changes.push({ path, exists: false, arrayParentPath: path, arrayKind: 'remove', arrayValue: cloneValue(beforeByID.get(id)), arrayBaselineCount: 1, arrayItemId: id, arrayItemCollectionPath: path })
+      }
+      return changes
+    }
+    const beforeOrder = beforeArray
+    const afterOrder = afterArray
+    if (beforeArray.length === afterArray.length && beforeArray.some((value, index) => !deepEqual(value, afterArray[index]))) {
+      const sameValues = beforeArray.every((value) => beforeArray.filter((candidate) => deepEqual(candidate, value)).length === afterArray.filter((candidate) => deepEqual(candidate, value)).length)
+      if (sameValues) return [{ path, exists: true, arrayParentPath: path, arrayKind: 'reorder', arrayOrder: cloneValue(afterOrder) as unknown[], arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }]
+    }
     if (afterArray.length > beforeArray.length) {
       const remaining = [...beforeArray]
       const added = afterArray.flatMap((value, index) => {
@@ -148,7 +187,7 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
         remaining.splice(existing, 1)
         return []
       })
-      return added.map(({ value, index }) => ({ path: `${path}/${index}`, after: cloneValue(value), exists: true, arrayParentPath: path, arrayKind: 'add' as const, arrayValue: cloneValue(value) }))
+      return added.map(({ value, index }) => ({ path: `${path}/${index}`, after: cloneValue(value), exists: true, arrayParentPath: path, arrayKind: 'add' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
     }
     if (beforeArray.length > afterArray.length) {
       const remaining = [...afterArray]
@@ -158,11 +197,11 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
         remaining.splice(index, 1)
         return false
       })
-      return removed.map((value) => ({ path, exists: false, arrayParentPath: path, arrayKind: 'remove' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length }))
+      return removed.map((value) => ({ path, exists: false, arrayParentPath: path, arrayKind: 'remove' as const, arrayValue: cloneValue(value), arrayBaselineCount: beforeArray.filter((candidate) => deepEqual(candidate, value)).length, arrayItemId, arrayItemCollectionPath, arrayItemParentPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }))
     }
     return after.flatMap((value, index) => index < before.length
-      ? collectChanges(before[index], value, `${path}/${index}`, path)
-      : collectChanges(undefined, value, `${path}/${index}`, path))
+      ? collectChanges(before[index], value, `${path}/${index}`, path, arrayItemId, arrayItemRootPath, arrayItemCollectionPath)
+      : collectChanges(undefined, value, `${path}/${index}`, path, arrayItemId, arrayItemRootPath, arrayItemCollectionPath))
   }
   if (before && after && typeof before === 'object' && typeof after === 'object' && !Array.isArray(before) && !Array.isArray(after)) {
     const beforeRecord = before as Record<string, unknown>
@@ -171,12 +210,12 @@ function collectChanges(before: unknown, after: unknown, path = '', arrayParentP
     return [...keys].flatMap((key) => {
       const childPath = `${path}/${key}`
       if (!Object.prototype.hasOwnProperty.call(afterRecord, key)) {
-        return [{ path: childPath, exists: false }]
+        return [{ path: childPath, exists: false, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && childPath.startsWith(arrayItemRootPath) ? childPath.slice(arrayItemRootPath.length) : undefined }]
       }
-      return collectChanges(beforeRecord[key], afterRecord[key], childPath, arrayParentPath)
+      return collectChanges(beforeRecord[key], afterRecord[key], childPath, arrayParentPath, arrayItemId, arrayItemRootPath, arrayItemCollectionPath)
     })
   }
-  return [{ path, after: cloneValue(after), exists: true, arrayParentPath }]
+  return [{ path, after: cloneValue(after), exists: true, arrayParentPath, arrayItemId, arrayItemCollectionPath, arrayItemFieldPath: arrayItemRootPath && path.startsWith(arrayItemRootPath) ? path.slice(arrayItemRootPath.length) : undefined }]
 }
 
 function valueAtPath(value: unknown, path: string): { exists: boolean; value?: unknown } {
@@ -194,9 +233,28 @@ function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): 
     if (change.arrayKind && change.arrayParentPath) {
       const parent = valueAtPath(draft, change.arrayParentPath)
       if (!parent.exists || !Array.isArray(parent.value)) return false
-      if (change.arrayKind === 'add') return parent.value.some((value) => deepEqual(value, change.arrayValue))
-      const count = parent.value.filter((value) => deepEqual(value, change.arrayValue)).length
-      return count < (change.arrayBaselineCount ?? 1)
+      let target = parent.value as unknown[]
+      if (change.arrayItemId && change.arrayItemCollectionPath) {
+        const collection = valueAtPath(draft, change.arrayItemCollectionPath)
+        if (!collection.exists || !Array.isArray(collection.value)) return false
+        const item = collection.value.find((value) => Boolean(value && typeof value === 'object' && (value as { id?: unknown }).id === change.arrayItemId))
+        if (!change.arrayItemParentPath) return change.arrayKind === 'add' ? Boolean(item) : !item
+        if (!item) return false
+        const nested = valueAtPath(item, change.arrayItemParentPath)
+        if (!nested.exists || !Array.isArray(nested.value)) return false
+        target = nested.value
+      }
+      if (change.arrayKind === 'reorder') return target.length === change.arrayOrder?.length && target.every((value, index) => deepEqual(value && typeof value === 'object' && change.arrayOrder?.[index] && typeof change.arrayOrder[index] === 'string' ? (value as { id?: unknown }).id : value, change.arrayOrder?.[index]))
+      const count = target.filter((value) => deepEqual(value, change.arrayValue)).length
+      return change.arrayKind === 'add' ? count > (change.arrayBaselineCount ?? 0) : count < (change.arrayBaselineCount ?? 1)
+    }
+    if (change.arrayItemId && change.arrayItemCollectionPath && change.arrayItemFieldPath) {
+      const parent = valueAtPath(draft, change.arrayItemCollectionPath)
+      if (!parent.exists || !Array.isArray(parent.value)) return false
+      const item = parent.value.find((value) => Boolean(value && typeof value === 'object' && (value as { id?: unknown }).id === change.arrayItemId))
+      if (!item) return false
+      const currentField = valueAtPath(item, change.arrayItemFieldPath)
+      return change.exists ? currentField.exists && deepEqual(currentField.value, change.after) : !currentField.exists
     }
     const current = valueAtPath(draft, change.path)
     if (change.arrayParentPath && change.exists && change.after !== undefined) {
