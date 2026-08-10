@@ -1,6 +1,12 @@
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 import type { CVLayout, LayoutNode } from '../types'
 
+type ItemOrderNode = LayoutNode & { type: 'experience' | 'projects' | 'education' }
+
+function isItemOrderNode(node: LayoutNode | undefined): node is ItemOrderNode {
+  return node?.type === 'experience' || node?.type === 'projects' || node?.type === 'education'
+}
+
 function cloneDefaultLayout(): CVLayout {
   return {
     version: 1,
@@ -32,7 +38,7 @@ export function moveNode(layout: CVLayout, nodeId: string, beforeNodeId: string 
 export function moveItem(layout: CVLayout, nodeId: string, itemId: string, beforeItemId: string | null): CVLayout {
   const nodeIndex = layout.nodes.findIndex((node) => node.id === nodeId)
   const node = layout.nodes[nodeIndex]
-  if (!node || !('itemOrder' in node) || !node.itemOrder) return layout
+  if (!isItemOrderNode(node) || !node.itemOrder) return layout
   const sourceIndex = node.itemOrder.indexOf(itemId)
   if (sourceIndex < 0 || beforeItemId === itemId) return layout
   const beforeIndex = beforeItemId === null ? -1 : node.itemOrder.indexOf(beforeItemId)
@@ -79,7 +85,7 @@ export function normalizeLayout(layout: CVLayout | undefined): CVLayout {
 export function materializeItemOrder(layout: CVLayout, nodeId: string, itemIds: string[]): CVLayout {
   const nodeIndex = layout.nodes.findIndex((node) => node.id === nodeId)
   const node = layout.nodes[nodeIndex]
-  if (!node || !('itemOrder' in node)) return layout
+  if (!isItemOrderNode(node)) return layout
   const validIds = new Set(itemIds)
   const current = (node.itemOrder ?? []).filter((id) => validIds.has(id))
   const itemOrder = [...current, ...itemIds.filter((id) => !current.includes(id))]

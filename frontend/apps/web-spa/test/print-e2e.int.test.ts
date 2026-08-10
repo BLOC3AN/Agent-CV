@@ -94,8 +94,12 @@ describe('real Playwright print', () => {
       await run(process.execPath, [tsx, cli, '--url', `http://127.0.0.1:${(appServer.address() as AddressInfo).port}/print/${longCv.id}?variant=presentation`, '--output', output])
       const { stdout } = await run('pdfinfo', [output])
       const pages = Number(stdout.match(/Pages:\s+(\d+)/)?.[1] ?? 0)
+      const { stdout: text } = await run('pdftotext', ['-layout', output, '-'])
       expect(pages).toBeGreaterThanOrEqual(3)
       expect(stdout).toMatch(/Page size:\s+\d+(?:\.\d+)? x \d+(?:\.\d+)? pts \(A4\)/)
+      // The final unique bullet proves the ordered single-flow document was
+      // allowed to paginate instead of being clipped at the first A4 shell.
+      expect(text).toContain('item 6.9')
     } finally {
       await new Promise<void>((done) => appServer.close(() => done()))
       await new Promise<void>((done) => backend.close(() => done()))

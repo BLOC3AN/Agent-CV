@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import { CVBlockRenderer } from '../src/components/CVBlockRenderer'
-import { moveItem, moveNode, resetDefaultLayout, setNodeVisible } from '../src/lib/layout-draft'
+import { materializeItemOrder, moveItem, moveNode, resetDefaultLayout, setNodeVisible } from '../src/lib/layout-draft'
 import { initialCVs } from '../src/mockData'
 import type { CVLayout } from '../src/types'
 
@@ -39,6 +39,20 @@ describe('layout draft operations', () => {
 
     expect(moved.nodes.find((node) => node.id === 'experience')?.itemOrder).toEqual(['exp-1', 'exp-2'])
     expect(layout.nodes.find((node) => node.id === 'experience')?.itemOrder).toEqual(['exp-2', 'exp-1'])
+  })
+
+  it('materializes and moves nested items from a legacy/default node without itemOrder', () => {
+    const legacyLayout: CVLayout = {
+      version: 1,
+      nodes: [{ id: 'experience', type: 'experience', visible: true }],
+    }
+
+    const materialized = materializeItemOrder(legacyLayout, 'experience', ['exp-1', 'exp-2'])
+    const moved = moveItem(materialized, 'experience', 'exp-2', 'exp-1')
+
+    expect(moved).not.toBe(legacyLayout)
+    expect(moved.nodes[0]).toMatchObject({ id: 'experience', itemOrder: ['exp-2', 'exp-1'] })
+    expect(legacyLayout.nodes[0]).not.toHaveProperty('itemOrder')
   })
 
   it('hides and unhides a node without deleting the underlying CV content', () => {
