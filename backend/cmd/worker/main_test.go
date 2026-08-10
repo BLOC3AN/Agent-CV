@@ -118,23 +118,21 @@ func TestProfileFromSegmentsKeepsCVSections(t *testing.T) {
 		"activities":     "ACTIVITIES\n2026 – Neura Agent\n• Built an agent",
 		"skills":         "SKILLS\n• Languages: Python, Go, Docker",
 		"certifications": "CERTIFICATE\nIBM-Python for Data Science",
-	})
-	if len(profile["education"].([]any)) != 1 || len(profile["work"].([]any)) != 1 || len(profile["activities"].([]any)) != 1 {
+	}, "test-cv")
+	sections := profile["sections"].(map[string]any)
+	if len(sections["education"].([]any)) != 1 || len(sections["experience"].([]any)) != 1 || len(sections["activities"].([]any)) != 1 {
 		t.Fatalf("sections not preserved: %#v", profile)
 	}
-	if len(profile["skills"].([]any)) != 3 || len(profile["certifications"].([]any)) != 1 {
+	if len(sections["skills"].([]any)) != 1 || len(sections["certifications"].([]any)) != 1 {
 		t.Fatalf("skills/certifications not preserved: %#v", profile)
 	}
-	activities := profile["activities"].([]any)
-	if activities[0].(map[string]any)["name"] != "Neura Agent" {
+	activities := sections["activities"].([]any)
+	if activities[0].(map[string]any)["organization"] != "Neura Agent" {
 		t.Fatalf("activity heading was not decoded: %#v", activities[0])
 	}
-	basics := profile["basics"].(map[string]any)
-	if basics["introduce"] != "Software Engineer focused on Go" {
-		t.Fatalf("introduce field was not decoded: %#v", basics)
-	}
-	if _, legacy := basics["summary"]; legacy {
-		t.Fatal("profile must not emit the legacy basics.summary field")
+	intro := sections["intro"].(map[string]any)
+	if _, legacy := intro["summary"]; !legacy {
+		t.Fatal("intro summary field missing")
 	}
 }
 

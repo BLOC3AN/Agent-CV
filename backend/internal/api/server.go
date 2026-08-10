@@ -376,7 +376,7 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 		v2Raw = nil
 	}
 
-	snapshot, schemaVersion, err := cvSnapshotForResponse(nil, v2Raw, true)
+	snapshot, schemaVersion, err := cvSnapshotForResponse(v2Raw)
 	if err != nil {
 		if errors.Is(err, errV2NotBackfilled) {
 			// Không im lặng rơi về v1: client đã nói rõ nó chỉ đọc được v2.

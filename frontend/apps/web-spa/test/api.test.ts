@@ -166,7 +166,7 @@ describe('getCV', () => {
 })
 
 describe('saveCV', () => {
-  it('gửi CẢ HAI biểu diễn tới PATCH /api/cv/:id', async () => {
+  it('gửi duy nhất CV v2 tới PATCH /api/cv/:id', async () => {
     const spy = mockFetch(200, { ok: true })
 
     await saveCV('cv-1', sampleCV)
@@ -175,7 +175,7 @@ describe('saveCV', () => {
     expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'PATCH' })
     const body = JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)
     expect(body.cv.schemaVersion).toBe(2)
-    expect(body.profile.schemaVersion).toBe(1)
+    expect(body.profile).toBeUndefined()
   })
 
   it('400 SCHEMA_PAIR_INVALID thành thông điệp người đọc hiểu được', async () => {

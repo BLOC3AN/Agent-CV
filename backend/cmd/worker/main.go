@@ -192,9 +192,19 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	if introduce := sectionText(seg.Merged["introduce"]); introduce != "" {
 		basics["introduce"] = introduce
 	}
-	profile := profileFromSegments(lang, seg.Merged)
-	profile["basics"] = basics
-	profile = importedCV(profile, j.ID)
+	profile := profileFromSegments(lang, seg.Merged, j.ID)
+	intro, _ := profile["sections"].(map[string]any)
+	introData, _ := intro["intro"].(map[string]any)
+	for key, value := range basics {
+		switch key {
+		case "name":
+			introData["fullName"] = value
+		case "introduce":
+			introData["summary"] = value
+		default:
+			introData[key] = value
+		}
+	}
 	raw := jsonString(profile)
 	var profileID string
 	if err := db.QueryRowContext(ctx, `INSERT INTO profiles(user_id,data,language) VALUES($1,$2::jsonb,$3) RETURNING id`, j.UserID, raw, lang).Scan(&profileID); err != nil {
@@ -217,55 +227,31 @@ func parseCVJobResult(profileID, language, quality string, warnings []string) ma
 	}
 }
 
-// PDFKit has already separated the CV into deterministic sections. Keep that
-// structure when creating the profile; previously only the first line/contact
-// fields were persisted, making every imported CV appear almost empty.
-func profileFromSegments(language string, merged map[string]string) map[string]any {
-	p := map[string]any{
-		"schemaVersion": 1, "language": language,
-		"basics":    map[string]any{"name": "Chưa rõ tên", "links": []any{}},
-		"education": []any{}, "work": []any{}, "projects": []any{}, "skills": []any{},
-		"activities": []any{}, "certifications": []any{}, "languages": []any{},
-		"_meta": map[string]any{"source": "pdf_import", "verified": map[string]any{}},
-	}
-	if introduce := sectionText(merged["introduce"]); introduce != "" {
-		p["basics"].(map[string]any)["introduce"] = introduce
-	}
-	p["education"] = parseEducation(merged["education"])
-	p["work"] = parseWork(merged["work"])
-	p["activities"] = parseActivities(merged["activities"])
-	p["skills"] = parseSkills(merged["skills"])
-	p["certifications"] = parseCertifications(merged["certifications"])
-	return p
-}
-
-// importedCV is the parser boundary after the SP-5 cutover. The PDF segmenter
-// deliberately produces a small v1-shaped intermediate because its parsing
-// helpers are section-oriented; nothing v1-shaped is persisted anymore.
-func importedCV(profile map[string]any, id string) map[string]any {
-	basics, _ := profile["basics"].(map[string]any)
-	text := func(key string) string { value, _ := basics[key].(string); return value }
-	name := text("name")
-	if name == "" {
-		name = "Chưa rõ tên"
-	}
+// PDFKit has already separated the CV into deterministic sections. Persist
+// those sections directly in the production CV v2 document.
+func profileFromSegments(language string, merged map[string]string, id string) map[string]any {
+	work := parseWork(merged["work"])
+	education := parseEducation(merged["education"])
+	skills := parseSkills(merged["skills"])
+	activities := parseActivities(merged["activities"])
+	certifications := parseCertifications(merged["certifications"])
+	name := "Chưa rõ tên"
 	sections := map[string]any{
 		"intro": map[string]any{
-			"fullName": name, "title": text("headline"), "email": text("email"),
-			"phone": text("phone"), "location": text("location"), "summary": text("introduce"),
+			"fullName": name, "title": "", "email": "", "phone": "", "location": "", "summary": "",
 		},
-		"experience":     importedExperience(profile["work"]),
+		"experience":     importedExperience(work),
 		"projects":       []any{},
-		"education":      importedEducation(profile["education"]),
-		"skills":         importedSkills(profile["skills"]),
-		"activities":     importedActivities(profile["activities"]),
-		"certifications": importedCertifications(profile["certifications"]),
+		"education":      importedEducation(education),
+		"skills":         importedSkills(skills),
+		"activities":     importedActivities(activities),
+		"certifications": importedCertifications(certifications),
 		"languages":      []any{},
 	}
 	return map[string]any{
 		"schemaVersion": 2, "id": id, "title": name,
 		"lastModified": time.Now().UTC().Format(time.RFC3339),
-		"language":     profile["language"], "sections": sections,
+		"language":     language, "sections": sections,
 		"design":         map[string]any{"template": "modern", "accentColor": "#4F46E5", "font": "Roboto", "fontSize": 14, "spacing": "normal"},
 		"activeSections": map[string]any{"intro": true, "experience": true, "projects": true, "education": true, "skills": true, "activities": true, "certifications": true, "languages": true},
 		"_meta":          map[string]any{"source": "pdf_import", "verified": map[string]any{}},

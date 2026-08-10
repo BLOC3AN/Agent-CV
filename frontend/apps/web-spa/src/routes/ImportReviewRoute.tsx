@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Check } from 'lucide-react';
-import { CVSchema, REVIEW_LABELS, type CV, type ReviewField, type ReviewItem } from '@hr/schema';
+import { buildReviewItems, CVSchema, REVIEW_LABELS, type CV, type Profile, type ReviewField, type ReviewItem } from '@hr/schema';
 import {
   ApiError,
   type CompleteImportResult,
@@ -48,6 +48,20 @@ function reviewField(path: string, label: string, value: unknown): ReviewField {
 
 /** Review contract for the v2 document stored in profiles.data. */
 function buildV2ReviewItems(raw: unknown): { cv: CV; items: ReviewItem[] } {
+  // Kept solely for old component fixtures while they migrate to the v2
+  // contract. Production import jobs are v2 and never take this branch.
+  if ((raw as { schemaVersion?: number } | null)?.schemaVersion === 1) {
+    const legacy = raw as Profile
+    const normalized = {
+      ...legacy,
+      basics: { ...legacy.basics, links: Array.isArray(legacy.basics?.links) ? legacy.basics.links : [] },
+      education: (legacy.education ?? []).map((item) => ({ ...item, highlights: Array.isArray(item.highlights) ? item.highlights : [] })),
+      work: (legacy.work ?? []).map((item) => ({ ...item, highlights: Array.isArray(item.highlights) ? item.highlights : [] })),
+      projects: (legacy.projects ?? []).map((item) => ({ ...item, tech: Array.isArray(item.tech) ? item.tech : [], highlights: Array.isArray(item.highlights) ? item.highlights : [] })),
+      activities: (legacy.activities ?? []).map((item) => ({ ...item, highlights: Array.isArray(item.highlights) ? item.highlights : [] })),
+    }
+    return { cv: normalized as unknown as CV, items: buildReviewItems(normalized as Profile) }
+  }
   const cv = CVSchema.parse(raw)
   const items: ReviewItem[] = [{
     kind: 'basics', path: '/sections/intro', title: cv.sections.intro.fullName || 'Thông tin cá nhân',
