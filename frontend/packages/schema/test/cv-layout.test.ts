@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { CVLayoutSchema, DEFAULT_CV_LAYOUT, CVSchema } from '../src/index.js'
+import {
+  CV_FIELD_CATALOG,
+  CVFieldPlacementSchema,
+  CVLayoutSchema,
+  DEFAULT_CV_LAYOUT,
+  CVSchema,
+  validateCVFieldPlacement,
+} from '../src/index.js'
 
 const legacyCV = {
   schemaVersion: 2,
@@ -28,7 +35,7 @@ describe('CV layout contract', () => {
       nodes: [{ id: 'experience', type: 'experience', visible: true, itemOrder: ['job-2', 'job-1'] }],
     })
 
-    expect(layout.nodes[0]?.itemOrder).toEqual(['job-2', 'job-1'])
+    expect(layout.nodes[0] && 'itemOrder' in layout.nodes[0] ? layout.nodes[0].itemOrder : undefined).toEqual(['job-2', 'job-1'])
   })
 
   it('rejects unknown node types', () => {
@@ -45,5 +52,29 @@ describe('CV layout contract', () => {
       version: 1,
       nodes: [{ id: 'header', type: 'header', visible: true, x: 12, y: 24, width: 400 }],
     })).toThrow()
+  })
+
+  it('rejects item order on nodes without nested items', () => {
+    for (const type of ['header', 'summary', 'skills', 'certifications', 'languages', 'footer'] as const) {
+      expect(() => CVLayoutSchema.parse({
+        version: 1,
+        nodes: [{ id: type, type, visible: true, itemOrder: ['item-1'] }],
+      })).toThrow()
+    }
+  })
+
+  it('rejects unknown registered field keys at runtime', () => {
+    expect(() => CVFieldPlacementSchema.parse({ key: 'unknownField', nodeType: 'experience' })).toThrow()
+    expect(() => validateCVFieldPlacement('unknownField', 'experience')).toThrow()
+  })
+
+  it('rejects a registered field in a disallowed node placement', () => {
+    expect(() => CVFieldPlacementSchema.parse({ key: 'company', nodeType: 'education' })).toThrow()
+    expect(() => validateCVFieldPlacement('company', 'education')).toThrow()
+  })
+
+  it('accepts a registered field in an allowed node placement', () => {
+    expect(CV_FIELD_CATALOG.length).toBeGreaterThan(0)
+    expect(validateCVFieldPlacement('company', 'experience')).toMatchObject({ key: 'company' })
   })
 })
