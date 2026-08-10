@@ -6,7 +6,7 @@
  * lỗi đó không thể lặp lại ở mười chỗ khác nhau.
  */
 
-import type { CV } from '@hr/schema'
+import type { CV, CVLayout } from '@hr/schema'
 
 export class ApiError extends Error {
   readonly status: number
@@ -130,7 +130,8 @@ export interface CVEnvelope {
   title: string
   templateId: string
   theme: unknown
-  layout: unknown
+  /** Legacy `{}` storage is normalized to the shared default by GET /api/cv/:id. */
+  layout: CVLayout
   language: string
   updatedAt: string
   profileSnapshot: CV
@@ -283,6 +284,69 @@ export async function saveCV(id: string, cv: CV): Promise<void> {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ cv }),
+  })
+}
+
+export type CVRevisionSource = 'user' | 'ai' | 'restore'
+
+export interface CVRevisionSnapshot {
+  profileSnapshot: CV
+  layout: CVLayout
+}
+
+export interface CVRevision extends CVRevisionSnapshot {
+  id: string
+  number: number
+  cvId: string
+  source: CVRevisionSource
+  message?: string
+  parentRevisionId?: string
+  createdAt: string
+}
+
+export interface CVRevisionSummary {
+  id: string
+  number: number
+  cvId: string
+  source: CVRevisionSource
+  message?: string
+  parentRevisionId?: string
+  createdAt: string
+}
+
+export interface CVCommitResult {
+  cv: CVEnvelope
+  revision: CVRevision
+}
+
+export async function commitCV(
+  id: string,
+  cv: CV,
+  layout: CVLayout,
+  source: Extract<CVRevisionSource, 'user' | 'ai'>,
+  message?: string,
+): Promise<CVCommitResult> {
+  return request<CVCommitResult>(`/api/cv/${encodeURIComponent(id)}/commit`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ cv, layout, source, ...(message ? { message } : {}) }),
+  })
+}
+
+export async function listCVRevisions(id: string): Promise<CVRevisionSummary[]> {
+  const body = await request<{ revisions: CVRevisionSummary[] }>(`/api/cv/${encodeURIComponent(id)}/revisions`)
+  return body.revisions ?? []
+}
+
+export async function getCVRevision(id: string, revisionId: string): Promise<{ revision: CVRevision; before?: CVRevisionSnapshot }> {
+  return request<{ revision: CVRevision; before?: CVRevisionSnapshot }>(
+    `/api/cv/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}`,
+  )
+}
+
+export async function restoreCVRevision(id: string, revisionId: string): Promise<CVCommitResult> {
+  return request<CVCommitResult>(`/api/cv/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/restore`, {
+    method: 'POST',
   })
 }
 

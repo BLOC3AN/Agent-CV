@@ -1,19 +1,23 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { CVSchema, type CV } from '@hr/schema'
+import { CVLayoutSchema, CVSchema, type CV } from '@hr/schema'
 import {
   ApiError,
   completeImport,
+  commitCV,
   createCV,
   deleteAccount,
   deleteCV,
   getCV,
+  getCVRevision,
   getImportReview,
   getJob,
   getSession,
   listCVs,
+  listCVRevisions,
   patchProfile,
   requestLogin,
   readSSE,
+  restoreCVRevision,
   saveCV,
   sendChat,
   uploadCV,
@@ -182,6 +186,38 @@ describe('saveCV', () => {
     mockFetch(400, { error: '...', code: 'SCHEMA_V2_INVALID' })
 
     await expect(saveCV('cv-1', sampleCV)).rejects.toThrow(/định dạng/i)
+  })
+})
+
+describe('CV revisions', () => {
+  it('commits the CV and layout in one request', async () => {
+    const spy = mockFetch(200, {
+      cv: { id: 'cv-1', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } },
+      revision: { id: 'revision-1', number: 1, cvId: 'cv-1', source: 'user', createdAt: '2026-08-10T00:00:00Z', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } },
+    })
+    const layout = CVLayoutSchema.parse({ version: 1, nodes: [] })
+
+    const result = await commitCV('cv-1', sampleCV, layout, 'user', 'Save draft')
+
+    expect((spy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1/commit')
+    expect((spy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((spy.mock.calls as any)[0]?.[1]?.body as string)).toEqual({ cv: sampleCV, layout, source: 'user', message: 'Save draft' })
+    expect(result.revision.number).toBe(1)
+  })
+
+  it('uses the CV-scoped revision list, preview, and restore endpoints', async () => {
+    const listSpy = mockFetch(200, { revisions: [{ id: 'revision-2', number: 2, cvId: 'cv-1', source: 'ai', createdAt: '2026-08-10T00:00:00Z' }] })
+    await expect(listCVRevisions('cv-1')).resolves.toMatchObject([{ id: 'revision-2', number: 2 }])
+    expect((listSpy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1/revisions')
+
+    const previewSpy = mockFetch(200, { revision: { id: 'revision-2', number: 2, cvId: 'cv-1', source: 'ai', createdAt: '2026-08-10T00:00:00Z', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } }, before: { profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } } })
+    await expect(getCVRevision('cv-1', 'revision-2')).resolves.toMatchObject({ revision: { id: 'revision-2' }, before: { layout: { version: 1 } } })
+    expect((previewSpy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1/revisions/revision-2')
+
+    const restoreSpy = mockFetch(200, { cv: { id: 'cv-1', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } }, revision: { id: 'revision-3', number: 3, cvId: 'cv-1', source: 'restore', createdAt: '2026-08-10T00:00:00Z', profileSnapshot: sampleCV, layout: { version: 1, nodes: [] } } })
+    await expect(restoreCVRevision('cv-1', 'revision-1')).resolves.toMatchObject({ revision: { source: 'restore', number: 3 } })
+    expect((restoreSpy.mock.calls as any)[0]?.[0]).toBe('/api/cv/cv-1/revisions/revision-1/restore')
+    expect((restoreSpy.mock.calls as any)[0]?.[1]).toMatchObject({ method: 'POST' })
   })
 })
 

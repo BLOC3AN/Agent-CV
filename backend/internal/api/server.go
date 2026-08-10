@@ -88,6 +88,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/cv/", s.cvRoute)
 	mux.HandleFunc("PATCH /api/cv/", s.cvRoute)
 	mux.HandleFunc("DELETE /api/cv/", s.cvRoute)
+	mux.HandleFunc("POST /api/cv/", s.cvRoute)
 	mux.HandleFunc("POST /api/uploads/cv", s.uploadCV)
 	mux.HandleFunc("GET /api/jobs/", s.job)
 	mux.HandleFunc("DELETE /api/jobs/", s.job)
@@ -189,7 +190,9 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
-	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/cv/"), "/")
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/cv/"), "/")
+	parts := strings.Split(path, "/")
+	id := parts[0]
 
 	// Validate the v2 document before touching PostgreSQL.
 	var cvV2 json.RawMessage
@@ -222,8 +225,28 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
 		return
 	}
-	if strings.HasSuffix(id, "/export") {
-		s.exportCV(w, r, strings.TrimSuffix(id, "/export"))
+	if len(parts) == 2 && parts[1] == "export" {
+		s.exportCV(w, r, id)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "commit" && r.Method == http.MethodPost {
+		s.cvCommit(w, r, id)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "revisions" && r.Method == http.MethodGet {
+		s.cvRevisionList(w, r, id)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "revisions" && r.Method == http.MethodGet {
+		s.cvRevisionPreview(w, r, id, parts[2])
+		return
+	}
+	if len(parts) == 4 && parts[1] == "revisions" && parts[3] == "restore" && r.Method == http.MethodPost {
+		s.cvRevisionRestore(w, r, id, parts[2])
+		return
+	}
+	if len(parts) != 1 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
 		return
 	}
 	switch r.Method {
@@ -297,43 +320,11 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
 		return
 	}
-	var cv map[string]any = make(map[string]any)
-	var profileRaw, themeRaw, layoutRaw []byte
-	var cvID string
-	var title, language, templateID, profileID string
-	var updated time.Time
-	err := s.db.QueryRowContext(r.Context(), `SELECT id, profile_id, profile_snapshot, template_id, theme, layout, language, title, updated_at FROM cv_documents WHERE id = $1 AND user_id=$2`, id, userID).Scan(&cvID, &profileID, &profileRaw, &templateID, &themeRaw, &layoutRaw, &language, &title, &updated)
-	if err == sql.ErrNoRows {
+	cv, err := s.loadCVEnvelope(r.Context(), userID, id)
+	if errors.Is(err, errCVNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
 		return
 	}
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
-		return
-	}
-	cv["id"] = cvID
-	cv["profileId"] = profileID
-	var theme, layout any
-	_ = json.Unmarshal(themeRaw, &theme)
-	_ = json.Unmarshal(layoutRaw, &layout)
-	cv["templateId"] = templateID
-	cv["theme"] = theme
-	cv["layout"] = layout
-	cv["language"] = language
-	cv["title"] = title
-	cv["updatedAt"] = updated
-
-	// SP-5 cutover: profile_snapshot and profiles.data are both v2.
-	// Keep the ownership join on the live profile read as a defense-in-depth
-	// check; cv_documents.user_id is not a database-enforced invariant.
-	var v2Raw []byte
-	if err := s.db.QueryRowContext(r.Context(),
-		`SELECT p.data FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
-		 WHERE c.id = $1 AND c.user_id = $2 AND p.user_id = $2`, id, userID).Scan(&v2Raw); err != nil {
-		v2Raw = nil
-	}
-
-	snapshot, schemaVersion, err := cvSnapshotForResponse(v2Raw)
 	if err != nil {
 		if errors.Is(err, errV2NotBackfilled) {
 			// Không im lặng trả dữ liệu khác schema: client chỉ đọc CV v2.
@@ -343,14 +334,10 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 			})
 			return
 		}
-		// data có mặt nhưng hỏng JSON: lỗi dữ liệu, không phải lỗi client —
-		// nhưng vẫn không được trả response nửa vời.
+		// Dữ liệu hoặc layout có mặt nhưng hỏng JSON: không trả response nửa vời.
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được dữ liệu CV"})
 		return
 	}
-	cv["profileSnapshot"] = snapshot
-	cv["schemaVersion"] = schemaVersion
-
 	writeJSON(w, http.StatusOK, map[string]any{"cv": cv})
 }
 
