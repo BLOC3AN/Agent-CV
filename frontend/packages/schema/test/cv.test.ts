@@ -40,6 +40,13 @@ describe('CV v2', () => {
     expect(cv.sections.experience[0]!.highlights).toHaveLength(2)
   })
 
+  it('rejects empty persisted item ids', () => {
+    expect(() => CVSchema.parse({
+      ...minimal,
+      sections: { ...minimal.sections, experience: [{ id: '', title: 'Engineer', company: '' }] },
+    })).toThrow()
+  })
+
   it('từ chối description ở kinh nghiệm — chat sinh patch nhắm vào từng bullet', () => {
     expect(() => CVSchema.parse({
       ...minimal,

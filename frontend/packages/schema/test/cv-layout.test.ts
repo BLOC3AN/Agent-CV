@@ -66,6 +66,13 @@ describe('CV layout contract', () => {
     })).toThrow()
   })
 
+  it('rejects empty layout item references', () => {
+    expect(() => CVLayoutSchema.parse({
+      version: 1,
+      nodes: DEFAULT_CV_LAYOUT.nodes.map((node) => node.type === 'experience' ? { ...node, itemOrder: [''] } : node),
+    })).toThrow()
+  })
+
   it('rejects persisted pixel-position properties', () => {
     expect(CVLayoutSchema).toBeDefined()
     expect(() => CVLayoutSchema.parse({

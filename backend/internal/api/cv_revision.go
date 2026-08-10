@@ -227,6 +227,9 @@ func normalizeCommittedCVPair(raw, layout json.RawMessage) (json.RawMessage, jso
 	if err != nil {
 		return nil, nil, err
 	}
+	if _, err = validateCVLayout(normalizedLayout); err != nil {
+		return nil, nil, err
+	}
 	synchronizeActiveSections(cv, normalizedLayout)
 	var layoutValue any
 	if json.Unmarshal(normalizedLayout, &layoutValue) != nil {
@@ -311,6 +314,11 @@ func synchronizeActiveSections(cv map[string]any, rawLayout json.RawMessage) {
 func requiredCVString(value map[string]any, key string) bool {
 	_, ok := value[key].(string)
 	return ok
+}
+
+func requiredCVIdentifier(value map[string]any, key string) bool {
+	text, ok := value[key].(string)
+	return ok && text != ""
 }
 
 func onlyCVKeys(value map[string]any, allowed ...string) bool {
@@ -423,7 +431,11 @@ func normalizeCVItem(item map[string]any, rule cvItemRule) bool {
 		}
 	}
 	for _, key := range rule.required {
-		if !requiredCVString(item, key) {
+		if key == "id" {
+			if !requiredCVIdentifier(item, key) {
+				return false
+			}
+		} else if !requiredCVString(item, key) {
 			return false
 		}
 	}

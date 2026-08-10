@@ -113,10 +113,41 @@ interface DocumentState {
   draft: DraftDocument | null
 }
 
+interface ProvenanceChange { path: string; after: unknown }
+interface ProvenanceEntry { id: number; summary: string; changes: ProvenanceChange[] }
+
 const emptyDocuments: DocumentState = { committed: null, draft: null }
 
 function cloneDocument(document: DraftDocument): DraftDocument {
   return JSON.parse(JSON.stringify(document)) as DraftDocument
+}
+
+function cloneValue(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function collectChanges(before: unknown, after: unknown, path = ''): ProvenanceChange[] {
+  if (deepEqual(before, after)) return []
+  if (before && after && typeof before === 'object' && typeof after === 'object' && !Array.isArray(before) && !Array.isArray(after)) {
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)])
+    return [...keys].flatMap((key) => collectChanges((before as Record<string, unknown>)[key], (after as Record<string, unknown>)[key], `${path}/${key}`))
+  }
+  return [{ path, after: cloneValue(after) }]
+}
+
+function valueAtPath(value: unknown, path: string): unknown {
+  if (!path) return value
+  return path.slice(1).split('/').reduce<unknown>((current, key) => {
+    if (!current || typeof current !== 'object') return undefined
+    return (current as Record<string, unknown>)[key]
+  }, value)
+}
+
+function reconcileProvenance(entries: ProvenanceEntry[], draft: DraftDocument): ProvenanceEntry[] {
+  return entries.map((entry) => ({ ...entry, changes: entry.changes.filter((change) => {
+    const current = valueAtPath(draft, change.path)
+    return deepEqual(current, change.after) || (typeof current === 'string' && typeof change.after === 'string' && current.includes(change.after))
+  }) })).filter((entry) => entry.changes.length > 0)
 }
 
 function normalizeDocument(document: DraftDocument, legacyVisibility = false): DraftDocument {
@@ -156,8 +187,8 @@ export function useCVStore(id: string) {
   const [error, setError] = useState<string | undefined>()
   const [savePending, setSavePending] = useState(false)
   const [baseRevision, setBaseRevision] = useState(0)
-  const [pendingAIProvenance, setPendingAIProvenance] = useState<Array<{ id: number; summary: string }>>([])
-  const provenanceRef = useRef<Array<{ id: number; summary: string }>>([])
+  const [pendingAIProvenance, setPendingAIProvenance] = useState<ProvenanceEntry[]>([])
+  const provenanceRef = useRef<ProvenanceEntry[]>([])
   const provenanceIDRef = useRef(0)
   const documentVersionRef = useRef(0)
   const pendingSaveRef = useRef<Promise<void> | undefined>(undefined)
@@ -202,6 +233,8 @@ export function useCVStore(id: string) {
 
     const draft = cloneDocument(normalizeDocument(next))
     documentVersionRef.current += 1
+    provenanceRef.current = current.draft ? reconcileProvenance(provenanceRef.current, draft) : []
+    setPendingAIProvenance(provenanceRef.current)
     replaceDocuments({ committed: current.committed, draft })
     setError(undefined)
     setStatus(documentsEqual(current.committed, draft) ? 'ready' : 'dirty')
@@ -213,8 +246,9 @@ export function useCVStore(id: string) {
     const draft = cloneDocument(normalizeDocument(next))
     if (documentsEqual(current.draft, draft)) return
     documentVersionRef.current += 1
-    const entry = { id: ++provenanceIDRef.current, summary }
-    provenanceRef.current = [...provenanceRef.current, entry]
+    const changes = current.draft ? collectChanges(current.draft, draft) : []
+    provenanceRef.current = reconcileProvenance(provenanceRef.current, draft)
+    if (changes.length) provenanceRef.current = [...provenanceRef.current, { id: ++provenanceIDRef.current, summary, changes }]
     setPendingAIProvenance(provenanceRef.current)
     replaceDocuments({ committed: current.committed, draft })
     setError(undefined)

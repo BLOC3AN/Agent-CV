@@ -14,8 +14,9 @@ export const CVNodeTypeSchema = z.enum([
 ])
 
 /** A node is ordered by the array position; no pixel coordinates are persisted. */
+const nonEmptyID = z.string().min(1)
 const nodeBase = {
-  id: z.string(),
+  id: nonEmptyID,
   visible: z.boolean(),
 }
 
@@ -23,7 +24,7 @@ const simpleNode = (type: Exclude<CVNodeType, 'experience' | 'projects' | 'educa
   z.object({ ...nodeBase, type: z.literal(type) }).strict()
 
 const itemNode = (type: 'experience' | 'projects' | 'education') =>
-  z.object({ ...nodeBase, type: z.literal(type), itemOrder: z.array(z.string()).optional() }).strict()
+  z.object({ ...nodeBase, type: z.literal(type), itemOrder: z.array(nonEmptyID).optional() }).strict()
 
 export const LayoutNodeSchema = z.discriminatedUnion('type', [
   simpleNode('header'),

@@ -220,4 +220,20 @@ describe('useCVStore', () => {
 
     expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Manual change' }), layout, 'user', undefined, 0)
   })
+
+  it('reconciles AI provenance when manual editing reverts the AI contribution', async () => {
+    vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
+    const commit = vi.spyOn(api, 'commitCV').mockResolvedValue(commitResult({ ...cv, title: 'Independent manual save' }, 1))
+    const { result } = renderHook(() => useCVStore('cv-1'))
+    await waitFor(() => expect(result.current.draft).not.toBeNull())
+
+    act(() => result.current.applyAIDraft({ cv: { ...cv, title: 'AI proposal' }, layout }, 'AI proposal'))
+    expect(result.current.pendingAIProvenance).toEqual(['AI proposal'])
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'CV' }, layout }))
+    expect(result.current.pendingAIProvenance).toEqual([])
+    act(() => result.current.updateDraft({ cv: { ...cv, title: 'Independent manual save' }, layout }))
+    await act(async () => result.current.saveDraft())
+
+    expect(commit).toHaveBeenCalledWith('cv-1', expect.objectContaining({ title: 'Independent manual save' }), layout, 'user', undefined, 0)
+  })
 })

@@ -491,6 +491,54 @@ func TestCVCommitRejectsNullItemOrder(t *testing.T) {
 	}
 }
 
+func TestCVCommitRejectsEmptyItemIDAndItemOrderReference(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	handler := NewServerWithDB(db, "").Routes()
+	var profile map[string]any
+	if err := json.Unmarshal(f.profile, &profile); err != nil {
+		t.Fatal(err)
+	}
+	sections := profile["sections"].(map[string]any)
+	sections["experience"] = []any{map[string]any{"id": "", "title": "Engineer", "company": ""}}
+	invalidProfile, _ := json.Marshal(profile)
+	if w := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(invalidProfile, f.layout, "user", "empty id")); w.Code != http.StatusBadRequest {
+		t.Fatalf("empty item id status=%d body=%s", w.Code, w.Body)
+	}
+	if w := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(f.profile, revisionLayoutWithItemOrder("experience", []string{""}), "user", "empty ref")); w.Code != http.StatusBadRequest {
+		t.Fatalf("empty item ref status=%d body=%s", w.Code, w.Body)
+	}
+}
+
+func TestCVCommitNormalizesItemOrderAndGETReadsBackCanonicalSnapshot(t *testing.T) {
+	db := cvRevisionDB(t)
+	f := createCVRevisionFixture(t, db)
+	handler := NewServerWithDB(db, "").Routes()
+	var profile map[string]any
+	if err := json.Unmarshal(f.profile, &profile); err != nil {
+		t.Fatal(err)
+	}
+	profile["sections"].(map[string]any)["experience"] = []any{map[string]any{"id": "exp-1", "title": "Engineer", "company": "Acme"}}
+	updated, _ := json.Marshal(profile)
+	w := cvRevisionRequest(t, handler, http.MethodPost, "/api/cv/"+f.cvID+"/commit", f.token, revisionCommitBody(updated, f.layout, "user", "ordered"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("commit status=%d body=%s", w.Code, w.Body)
+	}
+	var response struct {
+		Revision struct {
+			Layout          json.RawMessage `json:"layout"`
+			ProfileSnapshot json.RawMessage `json:"profileSnapshot"`
+		} `json:"revision"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || !bytes.Contains(response.Revision.Layout, []byte(`"exp-1"`)) || !bytes.Contains(response.Revision.ProfileSnapshot, []byte(`"exp-1"`)) {
+		t.Fatalf("commit did not return normalized item order: %s", w.Body)
+	}
+	read := cvRevisionRequest(t, handler, http.MethodGet, "/api/cv/"+f.cvID, f.token, nil)
+	if read.Code != http.StatusOK || !bytes.Contains(read.Body.Bytes(), []byte(`"itemOrder":["exp-1"]`)) {
+		t.Fatalf("GET did not read back canonical item order: status=%d body=%s", read.Code, read.Body)
+	}
+}
+
 func TestCVCommitRejectsLayoutWithoutVisible(t *testing.T) {
 	db := cvRevisionDB(t)
 	f := createCVRevisionFixture(t, db)

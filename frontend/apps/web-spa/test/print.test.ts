@@ -95,3 +95,41 @@ it('SSR /print rejects an upstream envelope whose committed snapshot is invalid'
   expect(response.status).toBe(502)
   expect(await response.text()).toContain('CV không hợp lệ')
 })
+
+it('SSR /print preserves registered fallback fields and print-style markup from the real envelope', async () => {
+  const hiddenHeaderLayout = {
+    ...movedLayout,
+    nodes: movedLayout.nodes.map((node) => node.type === 'header' ? { ...node, visible: false } : node),
+  }
+  const stored = CVSchema.parse({
+    ...cv,
+    sections: {
+      ...cv.sections,
+      intro: { ...cv.sections.intro, website: 'https://ada.example', avatarUrl: 'https://ada.example/avatar.png' },
+      experience: [{ ...cv.sections.experience[0]!, current: true }],
+    },
+    layout: hiddenHeaderLayout,
+  })
+  const actualEnvelope: CVEnvelope = { ...envelope, profileSnapshot: stored, layout: hiddenHeaderLayout }
+  const backend = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ cv: actualEnvelope }))
+  })
+  await new Promise<void>((done) => backend.listen(0, '127.0.0.1', done))
+  servers.push(() => new Promise<void>((done) => backend.close(() => done())))
+  const app = await createApp({ backendURL: `http://127.0.0.1:${(backend.address() as AddressInfo).port}`, serveApp: false })
+  const server = http.createServer(app)
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+  servers.push(() => new Promise<void>((done) => server.close(() => done())))
+
+  const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/print/${cv.id}`)
+  const html = await response.text()
+  expect(response.status).toBe(200)
+  expect(html).toContain('Location: Hà Nội')
+  expect(html).toContain('https://ada.example')
+  expect(html).toContain('data-cv-field="avatarUrl"')
+  expect(html).toContain('Present')
+  expect(html).toContain('class="cv-field-tags"')
+  expect(html).toContain('class="cv-field-tag"')
+  expect(html).toContain('.cv-field-tags')
+})

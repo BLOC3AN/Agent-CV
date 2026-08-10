@@ -52,9 +52,13 @@ function orderedItems<T extends { id: string }>(items: T[], itemOrder?: string[]
 
 function RegisteredValue({ fieldKey, value, label }: { fieldKey: string; value?: string | string[]; label?: string }) {
   const definition = CV_FIELD_CATALOG.find((field) => field.key === fieldKey)
+  if (!definition || value == null || (Array.isArray(value) ? !value.length : !value)) return null
+  const prefix = label ? `${label}: ` : ''
+  if (definition.printStyle === 'tags' && Array.isArray(value)) {
+    return <span className="cv-field-tags" data-cv-field={fieldKey} data-print-style={definition.printStyle}>{prefix}{value.map((text) => <span className="cv-field-tag" key={text}>{text}</span>)}</span>
+  }
   const text = Array.isArray(value) ? value.join(', ') : value
-  if (!definition || !text) return null
-  return <span data-cv-field={fieldKey} data-print-style={definition.printStyle}>{label ? `${label}: ` : ''}{text}</span>
+  return <span className={`cv-field-${definition.printStyle}`} data-cv-field={fieldKey} data-print-style={definition.printStyle}>{prefix}{text}</span>
 }
 
 function RegisteredHighlights({ fieldKey = 'highlights', itemId, values }: { fieldKey?: string; itemId: string; values: string[] }) {
@@ -126,21 +130,24 @@ function renderHeader(context: RenderContext) {
   const { intro } = cv.sections
   if (variant === 'print') {
     return nodeFrame(context, <>
+      {intro.avatarUrl && <img className="cv-avatar" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}
       <h1 className="cv-name">{intro.fullName}</h1>
       <p className="cv-headline">{intro.title}</p>
-      <div className="cv-contact">{intro.email && <span>{intro.email}</span>}{intro.phone && <span>{intro.phone}</span>}{intro.location && <RegisteredValue fieldKey="location" value={intro.location} />}{intro.website && <span>{intro.website}</span>}</div>
+      <div className="cv-contact">{intro.email && <span>{intro.email}</span>}{intro.phone && <span>{intro.phone}</span>}{intro.location && <RegisteredValue fieldKey="location" value={intro.location} />}{intro.website && <span data-cv-field="website">{intro.website}</span>}</div>
       <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>
       {!context.layout.nodes.some((node) => node.type === 'summary' && node.visible) && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}
     </>, 'header')
   }
   return nodeFrame(context, <>
     <div className="absolute top-0 bottom-0 left-[-20mm] w-2.5" style={{ backgroundColor: cv.design.accentColor }} />
+    {intro.avatarUrl && <img className="cv-avatar mb-2" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}
     <h1 className="text-2xl md:text-3xl font-extrabold uppercase tracking-tight text-slate-900">{intro.fullName || 'LE THANH HAI'}</h1>
     <p className="text-base font-bold mt-0.5" style={{ color: cv.design.accentColor }}>{intro.title || 'AI Engineer'}</p>
     <div className="flex flex-wrap items-center gap-x-3 text-xs text-slate-600 mt-2 font-medium">
       <span>{intro.email}</span>
       {intro.phone && <><span>•</span><span>{intro.phone}</span></>}
       {intro.location && <><span>•</span><RegisteredValue fieldKey="location" value={intro.location} /></>}
+      {intro.website && <><span>•</span><span data-cv-field="website">{intro.website}</span></>}
     </div>
     {intro.availability && <p className="mt-1 text-xs text-slate-600"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}
     {!context.layout.nodes.some((node) => node.type === 'summary' && node.visible) && intro.careerObjective && <p className="mt-2 text-xs text-slate-700"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}
@@ -151,16 +158,18 @@ function renderSummary(context: RenderContext) {
   const { cv, variant } = context
   const { intro } = cv.sections
   const fallbackAvailability = !context.layout.nodes.some((node) => node.type === 'header' && node.visible)
-  if (!intro.summary && !intro.careerObjective && !(fallbackAvailability && intro.availability)) return null
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'GIỚI THIỆU')}<p>{intro.summary}</p>{intro.careerObjective && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}</section>)
-  return nodeFrame(context, <div className="mb-6 text-xs text-slate-700 leading-relaxed"><h3 className="font-bold text-xs uppercase tracking-wider mb-1" style={{ color: cv.design.accentColor }}>GIỚI THIỆU BẢN THÂN</h3><p>{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}</div>)
+  const fallbackLocation = !context.layout.nodes.some((node) => node.type === 'header' && node.visible)
+  if (!intro.summary && !intro.careerObjective && !(fallbackAvailability && intro.availability) && !(fallbackLocation && intro.location)) return null
+  const fallbackContact = fallbackLocation && <>{intro.website && <p><span data-cv-field="website">{intro.website}</span></p>}{intro.avatarUrl && <img className="cv-avatar" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}</>
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'GIỚI THIỆU')}<p>{intro.summary}</p>{intro.careerObjective && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</section>)
+  return nodeFrame(context, <div className="mb-6 text-xs text-slate-700 leading-relaxed"><h3 className="font-bold text-xs uppercase tracking-wider mb-1" style={{ color: cv.design.accentColor }}>GIỚI THIỆU BẢN THÂN</h3><p>{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</div>)
 }
 
 function renderExperience(context: RenderContext) {
   const { cv, node, variant } = context
   const items = orderedItems(cv.sections.experience, 'itemOrder' in node ? node.itemOrder : undefined)
   if (!items.length) return null
-  const entries = items.map((item) => <div className="cv-entry space-y-1" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="role" value={item.title} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="company" value={item.company} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div><div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" /></div><RegisteredHighlights itemId={item.id} values={item.highlights} /></div>)
+  const entries = items.map((item) => <div className="cv-entry space-y-1" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="role" value={item.title} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="company" value={item.company} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.current ? 'Present' : item.endDate].filter(Boolean).join(' – ')} /></span></div><div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" /></div><RegisteredHighlights itemId={item.id} values={item.highlights} /></div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'KINH NGHIỆM')}<div>{entries}</div></section>)
   return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.experience!)}<div className="space-y-4">{entries}</div></div>)
 }

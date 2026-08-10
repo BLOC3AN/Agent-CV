@@ -155,7 +155,7 @@ describe('catalog-driven inline CV editing', () => {
     fireEvent.change(screen.getByLabelText('End time'), { target: { value: '2026-01' } })
     fireEvent.change(screen.getByLabelText('Tech stack'), { target: { value: 'React, TypeScript' } })
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter', ctrlKey: true })
-    expect(screen.getByText('2025-01 – 2026-01')).toBeInTheDocument()
+    expect(screen.getByTestId('cv-block-experience').querySelector('[data-cv-field="time"]')).toHaveTextContent('2025-01 – Present')
 
     openProjectItem()
     fireEvent.click(screen.getByRole('button', { name: 'Thêm Contribution' }))

@@ -52,7 +52,7 @@ export const IntroSectionSchema = z.object({
  */
 export const ExperienceItemSchema = z
   .object({
-    id: z.string(),
+    id: z.string().min(1),
     title: z.string(),
     company: z.string(),
     startDate: z.string().default(''),
@@ -66,7 +66,7 @@ export const ExperienceItemSchema = z
 
 export const ProjectItemSchema = z
   .object({
-    id: z.string(),
+    id: z.string().min(1),
     name: z.string(),
     role: z.string().default(''),
     startDate: z.string().default(''),
@@ -81,7 +81,7 @@ export const ProjectItemSchema = z
 
 export const EducationItemSchema = z
   .object({
-    id: z.string(),
+    id: z.string().min(1),
     school: z.string(),
     degree: z.string().default(''),
     fieldOfStudy: z.string().default(''),
@@ -95,7 +95,7 @@ export const EducationItemSchema = z
 /** `skills` v2 gom theo nhóm: một dòng là một mảng kỹ năng cùng category (UC-57). */
 export const SkillItemSchema = z
   .object({
-    id: z.string(),
+    id: z.string().min(1),
     category: z.string(),
     skills: z.array(z.string()).default([]),
   })
@@ -103,7 +103,7 @@ export const SkillItemSchema = z
 
 export const ActivityItemSchema = z
   .object({
-    id: z.string(),
+    id: z.string().min(1),
     organization: z.string(),
     role: z.string().default(''),
     startDate: z.string().default(''),
@@ -114,7 +114,7 @@ export const ActivityItemSchema = z
 
 export const CertificationItemSchema = z
   .object({
-    id: z.string(),
+    id: z.string().min(1),
     name: z.string(),
     issuer: z.string().default(''),
     date: z.string().default(''),
@@ -124,7 +124,7 @@ export const CertificationItemSchema = z
 
 export const LanguageItemSchema = z
   .object({
-    id: z.string(),
+    id: z.string().min(1),
     language: z.string(),
     proficiency: z.string().default(''),
   })
