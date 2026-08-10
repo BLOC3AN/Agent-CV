@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CV, CVDesign, CVLayout } from '../types';
+import { CV, CVDesign, CVLayout, LayoutNode } from '../types';
 import {
   Edit2,
   X,
@@ -9,6 +9,8 @@ import { PaginatedA4Document } from './PaginatedA4Document';
 import { ComponentTree } from './ComponentTree';
 import { CVBlockRenderer } from './CVBlockRenderer';
 import { hasDefaultNodeOrder, materializeItemOrder, moveItem, moveNode, normalizeLayout, resetDefaultLayout, setNodeVisible } from '../lib/layout-draft';
+import { CV_FIELDS } from '../lib/cv-fields';
+import { InlineCVEditor } from './InlineCVEditor';
 
 interface CVEditorViewProps {
   cv: CV;
@@ -30,6 +32,7 @@ interface CVEditorViewProps {
  * kiểu này để SP-3/SP-4 nối chat vào không phải đổi type lần nữa.
  */
 type BulletSection = 'experience' | 'projects' | 'activities';
+type InlineTarget = { node: LayoutNode; itemId?: string };
 
 function mapHighlights(
   cv: CV,
@@ -68,6 +71,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   // Navigation & Edit state
   const [activeTab, setActiveTab] = useState<'SECTIONS' | 'DESIGN'>('SECTIONS');
   const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [inlineTarget, setInlineTarget] = useState<InlineTarget | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -76,6 +80,13 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const editNode = (nodeId: string) => {
     const section = nodeId === 'header' || nodeId === 'summary' ? 'intro' : nodeId;
     if (section !== 'footer') setEditingSection(section);
+  };
+
+  const openInlineEditor = (nodeId: string, itemId?: string) => {
+    const node = layout.nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    setSelectedNodeId(node.id);
+    setInlineTarget({ node, itemId });
   };
 
   const itemIdsFor = (nodeId: string): string[] => {
@@ -159,6 +170,8 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
             Thiết kế (Design)
           </button>
         </div>
+
+        {dirty && <p role="status" className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">Bản nháp chưa lưu</p>}
 
         {(onSave || onDiscard) && (
           <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
@@ -277,9 +290,19 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                   onMoveItem={(nodeId, itemId, beforeItemId) => updateLayout(moveItem(materializeItemOrder(layout, nodeId, itemIdsFor(nodeId)), nodeId, itemId, beforeItemId))}
                   onSetNodeVisible={(nodeId, visible) => updateLayout(setNodeVisible(layout, nodeId, visible))}
                   onSelect={(nodeId) => setSelectedNodeId(nodeId)}
-                  onEdit={(nodeId) => editNode(nodeId)}
+                  onEdit={openInlineEditor}
                 />
               </section>
+
+              {inlineTarget && <InlineCVEditor
+                key={`${inlineTarget.node.id}:${inlineTarget.itemId ?? 'node'}`}
+                node={inlineTarget.node}
+                item={inlineTarget.itemId ? { id: inlineTarget.itemId } : undefined}
+                fieldDefinitions={CV_FIELDS}
+                draft={cv}
+                onDraftChange={onUpdateCV}
+                onClose={() => setInlineTarget(null)}
+              />}
 
               {/* Inline Form Editor Drawer for Selected Section */}
               {editingSection && (
@@ -584,7 +607,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
             lineHeight: cv.design.spacing === 'condensed' ? '1.4' : cv.design.spacing === 'wide' ? '1.8' : '1.6',
           }}
         >
-          <CVBlockRenderer cv={cv} layout={layout} variant="editor" onSelect={setSelectedNodeId} onEdit={editNode} />
+          <CVBlockRenderer cv={cv} layout={layout} variant="editor" onSelect={setSelectedNodeId} onEdit={openInlineEditor} />
         </PaginatedA4Document>
       </div>
 

@@ -68,8 +68,14 @@ function sectionHeading(context: RenderContext, title: string) {
 function interactiveProps(context: RenderContext, itemId?: string): React.HTMLAttributes<HTMLElement> {
   const { node, onEdit, onSelect } = context
   return {
-    onClick: onSelect ? () => onSelect(node.id, itemId) : undefined,
-    onDoubleClick: onEdit ? () => onEdit(node.id, itemId) : undefined,
+    onClick: onSelect ? (event) => {
+      if (itemId) event.stopPropagation()
+      onSelect(node.id, itemId)
+    } : undefined,
+    onDoubleClick: onEdit ? (event) => {
+      if (itemId) event.stopPropagation()
+      onEdit(node.id, itemId)
+    } : undefined,
   }
 }
 
