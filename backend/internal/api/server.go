@@ -330,9 +330,14 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 		// Lỗi truy vấn (kể cả không tìm thấy hàng) coi như "chưa có v2" và để
 		// cvSnapshotForResponse quyết định — hàm đó là nơi duy nhất biết cách
 		// dịch "rỗng" thành lỗi phân biệt được.
+		// AND p.user_id = $2 là phòng thủ có chủ đích, không phải điều kiện thừa:
+		// cv_documents.user_id == profiles.user_id (qua profile_id) là bất biến ở
+		// tầng ứng dụng, KHÔNG có ràng buộc DB nào ép nó (xem 001_core.sql).
+		// exportCV đã không tin bất biến này (kiểm tra cả p.user_id); nhánh v2
+		// đọc nguyên hồ sơ CV nên phải cẩn trọng như vậy, không được kém hơn.
 		if err := s.db.QueryRowContext(r.Context(),
 			`SELECT p.data_v2 FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
-			 WHERE c.id = $1 AND c.user_id = $2`, id, userID).Scan(&v2Raw); err != nil {
+			 WHERE c.id = $1 AND c.user_id = $2 AND p.user_id = $2`, id, userID).Scan(&v2Raw); err != nil {
 			v2Raw = nil
 		}
 	}
