@@ -194,6 +194,7 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	}
 	profile := profileFromSegments(lang, seg.Merged)
 	profile["basics"] = basics
+	profile = importedCV(profile, j.ID)
 	raw := jsonString(profile)
 	var profileID string
 	if err := db.QueryRowContext(ctx, `INSERT INTO profiles(user_id,data,language) VALUES($1,$2::jsonb,$3) RETURNING id`, j.UserID, raw, lang).Scan(&profileID); err != nil {
@@ -236,6 +237,99 @@ func profileFromSegments(language string, merged map[string]string) map[string]a
 	p["skills"] = parseSkills(merged["skills"])
 	p["certifications"] = parseCertifications(merged["certifications"])
 	return p
+}
+
+// importedCV is the parser boundary after the SP-5 cutover. The PDF segmenter
+// deliberately produces a small v1-shaped intermediate because its parsing
+// helpers are section-oriented; nothing v1-shaped is persisted anymore.
+func importedCV(profile map[string]any, id string) map[string]any {
+	basics, _ := profile["basics"].(map[string]any)
+	text := func(key string) string { value, _ := basics[key].(string); return value }
+	name := text("name")
+	if name == "" {
+		name = "Chưa rõ tên"
+	}
+	sections := map[string]any{
+		"intro": map[string]any{
+			"fullName": name, "title": text("headline"), "email": text("email"),
+			"phone": text("phone"), "location": text("location"), "summary": text("introduce"),
+		},
+		"experience":     importedExperience(profile["work"]),
+		"projects":       []any{},
+		"education":      importedEducation(profile["education"]),
+		"skills":         importedSkills(profile["skills"]),
+		"activities":     importedActivities(profile["activities"]),
+		"certifications": importedCertifications(profile["certifications"]),
+		"languages":      []any{},
+	}
+	return map[string]any{
+		"schemaVersion": 2, "id": id, "title": name,
+		"lastModified": time.Now().UTC().Format(time.RFC3339),
+		"language":     profile["language"], "sections": sections,
+		"design":         map[string]any{"template": "modern", "accentColor": "#4F46E5", "font": "Roboto", "fontSize": 14, "spacing": "normal"},
+		"activeSections": map[string]any{"intro": true, "experience": true, "projects": true, "education": true, "skills": true, "activities": true, "certifications": true, "languages": true},
+		"_meta":          map[string]any{"source": "pdf_import", "verified": map[string]any{}},
+	}
+}
+
+func importedExperience(raw any) []any {
+	items, _ := raw.([]any)
+	out := make([]any, 0, len(items))
+	for i, value := range items {
+		item, _ := value.(map[string]any)
+		out = append(out, map[string]any{"id": fmt.Sprintf("experience-%d", i), "title": item["role"], "company": item["org"], "startDate": item["startDate"], "endDate": item["endDate"], "current": false, "highlights": item["highlights"]})
+	}
+	return out
+}
+
+func importedEducation(raw any) []any {
+	items, _ := raw.([]any)
+	out := make([]any, 0, len(items))
+	for i, value := range items {
+		item, _ := value.(map[string]any)
+		entry := map[string]any{"id": fmt.Sprintf("education-%d", i), "school": item["school"], "degree": item["degree"], "fieldOfStudy": "", "startDate": "", "endDate": "", "highlights": item["highlights"]}
+		if gpa, ok := item["gpa"].(string); ok && gpa != "" {
+			entry["gpa"] = gpa
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func importedSkills(raw any) []any {
+	items, _ := raw.([]any)
+	names := make([]any, 0, len(items))
+	for _, value := range items {
+		if item, ok := value.(map[string]any); ok {
+			if name, ok := item["name"].(string); ok && name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	if len(names) == 0 {
+		return []any{}
+	}
+	return []any{map[string]any{"id": "skills-0", "category": "Skills", "skills": names}}
+}
+
+func importedActivities(raw any) []any {
+	items, _ := raw.([]any)
+	out := make([]any, 0, len(items))
+	for i, value := range items {
+		item, _ := value.(map[string]any)
+		out = append(out, map[string]any{"id": fmt.Sprintf("activity-%d", i), "organization": item["name"], "role": "", "startDate": "", "endDate": "", "highlights": item["highlights"]})
+	}
+	return out
+}
+
+func importedCertifications(raw any) []any {
+	items, _ := raw.([]any)
+	out := make([]any, 0, len(items))
+	for i, value := range items {
+		item, _ := value.(map[string]any)
+		out = append(out, map[string]any{"id": fmt.Sprintf("certification-%d", i), "name": item["name"], "issuer": "", "date": ""})
+	}
+	return out
 }
 
 func cleanLines(raw string) []string {

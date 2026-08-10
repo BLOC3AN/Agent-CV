@@ -189,7 +189,21 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(body.Phone) != "" {
 		basics["phone"] = strings.TrimSpace(body.Phone)
 	}
-	profile := map[string]any{"schemaVersion": 1, "language": body.Language, "basics": basics, "_meta": map[string]any{"source": "manual", "verified": map[string]any{}}}
+	profile := map[string]any{
+		"schemaVersion": 2,
+		"id":            newID(),
+		"title":         strings.TrimSpace(body.Name),
+		"lastModified":  time.Now().UTC().Format(time.RFC3339),
+		"language":      body.Language,
+		"sections": map[string]any{
+			"intro": basics, "experience": []any{}, "projects": []any{},
+			"education": []any{}, "skills": []any{}, "activities": []any{},
+			"certifications": []any{}, "languages": []any{},
+		},
+		"design":         map[string]any{"template": "modern", "accentColor": "#4F46E5", "font": "Roboto", "fontSize": 14, "spacing": "normal"},
+		"activeSections": map[string]any{"intro": true, "experience": true, "projects": true, "education": true, "skills": true, "activities": true, "certifications": true, "languages": true},
+		"_meta":          map[string]any{"source": "manual", "verified": map[string]any{}},
+	}
 	profileJSON := jsonString(profile)
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
