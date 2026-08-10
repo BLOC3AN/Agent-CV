@@ -277,9 +277,14 @@ func importedExperience(raw any) []any {
 	out := make([]any, 0, len(items))
 	for i, value := range items {
 		item, _ := value.(map[string]any)
-		out = append(out, map[string]any{"id": fmt.Sprintf("experience-%d", i), "title": item["role"], "company": item["org"], "startDate": item["startDate"], "endDate": item["endDate"], "current": false, "highlights": item["highlights"]})
+		out = append(out, map[string]any{"id": fmt.Sprintf("experience-%d", i), "title": stringOrEmpty(item["role"]), "company": stringOrEmpty(item["org"]), "startDate": stringOrEmpty(item["startDate"]), "endDate": stringOrEmpty(item["endDate"]), "current": false, "highlights": item["highlights"]})
 	}
 	return out
+}
+
+func stringOrEmpty(value any) string {
+	text, _ := value.(string)
+	return text
 }
 
 func importedEducation(raw any) []any {
