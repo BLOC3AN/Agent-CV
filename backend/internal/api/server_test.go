@@ -418,6 +418,70 @@ func TestCVListRouteAcceptsSchemaHeader(t *testing.T) {
 	}
 }
 
+// Cặp không hợp lệ phải bị từ chối TRƯỚC khi chạm DB. Ghi được một nửa nghĩa
+// là data và data_v2 nói hai chuyện khác nhau về cùng một CV, và không ai
+// biết bên nào đúng. NewServer() không có DB: nếu chốt chặn nằm sau bước
+// chạm DB (hoặc sau chốt "s.db == nil" ở cvRoute) thì test này nhận 503 —
+// đúng ý đồ, nó ép chốt chặn phải nằm trước cả bước đó.
+func TestPatchCVV2RejectsMismatchedPair(t *testing.T) {
+	cases := []struct{ body, why string }{
+		{`{"cv":{"schemaVersion":2},"profile":{"schemaVersion":2}}`, "profile phải là v1"},
+		{`{"cv":{"schemaVersion":1},"profile":{"schemaVersion":1}}`, "cv phải là v2"},
+		{`{"cv":{"schemaVersion":2}}`, "thiếu hẳn profile"},
+		{`{"profile":{"schemaVersion":1}}`, "thiếu hẳn cv"},
+	}
+	for _, tc := range cases {
+		r := httptest.NewRequest(http.MethodPatch,
+			"/api/cv/00000000-0000-0000-0000-000000000000", strings.NewReader(tc.body))
+		r.Header.Set(SchemaVersionHeader, "2")
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		NewServer().Routes().ServeHTTP(w, r)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, muốn 400", tc.why, w.Code)
+		}
+		var body map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s: response không phải JSON: %v", tc.why, err)
+		}
+		if body["code"] != "SCHEMA_PAIR_INVALID" {
+			t.Fatalf("%s: code = %q, muốn SCHEMA_PAIR_INVALID", tc.why, body["code"])
+		}
+	}
+}
+
+// Không có header thì hành vi PATCH /api/cv/:id phải y hệt trước khi có
+// Task 3: NewServer() không DB vẫn phải trả 503 ở chốt "s.db == nil" của
+// cvRoute như cũ, không phải 400 — vì thân bài không phải cặp v1/v2 nên
+// nhánh mới không được chạy.
+func TestPatchCVWithoutHeaderStaysServiceUnavailable(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPatch,
+		"/api/cv/00000000-0000-0000-0000-000000000000", strings.NewReader(`{"title":"x"}`))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	NewServer().Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, muốn %d khi chưa có PostgreSQL", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+// Một cặp ĐÚNG định dạng (schemaVersion khớp) nhưng không có DB phải rơi
+// đúng vào chốt "CV cần PostgreSQL" — 503, không phải 400. Điều này chứng
+// minh chốt chặn cặp chạy TRƯỚC chốt DB (không nuốt luôn trường hợp DB sống)
+// và không nhầm valid pair thành invalid.
+func TestPatchCVV2ValidPairWithoutDBIsServiceUnavailable(t *testing.T) {
+	body := `{"cv":{"schemaVersion":2,"sections":{}},"profile":{"schemaVersion":1,"basics":{"name":"Ada"}}}`
+	r := httptest.NewRequest(http.MethodPatch,
+		"/api/cv/00000000-0000-0000-0000-000000000000", strings.NewReader(body))
+	r.Header.Set(SchemaVersionHeader, "2")
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	NewServer().Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, muốn %d — cặp hợp lệ nhưng chưa có PostgreSQL", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
 func TestAuthSessionReportsAnonymousWithoutCookie(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
 	w := httptest.NewRecorder()

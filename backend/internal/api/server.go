@@ -217,11 +217,40 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/cv/"), "/")
+
+	// Chốt chặn cặp v1/v2 phải chạy TRƯỚC "s.db == nil" ở dưới, không chỉ
+	// trước truy vấn DB thật: server không dựng lại được cặp lệch (bộ chuyển
+	// đổi là TypeScript, cv-migrate.ts), nên đây là phòng thủ duy nhất còn
+	// lại. Nếu chốt "cần PostgreSQL" chạy trước, một cặp lệch tới lúc DB đang
+	// down sẽ nhận 503 thay vì 400 — sai nghĩa lỗi, và test dựng server không
+	// DB (đúng ý đồ: nó không nên cần DB để phát hiện lỗi input) sẽ không
+	// bao giờ thấy 400. Chỉ đọc body khi PATCH + có header: mọi request khác
+	// (kể cả PATCH không header) không chạm nhánh này, giữ y hệt hành vi cũ.
+	var cvV2, profileV1 json.RawMessage
+	if r.Method == http.MethodPatch && wantsV2(r) {
+		var body struct {
+			CV      json.RawMessage `json:"cv"`
+			Profile json.RawMessage `json:"profile"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+			return
+		}
+		if err := validateCVPair(body.CV, body.Profile); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "Cần cả hai biểu diễn: cv là schemaVersion 2 và profile là schemaVersion 1",
+				"code":  "SCHEMA_PAIR_INVALID",
+			})
+			return
+		}
+		cvV2, profileV1 = body.CV, body.Profile
+	}
+
 	if s.db == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV cần PostgreSQL"})
 		return
 	}
-	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/cv/"), "/")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
 		return
@@ -234,7 +263,11 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		s.getCV(w, r, id)
 	case http.MethodPatch:
-		s.patchCV(w, r, id)
+		if cvV2 != nil {
+			s.patchCVPair(w, r, id, cvV2, profileV1)
+		} else {
+			s.patchCV(w, r, id)
+		}
 	case http.MethodDelete:
 		s.deleteCV(w, r, id)
 	default:
@@ -421,6 +454,61 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	s.getCV(w, r, cvID)
+}
+
+// patchCVPair ghi CV v2 và hồ sơ v1 trong MỘT transaction. cvV2 và profileV1
+// đã được validateCVPair() (gọi từ cvRoute) xác nhận đúng schemaVersion —
+// hàm này không kiểm lại, chỉ ghi.
+//
+// Ghi được một nửa là trạng thái tệ nhất: data và data_v2 mô tả cùng một CV
+// theo hai cách khác nhau, không cột nào tự nhận là sai, và lần đọc sau trả
+// kết quả nào tuỳ theo client gửi header gì (xem cvSnapshotForResponse ở
+// cv_snapshot.go).
+func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, cvV2, profileV1 json.RawMessage) {
+	userID := s.currentUserID(r)
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		return
+	}
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// AND p.user_id = $2 là phòng thủ có chủ đích, không phải điều kiện thừa
+	// — cùng mức cẩn trọng exportCV và nhánh đọc v2 của getCV (Task 2) đã
+	// dùng: cv_documents.user_id == profiles.user_id (qua profile_id) là bất
+	// biến ở tầng ứng dụng, KHÔNG có ràng buộc DB nào ép nó (xem 001_core.sql).
+	// Đây là đường GHI, nên còn quan trọng hơn đường đọc.
+	var profileID string
+	if err := tx.QueryRowContext(r.Context(),
+		`SELECT c.profile_id FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
+		 WHERE c.id = $1 AND c.user_id = $2 AND p.user_id = $2`, id, userID).Scan(&profileID); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE profiles SET data=$2::jsonb, data_v2=$3::jsonb, updated_at=now() WHERE id=$1 AND user_id=$4`,
+		profileID, string(profileV1), string(cvV2), userID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không ghi được hồ sơ"})
+		return
+	}
+	// profile_snapshot giữ dạng v1: apps/web đọc thẳng cột này và phục vụ
+	// production tới lúc cutover SP-5. cv_documents.snapshot_v2 KHÔNG được
+	// đụng tới ở đây — SP-2 cố tình để trống, backfill nó là việc khác.
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE cv_documents SET profile_snapshot=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3`,
+		id, string(profileV1), userID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không ghi được CV"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) deleteCV(w http.ResponseWriter, r *http.Request, id string) {
