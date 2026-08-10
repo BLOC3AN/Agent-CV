@@ -138,6 +138,19 @@ func TestProfileFromSegmentsKeepsCVSections(t *testing.T) {
 	}
 }
 
+func TestParsedSectionsUseEmptyArraysInsteadOfNullHighlights(t *testing.T) {
+	education := parseEducation("EDUCATION\nHCMUTE\nGPA: 8.0")
+	eduItem := education[0].(map[string]any)
+	if eduItem["highlights"] == nil {
+		t.Fatal("education highlights must be [] rather than null")
+	}
+	activities := parseActivities("ACTIVITIES\n2026 – Neura Agent\nLead")
+	activity := activities[0].(map[string]any)
+	if activity["highlights"] == nil {
+		t.Fatal("activity highlights must be [] rather than null")
+	}
+}
+
 func TestMatchingUsesTaxonomyDescendantsAndIntroduce(t *testing.T) {
 	testKBRoot(t)
 	tax := loadSkillTaxonomy()
@@ -178,6 +191,34 @@ func TestRubricParityScoresAutomaticCriteriaAndGaps(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected action verb gap, got %#v", gaps)
+	}
+}
+
+func TestRubricScoreIsShapeIndependent(t *testing.T) {
+	testKBRoot(t)
+	v1 := map[string]any{
+		"basics":    map[string]any{"introduce": "Backend engineer", "email": "a@example.com", "phone": "0900000000"},
+		"work":      []any{map[string]any{"role": "Engineer", "org": "FPT", "startDate": "2022", "endDate": "2024", "highlights": []any{"Built API for 2k users"}}},
+		"projects":  []any{map[string]any{"highlights": []any{"Built service for 100 users"}}, map[string]any{"highlights": []any{"Designed Go API"}}},
+		"education": []any{}, "activities": []any{}, "skills": []any{},
+	}
+	v2 := map[string]any{
+		"schemaVersion": float64(2),
+		"sections": map[string]any{
+			"intro":      map[string]any{"summary": "Backend engineer", "email": "a@example.com", "phone": "0900000000"},
+			"experience": []any{map[string]any{"title": "Engineer", "company": "FPT", "startDate": "2022", "endDate": "2024", "highlights": []any{"Built API for 2k users"}}},
+			"projects":   []any{map[string]any{"highlights": []any{"Built service for 100 users"}}, map[string]any{"highlights": []any{"Designed Go API"}}},
+			"education":  []any{}, "activities": []any{}, "skills": []any{},
+		},
+	}
+	jd := jdRequirements{RoleFamily: "backend_developer", Seniority: "fresher"}
+	s1, _ := scoreProfileRubric(v1, jd)
+	s2, _ := scoreProfileRubric(v2, jd)
+	if s1 != s2 {
+		t.Fatalf("rubric score v1=%v v2=%v — cùng nội dung phải cùng điểm", s1, s2)
+	}
+	if got1, got2 := estimateProfileYears(v1), estimateProfileYears(v2); got1 != got2 {
+		t.Fatalf("experience years v1=%v v2=%v — cùng nội dung phải cùng số năm", got1, got2)
 	}
 }
 

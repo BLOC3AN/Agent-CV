@@ -469,6 +469,7 @@ func minInt(a, b int) int {
 
 func richMatchScore(ctx context.Context, profile, rawJD string) (map[string]any, []map[string]any, []map[string]any) {
 	chunks, p := profileChunks(profile)
+	legacy := legacyProfile(p)
 	tax := loadSkillTaxonomy()
 	jd := parseJDRequirements(ctx, rawJD)
 	index := map[string][]profileChunk{}
@@ -537,12 +538,12 @@ func richMatchScore(ctx context.Context, profile, rawJD string) (map[string]any,
 			}
 		}
 	}
-	experience := estimateProfileYears(p)
+	experience := estimateProfileYears(legacy)
 	if jd.YearsRequired != nil && *jd.YearsRequired > 0 {
 		experience = minFloat(100, experience/(*jd.YearsRequired)*100)
 	}
 	education := 0.0
-	items, _ := p["education"].([]any)
+	items, _ := legacy["education"].([]any)
 	if len(items) > 0 {
 		education = 100
 	}
@@ -560,7 +561,7 @@ func richMatchScore(ctx context.Context, profile, rawJD string) (map[string]any,
 			}
 		}
 	}
-	rubric, rubricGaps := scoreProfileRubric(p, jd)
+	rubric, rubricGaps := scoreProfileRubric(legacy, jd)
 	gaps = append(gaps, rubricGaps...)
 	breakdown := map[string]any{"skills": int(keyword), "experience": int(experience), "education": int(education), "keywords": int(atsScoreFloat(atsScore)), "rubric": int(rubric)}
 	score := map[string]any{"overall": int(combineMatchBreakdown(breakdown, atsScore != nil)), "breakdown": breakdown, "missingAtsKeywords": atsMissing, "degradedReason": "Semantic/model layer chưa bật trong Go worker"}
@@ -592,6 +593,7 @@ func atsScoreFloat(v any) float64 {
 	return 0
 }
 func estimateProfileYears(p map[string]any) float64 {
+	p = legacyProfile(p)
 	years := map[int]bool{}
 	now := time.Now().Year()
 	items, _ := p["work"].([]any)
@@ -616,6 +618,51 @@ func estimateProfileYears(p map[string]any) float64 {
 		}
 	}
 	return float64(len(years))
+}
+
+// legacyProfile normalises CV v2 to the small v1-shaped view consumed by the
+// older rubric helpers. The matching chunks remain v2-native; this adapter is
+// deliberately local to the numeric scoring path so both schemas produce the
+// same score during SP-2→SP-5 coexistence.
+func legacyProfile(p map[string]any) map[string]any {
+	if _, ok := p["sections"].(map[string]any); !ok {
+		return p
+	}
+	sections, _ := p["sections"].(map[string]any)
+	intro, _ := sections["intro"].(map[string]any)
+	out := map[string]any{
+		"basics": map[string]any{
+			"name": stringValue(intro["fullName"]), "headline": stringValue(intro["title"]),
+			"introduce": stringValue(intro["summary"]), "email": stringValue(intro["email"]),
+			"phone": stringValue(intro["phone"]), "location": stringValue(intro["location"]),
+		},
+	}
+	if meta, ok := p["_meta"].(map[string]any); ok {
+		if links, ok := meta["originalLinks"].([]any); ok {
+			out["basics"].(map[string]any)["links"] = links
+		}
+	}
+	copyItems := func(key string, transform func(map[string]any) map[string]any) []any {
+		raw, _ := sections[key].([]any)
+		items := make([]any, 0, len(raw))
+		for _, value := range raw {
+			if item, ok := value.(map[string]any); ok {
+				items = append(items, transform(item))
+			}
+		}
+		return items
+	}
+	identity := func(item map[string]any) map[string]any { return item }
+	out["work"] = copyItems("experience", func(item map[string]any) map[string]any {
+		return map[string]any{"role": item["title"], "org": item["company"], "startDate": item["startDate"], "endDate": item["endDate"], "highlights": item["highlights"]}
+	})
+	out["projects"] = copyItems("projects", identity)
+	out["education"] = copyItems("education", func(item map[string]any) map[string]any {
+		return map[string]any{"school": item["school"], "degree": item["degree"], "major": item["fieldOfStudy"], "highlights": item["highlights"]}
+	})
+	out["activities"] = copyItems("activities", identity)
+	out["skills"] = sections["skills"]
+	return out
 }
 
 type rubricFile struct {
@@ -676,6 +723,7 @@ func selectRubric(rubrics []rubricDefinition, jd jdRequirements) *rubricDefiniti
 }
 
 func allHighlights(p map[string]any) []string {
+	p = legacyProfile(p)
 	var out []string
 	for _, key := range []string{"work", "projects", "education", "activities"} {
 		items, _ := p[key].([]any)
@@ -699,6 +747,7 @@ func startsAction(s string) bool {
 }
 
 func estimatePages(p map[string]any) int {
+	p = legacyProfile(p)
 	b, _ := p["basics"].(map[string]any)
 	chars := len(stringValue(b["introduce"]))
 	for _, h := range allHighlights(p) {
@@ -719,6 +768,7 @@ func estimatePages(p map[string]any) int {
 }
 
 func hasProfileField(p map[string]any, field string) bool {
+	p = legacyProfile(p)
 	if strings.HasPrefix(field, "basics.links[") {
 		want := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(field, "basics.links[?(@.label=='"), "')]"))
 		b, _ := p["basics"].(map[string]any)
@@ -744,6 +794,7 @@ func hasProfileField(p map[string]any, field string) bool {
 }
 
 func scoreProfileRubric(p map[string]any, jd jdRequirements) (float64, []map[string]any) {
+	p = legacyProfile(p)
 	r := selectRubric(loadRubrics(), jd)
 	if r == nil {
 		return 0, nil

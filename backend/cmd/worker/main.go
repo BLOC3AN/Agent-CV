@@ -272,7 +272,7 @@ func parseEducation(raw string) []any {
 		return []any{}
 	}
 	item := map[string]any{"school": lines[0], "degree": "", "highlights": []any{}}
-	var highlights []any
+	highlights := []any{}
 	for _, line := range lines[1:] {
 		clean := stripBullet(line)
 		lower := strings.ToLower(clean)
@@ -356,7 +356,7 @@ func parseActivities(raw string) []any {
 	}
 	result := []any{}
 	var current map[string]any
-	var highlights []any
+	highlights := []any{}
 	flush := func() {
 		if current != nil {
 			current["highlights"] = highlights
