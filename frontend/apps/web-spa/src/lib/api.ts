@@ -126,6 +126,7 @@ export async function deleteCV(id: string): Promise<void> {
  */
 export interface CVEnvelope {
   id: string
+  profileId: string
   title: string
   templateId: string
   theme: unknown
@@ -134,6 +135,120 @@ export interface CVEnvelope {
   updatedAt: string
   profileSnapshot: CV
   schemaVersion: 2
+}
+
+export interface ChatOp {
+  op: 'add' | 'replace' | 'remove'
+  path: string
+  value?: unknown
+  rationale: string
+  grounding: { type: string; ref: string }
+  kbRefs?: string[]
+}
+
+export interface ClarifyRequest {
+  reason: string
+  targetPath: string | null
+  questions: { id: string; question: string; placeholder?: string }[]
+}
+
+export type ChatResult =
+  | { kind: 'reply'; text: string }
+  | { kind: 'clarify'; request: ClarifyRequest }
+  | { kind: 'patch'; proposalId: string; summary: string; ops: ChatOp[]; rejected: { path: string; reason: string }[] }
+  | { kind: 'error'; code?: string; message: string; detail?: string; requestId?: string }
+
+export async function readSSE(
+  body: ReadableStream<Uint8Array>,
+  onStep: (label: string) => void,
+): Promise<Record<string, unknown> | null> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: Record<string, unknown> | null = null
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop() ?? ''
+    for (const part of parts) {
+      const event = /^event:\s*(.+)$/m.exec(part)?.[1]?.trim()
+      const raw = /^data:\s*([\s\S]+)$/m.exec(part)?.[1]
+      if (!event || !raw) continue
+      try {
+        const data = JSON.parse(raw) as Record<string, unknown>
+        if (event === 'step') onStep(String(data.label ?? ''))
+        if (event === 'result') result = data
+      } catch { /* ignore malformed frame */ }
+    }
+  }
+  return result
+}
+
+export async function sendChat(
+  profileId: string,
+  message: string,
+  answers: { question: string; answer: string }[] = [],
+  modelRef = 'local.reasoner',
+  hint?: string,
+  signal?: AbortSignal,
+  onStep: (label: string) => void = () => {},
+): Promise<ChatResult> {
+  const headers = new Headers({ 'content-type': 'application/json', 'X-CV-Schema': '2' })
+  const res = await fetch('/api/chat', {
+    method: 'POST', credentials: 'include', signal, headers,
+    body: JSON.stringify({ profileId, message, answers, modelRef, ...(hint ? { hint } : {}) }),
+  })
+  if (!res.ok) throw new ApiError(res.status, ((await res.json().catch(() => null)) as { error?: string })?.error ?? 'Không gửi được tin nhắn')
+  if (!res.body) throw new ApiError(0, 'Máy chủ không mở được luồng trả lời')
+  const result = await readSSE(res.body, onStep)
+  if (!result) throw new ApiError(0, 'Máy chủ đóng kết nối giữa chừng')
+  return result as unknown as ChatResult
+}
+
+export async function settleChatProposal(proposalId: string, profileId: string, accept: number[]) {
+  return request<{ applied: number; status: string; profile?: unknown }>(`/api/chat/proposals/${encodeURIComponent(proposalId)}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profileId, accept }),
+  })
+}
+
+export interface AnalyzeReport {
+  ready: boolean
+  overall?: number
+  breakdown?: Record<string, number>
+  matched?: unknown[]
+  gaps?: { id: string; requirement: string; severity: string; reason: string; advice: string | null; kbRefs: string[] }[]
+  missingAtsKeywords?: string[]
+  degraded?: boolean
+  degradedReason?: string | null
+  advicePending?: number
+  jd?: { id: string; title: string | null; seniority: string | null }
+}
+
+export async function startAnalyze(input: { cvId: string; jdText: string; language?: 'vi' | 'en' }) {
+  return request<{ jobId: string; cvId: string; jdId: string; queued: boolean }>('/api/analyze', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+  })
+}
+
+export async function getAnalyze(cvId: string): Promise<AnalyzeReport> {
+  return request<AnalyzeReport>(`/api/analyze/${encodeURIComponent(cvId)}`)
+}
+
+export interface Citation {
+  chunkId: string
+  text?: string
+  authorName: string
+  authorTitle?: string
+  excerpt: string
+}
+
+export async function getCitations(chunkIds: string[]): Promise<Citation[]> {
+  const body = await request<{ citations: Citation[] }>('/api/kb/citations', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chunkIds }),
+  })
+  return body.citations ?? []
 }
 
 export async function getCV(id: string): Promise<CVEnvelope> {

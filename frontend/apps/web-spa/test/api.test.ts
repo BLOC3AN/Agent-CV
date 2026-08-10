@@ -13,7 +13,9 @@ import {
   listCVs,
   patchProfile,
   requestLogin,
+  readSSE,
   saveCV,
+  sendChat,
   uploadCV,
   verifyProfile,
 } from '../src/lib/api.js'
@@ -180,6 +182,31 @@ describe('saveCV', () => {
     mockFetch(400, { error: '...', code: 'SCHEMA_PAIR_INVALID' })
 
     await expect(saveCV('cv-1', sampleCV)).rejects.toThrow(/định dạng/i)
+  })
+})
+
+describe('chat SSE', () => {
+  it('đọc step và result từ các frame SSE bị chia nhỏ', async () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: step\ndata: {"label":"Đang hiểu"}\n\n'))
+        controller.enqueue(encoder.encode('event: result\ndata: {"kind":"reply","text":"Xin chào"}\n\n'))
+        controller.close()
+      },
+    })
+    const steps: string[] = []
+    await expect(readSSE(stream, (label) => steps.push(label))).resolves.toEqual({ kind: 'reply', text: 'Xin chào' })
+    expect(steps).toEqual(['Đang hiểu'])
+  })
+
+  it('gửi câu trả lời clarify cùng profileId và schema v2', async () => {
+    const spy = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response('event: result\ndata: {"kind":"clarify","request":{"reason":"Cần số liệu","targetPath":null,"questions":[]}}\n\n', { status: 200 }))
+    vi.stubGlobal('fetch', spy)
+    await expect(sendChat('profile-1', 'Thêm số liệu', [{ question: 'Có số liệu không?', answer: 'Không có' }])).resolves.toMatchObject({ kind: 'clarify' })
+    const init = spy.mock.calls[0]?.[1] as RequestInit
+    expect(JSON.parse(init.body as string)).toMatchObject({ profileId: 'profile-1', answers: [{ answer: 'Không có' }] })
+    expect(new Headers(init.headers).get('X-CV-Schema')).toBe('2')
   })
 })
 

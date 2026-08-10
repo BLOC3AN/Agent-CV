@@ -18,7 +18,7 @@ import {
   verifyProfile as apiVerifyProfile,
   completeImport as apiCompleteImport,
 } from '../lib/api';
-import { JobMatchView } from '../components/JobMatchView';
+import { AnalyzeRoute } from './AnalyzeRoute';
 import { TemplatesView } from '../components/TemplatesView';
 import { SettingsRoute } from './SettingsRoute';
 import { RequireAuth, SessionProvider } from '../lib/session';
@@ -75,17 +75,13 @@ const protectedChildren: RouteObject[] = [
   {
     path: 'analyze',
     element: (
-      <div data-testid="view-job-match">
-        <JobMatchView cvs={[]} />
-      </div>
+      <AnalyzeRoute />
     ),
   },
   {
     path: 'analyze/:cvId',
     element: (
-      <div data-testid="view-job-match">
-        <JobMatchView cvs={[]} />
-      </div>
+      <AnalyzeRoute />
     ),
   },
   { path: 'templates', element: <div data-testid="view-templates"><TemplatesView cvs={[]} /></div> },

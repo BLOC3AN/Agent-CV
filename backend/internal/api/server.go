@@ -56,6 +56,7 @@ type chatModelOutput struct {
 	Text    string            `json:"text"`
 	Summary string            `json:"summary"`
 	Ops     []json.RawMessage `json:"ops"`
+	Request json.RawMessage   `json:"request"`
 }
 
 func NewServer() *Server { return &Server{jobs: make(map[string]*Job)} }
@@ -336,9 +337,9 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 	var cv map[string]any = make(map[string]any)
 	var profileRaw, themeRaw, layoutRaw []byte
 	var cvID string
-	var title, language, templateID string
+	var title, language, templateID, profileID string
 	var updated time.Time
-	err := s.db.QueryRowContext(r.Context(), `SELECT id, profile_snapshot, template_id, theme, layout, language, title, updated_at FROM cv_documents WHERE id = $1 AND user_id=$2`, id, userID).Scan(&cvID, &profileRaw, &templateID, &themeRaw, &layoutRaw, &language, &title, &updated)
+	err := s.db.QueryRowContext(r.Context(), `SELECT id, profile_id, profile_snapshot, template_id, theme, layout, language, title, updated_at FROM cv_documents WHERE id = $1 AND user_id=$2`, id, userID).Scan(&cvID, &profileID, &profileRaw, &templateID, &themeRaw, &layoutRaw, &language, &title, &updated)
 	if err == sql.ErrNoRows {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
 		return
@@ -348,6 +349,7 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	cv["id"] = cvID
+	cv["profileId"] = profileID
 	var theme, layout any
 	_ = json.Unmarshal(themeRaw, &theme)
 	_ = json.Unmarshal(layoutRaw, &layout)
@@ -1741,7 +1743,12 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	// whole conversation.
 	s.cacheChatMessages(r.Context(), userID, sessionID, history)
 	profileRaw := []byte{}
-	_ = s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 AND user_id=$2`, body.ProfileID, userID).Scan(&profileRaw)
+	var profileV1, profileV2 []byte
+	_ = s.db.QueryRowContext(r.Context(), `SELECT data,data_v2 FROM profiles WHERE id=$1 AND user_id=$2`, body.ProfileID, userID).Scan(&profileV1, &profileV2)
+	profileRaw = profileV1
+	if wantsV2(r) && len(profileV2) > 0 {
+		profileRaw = profileV2
+	}
 	// Giữ cùng UX SSE với flow Node: gửi trạng thái ngay khi đã nhận và dựng
 	// đủ context, thay vì để giao diện đứng ở "Đang kết nối" suốt lúc model chạy.
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
@@ -1758,7 +1765,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	// profileRaw giữ nguyên PII cho validateChatProposal và applyJSONPatch bên
 	// dưới — hai bước đó chạy trên máy chủ. Chỉ bản gửi model mới bị che.
-	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt(profileIsV2(profileRaw))}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Hint, body.Message)}}
+	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt(profileIsV2(profileRaw))}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Answers, body.Hint, body.Message)}}
 	sendStep("Đang hiểu yêu cầu của bạn")
 	sendStep("Đang xem lại hồ sơ để trả lời")
 	sendStep("Đang suy nghĩ")
@@ -1776,6 +1783,14 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	modelOutput := parseChatModelOutput(answer)
 	var assistantContent = modelOutput.Text
+	if modelOutput.Kind == "clarify" && len(modelOutput.Request) > 0 {
+		payload, _ := json.Marshal(map[string]any{"kind": "clarify", "request": json.RawMessage(modelOutput.Request), "sessionId": sessionID, "userMessageId": userMessageID})
+		fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return
+	}
 	if modelOutput.Kind == "patch" {
 		modelOutput.Ops = normalizeChatProposalOps(modelOutput.Ops)
 		if err := validateChatProposal(profileRaw, modelOutput.Ops); err != nil {
@@ -1834,13 +1849,13 @@ func redactProfileForModel(raw []byte) []byte {
 
 // Dựng phần user của prompt chat. Tách khỏi handler để test chứng minh được
 // PII không lọt ra — chốt chặn nằm ở đây thì không ai quên gọi nó.
-func chatUserPrompt(profileRaw []byte, history []map[string]string, hint, message string) string {
+func chatUserPrompt(profileRaw []byte, history []map[string]string, answers []map[string]string, hint, message string) string {
 	hintBlock := ""
 	if hint != "" {
 		hintBlock = "\n\nGỢI Ý BIẾN ĐỔI TỪ GIAO DIỆN: " + hint
 	}
 	return "PROFILE:\n" + string(redactProfileForModel(profileRaw)) +
-		"\n\nHISTORY:\n" + jsonString(history) + hintBlock +
+		"\n\nHISTORY:\n" + jsonString(history) + "\n\nANSWERS:\n" + jsonString(answers) + hintBlock +
 		"\n\nUSER:\n" + message
 }
 
@@ -1868,6 +1883,9 @@ func chatSystemPrompt(v2 bool) string {
 
 Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
 {"kind":"reply","text":"..."}
+
+Nếu thiếu thông tin người dùng phải cung cấp, hỏi tối đa 3 câu thay vì bịa:
+{"kind":"clarify","request":{"reason":"...","targetPath":null,"questions":[{"id":"...","question":"...","placeholder":"..."}]}}
 
 Nếu người dùng yêu cầu sửa, viết lại, nhóm, sắp xếp hoặc cập nhật hồ sơ, KHÔNG được nói đã cập nhật. Hãy trả đề xuất để người dùng duyệt:
 {"kind":"patch","summary":"...","ops":[{"op":"add|replace|remove","path":"/sections/experience/0/highlights/2","value":"...","rationale":"...","grounding":{"type":"existing_field|user_message|kb|inference","ref":"..."},"kbRefs":[]}]}
@@ -1907,6 +1925,9 @@ func parseChatModelOutput(raw string) chatModelOutput {
 		return chatModelOutput{Kind: "reply", Text: raw}
 	}
 	if out.Kind == "patch" && out.Summary != "" && len(out.Ops) > 0 {
+		return out
+	}
+	if out.Kind == "clarify" && len(out.Request) > 0 {
 		return out
 	}
 	if out.Kind == "reply" && out.Text != "" {
@@ -2127,10 +2148,14 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	var old []byte
-	if err = tx.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1 AND user_id=$2 FOR UPDATE`, body.ProfileID, userID).Scan(&old); err != nil {
+	var old, oldV2 []byte
+	if err = tx.QueryRowContext(r.Context(), `SELECT data,data_v2 FROM profiles WHERE id=$1 AND user_id=$2 FOR UPDATE`, body.ProfileID, userID).Scan(&old, &oldV2); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
 		return
+	}
+	v2 := wantsV2(r) && len(oldV2) > 0
+	if v2 {
+		old = oldV2
 	}
 	updated, err := applyJSONPatch(old, patchRaw)
 	if err != nil {
@@ -2138,7 +2163,11 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var revisionID int64
-	if err = tx.QueryRowContext(r.Context(), `UPDATE profiles SET data=$2::jsonb WHERE id=$1 AND user_id=$3 RETURNING id`, body.ProfileID, string(updated), userID).Scan(new(string)); err != nil {
+	column := "data"
+	if v2 {
+		column = "data_v2"
+	}
+	if err = tx.QueryRowContext(r.Context(), `UPDATE profiles SET `+column+`=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3 RETURNING id`, body.ProfileID, string(updated), userID).Scan(new(string)); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được hồ sơ"})
 		return
 	}

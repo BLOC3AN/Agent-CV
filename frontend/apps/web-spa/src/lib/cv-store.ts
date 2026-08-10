@@ -6,6 +6,7 @@ export type CVStoreStatus = 'loading' | 'ready' | 'saving' | 'saved' | 'error'
 
 export function useCVStore(id: string) {
   const [cv, setCV] = useState<CV | null>(null)
+  const [profileId, setProfileId] = useState<string>()
   const [status, setStatus] = useState<CVStoreStatus>('loading')
   const [error, setError] = useState<string | undefined>()
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -17,6 +18,7 @@ export function useCVStore(id: string) {
     try {
       const envelope = await getCV(id)
       const loaded = envelope.profileSnapshot as unknown as CV
+      setProfileId(envelope.profileId)
       latest.current = loaded
       setCV(loaded)
       setStatus('ready')
@@ -51,5 +53,5 @@ export function useCVStore(id: string) {
     }, 500)
   }, [id])
 
-  return { cv, status, error, update, reload: load }
+  return { cv, profileId, status, error, update, reload: load }
 }

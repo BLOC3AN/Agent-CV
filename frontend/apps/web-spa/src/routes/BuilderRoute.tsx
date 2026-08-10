@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../lib/api'
 import { useCVStore } from '../lib/cv-store'
 import { CVEditorView } from '../components/CVEditorView'
+import { ChatPanel } from '../components/ChatPanel'
 
 export function BuilderRoute() {
   const { cvId } = useParams<{ cvId: string }>()
@@ -34,6 +35,7 @@ export function BuilderRoute() {
         onOpenShare={() => {}}
         onDownloadPDF={() => { window.location.assign(`/api/cv/${encodeURIComponent(cvId)}/export?variant=presentation`) }}
       />
+      {store.profileId && <div className="fixed bottom-4 right-4 z-50 h-[520px] w-[380px]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.cv} onApplied={() => void store.reload()} /></div>}
     </>
   )
 }

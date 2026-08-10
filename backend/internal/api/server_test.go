@@ -116,6 +116,23 @@ func TestChatSystemPromptV2UsesSectionPointers(t *testing.T) {
 	}
 }
 
+func TestChatSystemPromptV2SupportsClarifyWithoutInventingFacts(t *testing.T) {
+	if !strings.Contains(chatSystemPrompt(true), `"kind":"clarify"`) {
+		t.Fatal("v2 prompt must support clarify responses")
+	}
+	out := parseChatModelOutput(`{"kind":"clarify","request":{"reason":"Cần số liệu","targetPath":null,"questions":[{"id":"metric","question":"Có bao nhiêu user?"}]}}`)
+	if out.Kind != "clarify" || len(out.Request) == 0 {
+		t.Fatalf("unexpected clarify output: %#v", out)
+	}
+}
+
+func TestChatUserPromptIncludesAnswers(t *testing.T) {
+	prompt := chatUserPrompt([]byte(`{"sections":{"intro":{"summary":"Engineer"}}}`), nil, []map[string]string{{"question": "Có số liệu không?", "answer": "Không có"}}, "", "Viết lại")
+	if !strings.Contains(prompt, "Không có") {
+		t.Fatalf("answers missing from prompt: %s", prompt)
+	}
+}
+
 // config.yml khai `redact_pii.required_local: true` và
 // `never_send_raw_pii: true`. Người dùng chọn được `openai.luna` hoặc
 // `deepseek.v4` trong bộ chọn model, nên prompt này đi thẳng ra cloud —
@@ -127,7 +144,7 @@ func TestChatPromptNeverCarriesPIIToModel(t *testing.T) {
 		`"headline":"Kỹ sư AI","introduce":"Ba năm làm edge AI"},` +
 		`"work":[{"org":"FPT","role":"Engineer","highlights":["Giảm 40% độ trễ"]}]}`)
 
-	prompt := chatUserPrompt(profile, nil, "", "Viết lại phần giới thiệu")
+	prompt := chatUserPrompt(profile, nil, nil, "", "Viết lại phần giới thiệu")
 
 	for _, pii := range []string{
 		"Nguyễn Văn A", "a@example.com", "0901234567",
@@ -175,7 +192,7 @@ func TestChatPromptNeverCarriesPIIToModelForV2(t *testing.T) {
 		}
 	}`)
 
-	prompt := chatUserPrompt(profile, nil, "", "Viết lại phần giới thiệu")
+	prompt := chatUserPrompt(profile, nil, nil, "", "Viết lại phần giới thiệu")
 
 	// PII từ sections.intro, _meta.droppedFields, _meta.originalLinks không được lọt ra
 	for _, pii := range []string{
