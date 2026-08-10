@@ -392,6 +392,32 @@ func TestCVListRouteIsRegistered(t *testing.T) {
 	}
 }
 
+// Không có header X-CV-Schema thì phải là v1 kể cả khi data_v2 đã có sẵn:
+// apps/web đọc endpoint này và không có cách nào tự bảo vệ khỏi hình dạng lạ.
+// Chưa có PostgreSQL trong test này nên cách quan sát được là mã trạng thái
+// 503 không đổi — nếu nhánh header vô tình chạy trước cả việc kiểm tra s.db,
+// test sẽ fail vì lộ ra một mã trạng thái khác.
+func TestGetCVDefaultsToV1WithoutHeader(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/cv/00000000-0000-0000-0000-000000000000", nil)
+	w := httptest.NewRecorder()
+	NewServer().Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, muốn %d khi chưa có PostgreSQL", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+// Header X-CV-Schema: 2 không được làm route rẽ sang nhánh khác rồi panic
+// hay trả 404 — không có DB thì vẫn phải là 503 giống hệt không có header.
+func TestCVListRouteAcceptsSchemaHeader(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/cv", nil)
+	r.Header.Set(SchemaVersionHeader, "2")
+	w := httptest.NewRecorder()
+	NewServer().Routes().ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, muốn %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
 func TestAuthSessionReportsAnonymousWithoutCookie(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
 	w := httptest.NewRecorder()

@@ -322,6 +322,29 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 	cv["language"] = language
 	cv["title"] = title
 	cv["updatedAt"] = updated
+
+	if wantsV2(r) {
+		// Nguồn v2 là profiles.data_v2 qua cv_documents.profile_id — KHÔNG phải
+		// cv_documents.snapshot_v2, cột đó SP-2 cố tình để trống chưa backfill.
+		var v2 []byte
+		err := s.db.QueryRowContext(r.Context(),
+			`SELECT p.data_v2 FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
+			 WHERE c.id = $1 AND c.user_id = $2`, id, userID).Scan(&v2)
+		if err != nil || len(v2) == 0 {
+			// Không im lặng rơi về v1: client đã nói rõ nó chỉ đọc được v2.
+			// Trả v1 cho nó là đẩy lỗi sang tầng giao diện, xa nguyên nhân.
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "CV này chưa có bản v2. Chạy `npm run db:backfill-v2` rồi thử lại.",
+				"code":  "V2_NOT_BACKFILLED",
+			})
+			return
+		}
+		var snapshotV2 any
+		_ = json.Unmarshal(v2, &snapshotV2)
+		cv["profileSnapshot"] = snapshotV2
+		cv["schemaVersion"] = 2
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"cv": cv})
 }
 
