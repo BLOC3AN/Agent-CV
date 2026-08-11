@@ -91,7 +91,7 @@ func TestChatModelRefsResolveFromConfig(t *testing.T) {
 }
 
 func TestChatPromptUsesIntroduceForCVField(t *testing.T) {
-	prompt := chatSystemPrompt()
+	prompt := chatSystemPrompt("vi")
 	if !strings.Contains(prompt, "/sections/intro/summary") {
 		t.Fatal("chat prompt must identify the v2 introduction field")
 	}
@@ -101,7 +101,7 @@ func TestChatPromptUsesIntroduceForCVField(t *testing.T) {
 // từng gạch đầu dòng — đó là điều kiện để màn duyệt diff còn gì đáng duyệt.
 
 func TestChatSystemPromptUsesSectionPointers(t *testing.T) {
-	prompt := chatSystemPrompt()
+	prompt := chatSystemPrompt("vi")
 	if !strings.Contains(prompt, "/sections/intro/summary") {
 		t.Fatal("prompt phải dạy đường dẫn giới thiệu của v2")
 	}
@@ -111,7 +111,7 @@ func TestChatSystemPromptUsesSectionPointers(t *testing.T) {
 }
 
 func TestChatSystemPromptV2SupportsClarifyWithoutInventingFacts(t *testing.T) {
-	if !strings.Contains(chatSystemPrompt(), `"kind":"clarify"`) {
+	if !strings.Contains(chatSystemPrompt("vi"), `"kind":"clarify"`) {
 		t.Fatal("v2 prompt must support clarify responses")
 	}
 	out := parseChatModelOutput(`{"kind":"clarify","request":{"reason":"Cần số liệu","targetPath":null,"questions":[{"id":"metric","question":"Có bao nhiêu user?"}]}}`)
@@ -482,5 +482,44 @@ func TestAuthSessionReportsAnonymousWithoutCookie(t *testing.T) {
 	}
 	if _, leaked := body["email"]; leaked {
 		t.Fatalf("anonymous session must not carry an email: %#v", body)
+	}
+}
+
+// Mô hình trước đây được bảo "trả lời cùng ngôn ngữ với hồ sơ", nên nó luôn
+// đáp tiếng Việt với một CV tiếng Việt — kể cả khi người dùng đã chuyển giao
+// diện sang tiếng Anh. Ngôn ngữ trả lời phải theo LỰA CHỌN CỦA NGƯỜI DÙNG,
+// và chỉ client mới biết lựa chọn đó.
+func TestChatSystemPromptFollowsRequestedLanguage(t *testing.T) {
+	en := chatSystemPrompt("en")
+	if !strings.Contains(en, "English") {
+		t.Fatalf("prompt tiếng Anh phải yêu cầu trả lời bằng tiếng Anh:\n%s", en)
+	}
+	vi := chatSystemPrompt("vi")
+	if !strings.Contains(vi, "tiếng Việt") {
+		t.Fatalf("prompt tiếng Việt phải yêu cầu trả lời bằng tiếng Việt:\n%s", vi)
+	}
+	// Ngôn ngữ lạ hoặc rỗng lùi về tiếng Việt — giữ nguyên hành vi của client cũ.
+	if chatSystemPrompt("") != vi || chatSystemPrompt("de") != vi {
+		t.Fatal("ngôn ngữ lạ phải lùi về tiếng Việt")
+	}
+}
+
+// Nhãn tiến trình bắn qua SSE phải là MÃ, không phải câu tiếng Việt. Client tra
+// mã sang chữ của nó; gửi câu chữ thì giao diện tiếng Anh hiện tiếng Việt, và
+// mọi lần backend sửa câu là client hết khớp.
+func TestChatStepLabelsAreCodes(t *testing.T) {
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatalf("không đọc được server.go: %v", err)
+	}
+	for _, viLabel := range []string{"Đang suy nghĩ", "Đang hiểu yêu cầu của bạn", "Đang xem lại hồ sơ để trả lời", "Đang kiểm tra đề xuất"} {
+		if strings.Contains(string(source), `sendStep("`+viLabel+`")`) {
+			t.Fatalf("sendStep còn gửi câu tiếng Việt %q thay vì mã", viLabel)
+		}
+	}
+	for _, code := range []string{"THINKING", "UNDERSTANDING", "REVIEWING_PROFILE", "CHECKING_PROPOSAL"} {
+		if !strings.Contains(string(source), `sendStep("`+code+`")`) {
+			t.Fatalf("thiếu mã tiến trình %q", code)
+		}
 	}
 }

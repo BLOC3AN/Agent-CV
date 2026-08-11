@@ -217,11 +217,13 @@ export async function sendChat(
   signal?: AbortSignal,
   onStep: (label: string) => void = () => {},
   context?: ChatDraftContext,
+  /** Ngôn ngữ giao diện — quyết định mô hình trả lời tiếng gì. */
+  language?: 'vi' | 'en',
 ): Promise<ChatResult> {
   const headers = new Headers({ 'content-type': 'application/json', 'X-CV-Schema': '2' })
   const res = await fetch('/api/chat', {
     method: 'POST', credentials: 'include', signal, headers,
-    body: JSON.stringify({ profileId, message, answers, modelRef, ...(hint ? { hint } : {}), ...(context ? {
+    body: JSON.stringify({ profileId, message, answers, modelRef, ...(language ? { language } : {}), ...(hint ? { hint } : {}), ...(context ? {
       cvId: context.cvId,
       draftToken: String(context.draftVersion),
       draft: context.draft,

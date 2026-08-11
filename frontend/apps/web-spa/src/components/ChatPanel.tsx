@@ -55,7 +55,7 @@ function display(value: unknown): string {
 }
 
 export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAIProposal, onClose }: Props) {
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const effectiveLayout = layout ?? cv.layout ?? { version: 1 as const, nodes: [] }
   const effectiveDraftVersion = draftVersion ?? 0
   const currentDraftRef = useRef({ cv, layout: effectiveLayout, draftVersion: effectiveDraftVersion })
@@ -85,7 +85,7 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
     setMessages((m) => [...m, { role: 'user', text }])
     const requestDraftVersion = effectiveDraftVersion
     try {
-      const result = await sendChat(profileId, text, suppliedAnswers, modelRef, undefined, ac.signal, setStep, { cvId, draft: cv, layout: effectiveLayout, draftVersion: requestDraftVersion })
+      const result = await sendChat(profileId, text, suppliedAnswers, modelRef, undefined, ac.signal, setStep, { cvId, draft: cv, layout: effectiveLayout, draftVersion: requestDraftVersion }, locale)
       if (result.kind === 'reply') setMessages((m) => [...m, { role: 'assistant', text: result.text }])
       else if (result.kind === 'clarify') {
         setMessages((m) => [...m, { role: 'assistant', text: result.request.reason }])

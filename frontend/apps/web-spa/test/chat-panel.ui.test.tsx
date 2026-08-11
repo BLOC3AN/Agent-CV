@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ChatPanel } from '../src/components/ChatPanel'
 import { initialCVs } from './fixtures/cvs'
+import { LocaleProvider, BuilderLocaleProvider } from '../src/lib/i18n'
 
 const { sendChat, settleChatProposal } = vi.hoisted(() => ({
   sendChat: vi.fn().mockResolvedValue({ kind: 'reply', text: 'Đã phân tích CV.' }),
@@ -56,6 +57,7 @@ describe('ChatPanel — giao diện trợ lý AI', () => {
       expect.any(AbortSignal),
       expect.any(Function),
       expect.objectContaining({ cvId: 'cv-1', draftVersion: 0 }),
+      'vi',
     ))
     expect(await screen.findByText('AI GỢI Ý')).toBeInTheDocument()
     expect(screen.getByText('Đã phân tích CV.')).toBeInTheDocument()
@@ -112,5 +114,31 @@ describe('ChatPanel — giao diện trợ lý AI', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/không được phép/i)
     expect(settleChatProposal).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Áp dụng vào CV' })).toBeInTheDocument()
+  })
+})
+
+
+describe('ngôn ngữ trả lời của AI', () => {
+  /*
+   * Mô hình chỉ biết trả lời tiếng gì nếu client nói cho nó. Trước đây prompt
+   * bảo "trả lời cùng ngôn ngữ với hồ sơ", nên CV tiếng Việt luôn nhận câu trả
+   * lời tiếng Việt kể cả khi giao diện đang tiếng Anh.
+   */
+  it('gửi ngôn ngữ giao diện lên cho máy chủ', async () => {
+    localStorage.setItem('hr-locale', 'en')
+    sendChat.mockResolvedValue({ kind: 'reply', text: 'ok' })
+    render(
+      <LocaleProvider>
+        <BuilderLocaleProvider>
+          <ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={vi.fn()} />
+        </BuilderLocaleProvider>
+      </LocaleProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /write a summary/i }))
+
+    await waitFor(() => expect(sendChat).toHaveBeenCalled())
+    expect(sendChat.mock.calls.at(-1)!.at(-1)).toBe('en')
+    localStorage.clear()
   })
 })

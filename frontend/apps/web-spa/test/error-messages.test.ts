@@ -46,13 +46,20 @@ describe('nhãn tiến trình do máy chủ bắn qua SSE', () => {
    * tiếng Việt (`server.go`, `sendStep("Đang suy nghĩ")`). Không sửa được ở
    * backend lúc này, nên tra theo đúng câu chữ; câu lạ thì giữ nguyên.
    */
-  it('dịch các nhãn đã biết', () => {
+  it('dịch các mã máy chủ gửi', () => {
+    const t = (key: MessageKey) => en[key]
+
+    expect(stepText('THINKING', t)).toBe(en.stepThinking)
+    expect(stepText('UNDERSTANDING', t)).toBe(en.stepUnderstanding)
+    expect(stepText('REVIEWING_PROFILE', t)).toBe(en.stepReviewingProfile)
+    expect(stepText('CHECKING_PROPOSAL', t)).toBe(en.stepCheckingProposal)
+  })
+
+  /* Frontend có thể lên trước backend — nhãn của bản cũ vẫn phải hiện đúng. */
+  it('vẫn hiểu câu chữ của bản backend cũ', () => {
     const t = (key: MessageKey) => en[key]
 
     expect(stepText('Đang suy nghĩ', t)).toBe(en.stepThinking)
-    expect(stepText('Đang hiểu yêu cầu của bạn', t)).toBe(en.stepUnderstanding)
-    expect(stepText('Đang xem lại hồ sơ để trả lời', t)).toBe(en.stepReviewingProfile)
-    expect(stepText('Đang kiểm tra đề xuất', t)).toBe(en.stepCheckingProposal)
   })
 
   it('nhãn lạ thì giữ nguyên thay vì nuốt mất', () => {

@@ -1664,6 +1664,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		Message    string              `json:"message"`
 		Answers    []map[string]string `json:"answers"`
 		ModelRef   string              `json:"modelRef"`
+		// Ngôn ngữ giao diện của người dùng — quyết định mô hình trả lời tiếng gì.
+		Language   string              `json:"language"`
 		Hint       string              `json:"hint"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || body.ProfileID == "" || body.CVID == "" || body.DraftToken == "" || len(body.Draft) == 0 || len(body.Layout) == 0 || len(strings.TrimSpace(body.Message)) < 2 || len(body.Message) > 2000 {
@@ -1728,6 +1730,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	flusher, _ := w.(http.Flusher)
+	// Gửi MÃ chứ không phải câu chữ: client dịch sang ngôn ngữ của nó. Gửi câu
+	// tiếng Việt thì giao diện tiếng Anh hiện tiếng Việt, và mỗi lần sửa câu ở
+	// đây là client hết khớp.
 	sendStep := func(label string) {
 		payload, _ := json.Marshal(map[string]string{"label": label})
 		fmt.Fprintf(w, "event: step\ndata: %s\n\n", payload)
@@ -1737,10 +1742,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	// profileRaw giữ nguyên PII cho validateChatProposal và applyJSONPatch bên
 	// dưới — hai bước đó chạy trên máy chủ. Chỉ bản gửi model mới bị che.
-	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt()}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Answers, body.Hint, body.Message)}}
-	sendStep("Đang hiểu yêu cầu của bạn")
-	sendStep("Đang xem lại hồ sơ để trả lời")
-	sendStep("Đang suy nghĩ")
+	prompt := []map[string]string{{"role": "system", "content": chatSystemPrompt(body.Language)}, {"role": "user", "content": chatUserPrompt(profileRaw, history, body.Answers, body.Hint, body.Message)}}
+	sendStep("UNDERSTANDING")
+	sendStep("REVIEWING_PROFILE")
+	sendStep("THINKING")
 	log.Printf("chat model request requestId=%s modelRef=%q hint=%q", requestID, body.ModelRef, body.Hint)
 	answer, modelErr := callChatModel(r.Context(), prompt, body.ModelRef)
 	if modelErr != nil {
@@ -1780,7 +1785,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	history = append(history, map[string]string{"role": "assistant", "content": assistantContent})
 	s.cacheChatMessages(r.Context(), userID, sessionID, history)
 	if modelOutput.Kind == "patch" {
-		sendStep("Đang kiểm tra đề xuất")
+		sendStep("CHECKING_PROPOSAL")
 		var proposalID string
 		if err := s.db.QueryRowContext(r.Context(), `INSERT INTO proposed_patches(message_id,cv_id,draft_token,profile_snapshot,layout_snapshot,ops) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb) RETURNING id`, assistantID, body.CVID, body.DraftToken, string(body.Draft), string(body.Layout), jsonRawArray(modelOutput.Ops)).Scan(&proposalID); err != nil {
 			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa lưu được đề xuất để bạn duyệt. Hồ sơ chưa thay đổi."}
@@ -1830,8 +1835,20 @@ func chatUserPrompt(profileRaw []byte, history []map[string]string, answers []ma
 		"\n\nUSER:\n" + message
 }
 
-func chatSystemPrompt() string {
-	return `Bạn là trợ lý chỉnh CV. Trả lời cùng ngôn ngữ với hồ sơ và chỉ trả về DUY NHẤT một object JSON hợp lệ.
+// chatSystemPrompt dựng system prompt cho một ngôn ngữ trả lời cụ thể.
+//
+// Bản trước bảo mô hình "trả lời cùng ngôn ngữ với hồ sơ", nên một CV tiếng
+// Việt luôn nhận câu trả lời tiếng Việt — kể cả khi người dùng đã chuyển giao
+// diện sang tiếng Anh. Chỉ client biết lựa chọn đó, nên nó phải gửi lên.
+//
+// Ngôn ngữ lạ hoặc rỗng lùi về tiếng Việt: client cũ không gửi trường này, và
+// im lặng giữ nguyên hành vi cũ vẫn hơn là trả lời bằng thứ tiếng bất ngờ.
+func chatSystemPrompt(language string) string {
+	replyIn := "tiếng Việt"
+	if language == "en" {
+		replyIn = "English"
+	}
+	return `Bạn là trợ lý chỉnh CV. Trả lời bằng ` + replyIn + ` và chỉ trả về DUY NHẤT một object JSON hợp lệ.
 
 Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
 {"kind":"reply","text":"..."}

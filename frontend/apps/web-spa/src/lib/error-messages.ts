@@ -90,12 +90,16 @@ export function jobErrorText(
 /**
  * Nhãn tiến trình máy chủ bắn qua SSE (`server.go`, `sendStep(...)`).
  *
- * Khác thông báo lỗi, các nhãn này KHÔNG kèm mã — máy chủ gửi thẳng câu tiếng
- * Việt. Vậy nên tra theo đúng câu chữ. Cách này mong manh hơn tra theo mã: đổi
- * câu ở backend là bảng hết khớp. Nhưng nhãn lạ vẫn hiện nguyên văn nên tệ nhất
- * là quay về hành vi cũ, không mất chữ. Sửa đúng gốc là cho backend gửi mã.
+ * Máy chủ nay gửi MÃ (`THINKING`, …) nên bảng này tra theo mã như mọi thứ khác.
+ * Bốn câu tiếng Việt của bản backend cũ vẫn giữ trong bảng: nếu frontend lên
+ * trước backend, người dùng vẫn thấy nhãn đúng thay vì một chuỗi lạ.
  */
 const STEP_TO_KEY: Record<string, MessageKey> = {
+  THINKING: 'stepThinking',
+  UNDERSTANDING: 'stepUnderstanding',
+  REVIEWING_PROFILE: 'stepReviewingProfile',
+  CHECKING_PROPOSAL: 'stepCheckingProposal',
+  // Câu chữ của bản backend cũ, giữ để một máy chủ chưa cập nhật vẫn hiện đúng.
   'Đang suy nghĩ': 'stepThinking',
   'Đang hiểu yêu cầu của bạn': 'stepUnderstanding',
   'Đang xem lại hồ sơ để trả lời': 'stepReviewingProfile',
