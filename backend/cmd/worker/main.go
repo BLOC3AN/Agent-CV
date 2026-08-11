@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hr-agent/backend/internal/pii"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -377,10 +378,64 @@ func cleanLines(raw string) []string {
 	return out
 }
 
+const bulletMarkers = "•▪▫◦●○◆◇■□▸▶►‣⁃➢✦✔✓*·-–—"
+
 func stripBullet(line string) string {
 	line = strings.TrimSpace(line)
 	line = strings.TrimSpace(strings.TrimLeft(line, "•▪▫◦●○◆◇■□▸▶►‣⁃➢✦✔✓*·"))
 	return strings.TrimSpace(strings.TrimLeft(line, "-–—"))
+}
+
+func startsBullet(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(trimmed)
+	return strings.ContainsRune(bulletMarkers, first)
+}
+
+// groupBullets turns extracted lines into one entry per bullet.
+//
+// PDF text extraction breaks a bullet at every VISUAL line, and only the first
+// of those lines carries the marker. Appending each line as its own highlight
+// therefore shreds one written point into several sentence fragments: measured
+// on a real 3-page CV, an entry with 4 bullets produced 19 highlights, and the
+// fragments are what the CV then renders as separate <li> items and what the AI
+// patches address individually.
+//
+// A block with no marker anywhere keeps one highlight per line. There is
+// nothing in the text to tell a wrapped line from a genuinely separate point,
+// and guessing would merge real bullets in CVs that never used markers.
+func groupBullets(lines []string) []any {
+	marked := false
+	for _, line := range lines {
+		if startsBullet(line) {
+			marked = true
+			break
+		}
+	}
+
+	out := []any{}
+	for _, line := range lines {
+		clean := stripBullet(line)
+		if clean == "" {
+			continue
+		}
+		if marked && !startsBullet(line) && len(out) > 0 {
+			previous, _ := out[len(out)-1].(string)
+			// A line broken mid-word keeps its hyphen attached: joining
+			// "for high-" and "throughput" with a space would invent one.
+			if strings.HasSuffix(previous, "-") {
+				out[len(out)-1] = previous + clean
+			} else {
+				out[len(out)-1] = previous + " " + clean
+			}
+			continue
+		}
+		out = append(out, clean)
+	}
+	return out
 }
 
 func sectionText(raw string) string {
@@ -400,7 +455,7 @@ func parseEducation(raw string) []any {
 		return []any{}
 	}
 	item := map[string]any{"school": lines[0], "degree": "", "highlights": []any{}}
-	highlights := []any{}
+	var body []string
 	for _, line := range lines[1:] {
 		clean := stripBullet(line)
 		lower := strings.ToLower(clean)
@@ -410,12 +465,10 @@ func parseEducation(raw string) []any {
 		case strings.HasPrefix(lower, "gpa:"):
 			item["gpa"] = strings.TrimSpace(clean[len("GPA:"):])
 		default:
-			if clean != "" {
-				highlights = append(highlights, clean)
-			}
+			body = append(body, line)
 		}
 	}
-	item["highlights"] = highlights
+	item["highlights"] = groupBullets(body)
 	return []any{item}
 }
 
@@ -453,12 +506,7 @@ func parseWork(raw string) []any {
 				bodyEnd = end - 2
 			}
 		}
-		highlights := []any{}
-		for _, line := range lines[date+1 : bodyEnd] {
-			if clean := stripBullet(line); clean != "" {
-				highlights = append(highlights, clean)
-			}
-		}
+		highlights := groupBullets(lines[date+1 : bodyEnd])
 		result = append(result, map[string]any{"org": before[len(before)-2], "role": before[len(before)-1], "startDate": lines[date], "highlights": highlights})
 	}
 	return result
@@ -484,13 +532,13 @@ func parseActivities(raw string) []any {
 	}
 	result := []any{}
 	var current map[string]any
-	highlights := []any{}
+	var body []string
 	flush := func() {
 		if current != nil {
-			current["highlights"] = highlights
+			current["highlights"] = groupBullets(body)
 			result = append(result, current)
 		}
-		highlights = []any{}
+		body = nil
 	}
 	for _, line := range lines {
 		clean := stripBullet(line)
@@ -509,9 +557,7 @@ func parseActivities(raw string) []any {
 			current = map[string]any{"name": clean}
 			continue
 		}
-		if clean != "" {
-			highlights = append(highlights, clean)
-		}
+		body = append(body, line)
 	}
 	flush()
 	return result
