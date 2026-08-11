@@ -374,6 +374,11 @@ export const vi = {
   applyFailed: 'Không áp dụng được đề xuất',
   aiAnalysing: 'AI đang phân tích',
   draftChangedDuringSettle: 'Bản nháp đã thay đổi trong lúc chờ. Đề xuất được giữ lại để bạn thử lại.',
+  applyToCV: 'Áp dụng vào CV',
+  skip: 'Bỏ qua',
+  sendAnswers: 'Gửi câu trả lời',
+  hasFiguresQuestion: 'Có số liệu không?',
+  noFigures: 'Không có số liệu cụ thể',
 } as const
 
 export type MessageKey = keyof typeof vi

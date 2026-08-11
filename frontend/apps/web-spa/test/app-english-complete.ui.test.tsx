@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { DashboardRoute } from '../src/routes/DashboardRoute'
 import { MyCVsRoute } from '../src/routes/MyCVsRoute'
@@ -291,5 +291,28 @@ describe('thông báo lỗi và trạng thái theo ngôn ngữ giao diện', () 
 
     expect(errorText(new ApiError(409, 'raw', 'V2_NOT_BACKFILLED'), t, 'fallback')).toBe(en.errorV2NotBackfilled)
     expect(errorText(new ApiError(500, '', undefined), t, 'fallback')).toBe('fallback')
+  })
+})
+
+describe('trợ lý AI ở trạng thái có đề xuất', () => {
+  /*
+   * Khung đề xuất chỉ hiện sau khi AI trả về một patch. Fixture trước đây dừng
+   * ở trạng thái rỗng, nên "Áp dụng vào CV" và "Bỏ qua" nằm ngoài tầm lưới —
+   * đúng kiểu bỏ sót đã lặp lại nhiều lần: lưới chỉ thấy thứ nó render ra.
+   */
+  it('khung đề xuất không còn tiếng Việt', async () => {
+    vi.spyOn(api, 'sendChat').mockResolvedValue({
+      kind: 'patch', proposalId: 'p1', summary: 'Rewrote the summary', rejected: [],
+      ops: [{ op: 'replace', path: '/sections/intro/summary', value: 'New summary', rationale: 'Clearer', grounding: { type: 'profile', ref: 'cv-1' } }],
+    } as never)
+    const { container } = renderInEnglish(
+      <ChatPanel profileId="profile-1" cvId="cv-1" cv={profileSnapshot} layout={undefined as never} draftVersion={0} onApplyAIProposal={() => undefined} onClose={() => undefined} />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /write a summary/i }))
+    await screen.findByRole('button', { name: /apply to cv/i })
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
   })
 })

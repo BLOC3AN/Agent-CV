@@ -340,4 +340,9 @@ export const en: Record<MessageKey, string> = {
   applyFailed: 'Could not apply the proposal',
   aiAnalysing: 'AI is analysing',
   draftChangedDuringSettle: 'The draft changed while waiting. The proposal is kept so you can retry.',
+  applyToCV: 'Apply to CV',
+  skip: 'Skip',
+  sendAnswers: 'Send answers',
+  hasFiguresQuestion: 'Any figures to include?',
+  noFigures: 'No specific figures',
 }
