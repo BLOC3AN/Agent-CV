@@ -33,9 +33,19 @@ function renderBuilder() {
   render(<RouterProvider router={router} />)
 }
 
+/**
+ * Mở panel VÀ đợi danh sách phiên bản nạp xong.
+ *
+ * Khung dialog hiện ngay, nhưng danh sách đến từ một request riêng. Chỉ đợi
+ * dialog rồi truy vấn đồng bộ vào danh sách là một cuộc đua — nó thắng khi máy
+ * rảnh và thua khi cả bộ test chạy song song, làm file này hỏng ngẫu nhiên ở
+ * một test khác nhau mỗi lần. Đợi đúng thứ mình sắp dùng thì hết đua.
+ */
 async function openHistory() {
   fireEvent.click(await screen.findByRole('button', { name: 'Lịch sử phiên bản' }))
-  return screen.findByRole('dialog', { name: 'Lịch sử phiên bản' })
+  const dialog = await screen.findByRole('dialog', { name: 'Lịch sử phiên bản' })
+  await within(dialog).findAllByRole('button', { name: /^Xem trước phiên bản/ })
+  return dialog
 }
 
 async function editName() {
