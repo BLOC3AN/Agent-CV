@@ -12,7 +12,7 @@ export const initialCVs: CV[] = [
       template: 'modern',
       accentColor: '#00897B',
       font: 'Open Sans',
-      fontSize: 14,
+      fontSize: 10.5,
       spacing: 'condensed',
     },
     activeSections: {
@@ -189,7 +189,7 @@ export const initialCVs: CV[] = [
       template: 'classic',
       accentColor: '#1E40AF',
       font: 'Roboto',
-      fontSize: 14,
+      fontSize: 10.5,
       spacing: 'normal',
     },
     activeSections: {
@@ -231,7 +231,7 @@ export const initialCVs: CV[] = [
       template: 'professional',
       accentColor: '#0F766E',
       font: 'Lato',
-      fontSize: 13,
+      fontSize: 10.5,
       spacing: 'wide',
     },
     activeSections: {

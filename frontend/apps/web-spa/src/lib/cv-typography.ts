@@ -19,9 +19,13 @@ export interface CVTypography {
 }
 
 export function resolveCVTypography(design: Pick<CVDesign, 'font' | 'fontSize' | 'bodyFontSize' | 'sectionTitleFontSize' | 'headerFontSize'>): CVTypography {
+  // CVs created before the typography controls used 14pt as the implicit body
+  // default. Once the explicit body control exists, that legacy value should
+  // render as the new 10.5pt default; an explicit bodyFontSize always wins.
+  const bodyFontSize = design.bodyFontSize ?? (design.fontSize === 14 ? 10.5 : design.fontSize)
   return {
     fontFamily: CV_FONT_FAMILIES[design.font] ?? CV_FONT_FAMILIES.Auto,
-    bodyFontSize: design.bodyFontSize ?? design.fontSize,
+    bodyFontSize,
     sectionTitleFontSize: design.sectionTitleFontSize ?? 11,
     headerFontSize: design.headerFontSize ?? 20,
   }

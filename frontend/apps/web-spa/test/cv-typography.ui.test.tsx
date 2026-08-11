@@ -48,10 +48,18 @@ describe('CV typography controls', () => {
     expect(paper.style.getPropertyValue('--cv-header-size')).toBe('24pt')
   })
 
+  it('keeps Intro body content on the shared body-size variable', () => {
+    renderEditor()
+    const summary = screen.getByTestId('cv-block-summary').querySelector(':scope > div') as HTMLElement
+    expect(summary.style.fontSize).toBe('var(--cv-body-size)')
+  })
+
   it('resolves Auto to Calibri and preserves legacy body-size fallback', () => {
     expect(resolveCVTypography({ font: 'Auto', fontSize: 12 })).toEqual({
       fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 11, headerFontSize: 20,
     })
+    expect(resolveCVTypography({ font: 'Auto', fontSize: 14 }).bodyFontSize).toBe(10.5)
+    expect(resolveCVTypography({ font: 'Auto', fontSize: 14, bodyFontSize: 14 }).bodyFontSize).toBe(14)
   })
 
   it('applies the selected font family to the live CV surface', () => {

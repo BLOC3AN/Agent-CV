@@ -46,6 +46,17 @@ func TestNormalizeCVDesignAcceptsTypographyFields(t *testing.T) {
 	}
 }
 
+func TestNormalizeCVDesignUsesCVTypographyDefaults(t *testing.T) {
+	cv := map[string]any{"design": map[string]any{}}
+	if !normalizeCVDesign(cv) {
+		t.Fatal("empty design should receive valid defaults")
+	}
+	design := cv["design"].(map[string]any)
+	if design["font"] != "Auto" || design["fontSize"] != float64(10.5) {
+		t.Fatalf("defaults = %#v, want Auto and 10.5pt", design)
+	}
+}
+
 // hasSchemaVersion là mảnh kiểm tra nhỏ nhất: đúng một khoá, không parse cả
 // tài liệu. Test riêng để chứng minh nó không âm thầm chấp nhận giá trị sai
 // kiểu (chuỗi "2" thay vì số 2) hay JSON rỗng.

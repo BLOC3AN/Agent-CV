@@ -26,7 +26,7 @@ describe('PreviewModal print mode', () => {
 
     const surface = screen.getByTestId('cv-print-surface')
     expect(surface).toHaveStyle('--cv-font-family: "Open Sans", Arial, sans-serif')
-    expect(surface).toHaveStyle('--cv-body-size: 14pt')
+    expect(surface).toHaveStyle('--cv-body-size: 10.5pt')
     expect(surface).toHaveStyle('--cv-section-title-size: 11pt')
     expect(surface).toHaveStyle('--cv-header-size: 20pt')
     expect(surface).toHaveAttribute('data-variant', 'print')

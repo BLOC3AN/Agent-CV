@@ -486,7 +486,7 @@ func normalizeCVDesign(cv map[string]any) bool {
 	if !ok || !onlyCVKeys(design, "template", "accentColor", "font", "fontSize", "bodyFontSize", "sectionTitleFontSize", "headerFontSize", "spacing") || !defaultCVString(design, "accentColor", "#4F46E5") {
 		return false
 	}
-	for key, fallback := range map[string]string{"template": "modern", "font": "Roboto", "spacing": "normal"} {
+	for key, fallback := range map[string]string{"template": "modern", "font": "Auto", "spacing": "normal"} {
 		if !defaultCVString(design, key, fallback) {
 			return false
 		}
@@ -496,7 +496,7 @@ func normalizeCVDesign(cv map[string]any) bool {
 			return false
 		}
 	} else {
-		design["fontSize"] = float64(14)
+		design["fontSize"] = float64(10.5)
 	}
 	if !validCVFont(design["font"]) || !validCVOptionalFontSize(design, "bodyFontSize", 9, 14) || !validCVOptionalFontSize(design, "sectionTitleFontSize", 10, 16) || !validCVOptionalFontSize(design, "headerFontSize", 16, 28) {
 		return false
