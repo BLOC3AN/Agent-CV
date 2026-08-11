@@ -474,7 +474,7 @@ func normalizeCVDesign(cv map[string]any) bool {
 		cv["design"] = value
 	}
 	design, ok := value.(map[string]any)
-	if !ok || !onlyCVKeys(design, "template", "accentColor", "font", "fontSize", "spacing") || !defaultCVString(design, "accentColor", "#4F46E5") {
+	if !ok || !onlyCVKeys(design, "template", "accentColor", "font", "fontSize", "bodyFontSize", "sectionTitleFontSize", "headerFontSize", "spacing") || !defaultCVString(design, "accentColor", "#4F46E5") {
 		return false
 	}
 	for key, fallback := range map[string]string{"template": "modern", "font": "Roboto", "spacing": "normal"} {
@@ -489,7 +489,32 @@ func normalizeCVDesign(cv map[string]any) bool {
 	} else {
 		design["fontSize"] = float64(14)
 	}
-	return (design["template"] == "modern" || design["template"] == "classic" || design["template"] == "professional") && (design["font"] == "Roboto" || design["font"] == "Open Sans" || design["font"] == "Lato") && (design["spacing"] == "condensed" || design["spacing"] == "normal" || design["spacing"] == "wide")
+	if !validCVFont(design["font"]) || !validCVOptionalFontSize(design, "bodyFontSize", 9, 14) || !validCVOptionalFontSize(design, "sectionTitleFontSize", 10, 16) || !validCVOptionalFontSize(design, "headerFontSize", 16, 28) {
+		return false
+	}
+	return (design["template"] == "modern" || design["template"] == "classic" || design["template"] == "professional") && (design["spacing"] == "condensed" || design["spacing"] == "normal" || design["spacing"] == "wide")
+}
+
+func validCVFont(value any) bool {
+	font, ok := value.(string)
+	if !ok {
+		return false
+	}
+	switch font {
+	case "Auto", "Calibri", "Arial", "Times New Roman", "Roboto", "Open Sans", "Lato":
+		return true
+	default:
+		return false
+	}
+}
+
+func validCVOptionalFontSize(design map[string]any, key string, min, max float64) bool {
+	value, exists := design[key]
+	if !exists {
+		return true
+	}
+	size, ok := value.(float64)
+	return ok && size >= min && size <= max
 }
 
 func normalizeCVActiveSections(cv map[string]any) bool {

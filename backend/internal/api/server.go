@@ -2050,7 +2050,7 @@ func allowedChatPatchPath(op, path string) bool {
 		}
 	}
 	if len(parts) == 2 && parts[0] == "design" {
-		return stringIn(parts[1], "template", "accentColor", "font", "fontSize", "spacing")
+		return stringIn(parts[1], "template", "accentColor", "font", "fontSize", "bodyFontSize", "sectionTitleFontSize", "headerFontSize", "spacing")
 	}
 	if len(parts) >= 2 && parts[0] == "layout" && parts[1] == "nodes" {
 		if len(parts) == 2 {

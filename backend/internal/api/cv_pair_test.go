@@ -34,6 +34,18 @@ func TestValidateCVAcceptsV2(t *testing.T) {
 	}
 }
 
+func TestNormalizeCVDesignAcceptsTypographyFields(t *testing.T) {
+	cv := map[string]any{
+		"design": map[string]any{
+			"template": "modern", "accentColor": "#4F46E5", "font": "Auto", "fontSize": float64(14), "spacing": "normal",
+			"bodyFontSize": float64(10.5), "sectionTitleFontSize": float64(11), "headerFontSize": float64(20),
+		},
+	}
+	if !normalizeCVDesign(cv) {
+		t.Fatal("typography fields and Auto font must be accepted")
+	}
+}
+
 // hasSchemaVersion là mảnh kiểm tra nhỏ nhất: đúng một khoá, không parse cả
 // tài liệu. Test riêng để chứng minh nó không âm thầm chấp nhận giá trị sai
 // kiểu (chuỗi "2" thay vì số 2) hay JSON rỗng.

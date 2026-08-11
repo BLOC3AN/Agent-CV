@@ -431,6 +431,14 @@ func TestPatchCVRejectsNonV2(t *testing.T) {
 	}
 }
 
+func TestAllowedChatPatchPathAcceptsTypographyFields(t *testing.T) {
+	for _, field := range []string{"font", "bodyFontSize", "sectionTitleFontSize", "headerFontSize"} {
+		if !allowedChatPatchPath("replace", "/design/"+field) {
+			t.Fatalf("design field %q should be accepted", field)
+		}
+	}
+}
+
 // Không có header thì PATCH vẫn giữ hành vi service-unavailable khi chưa có DB.
 func TestPatchCVWithoutHeaderStaysServiceUnavailable(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPatch,
