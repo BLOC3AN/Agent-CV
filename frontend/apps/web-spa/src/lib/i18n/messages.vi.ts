@@ -351,6 +351,20 @@ export const vi = {
   fieldGroup: 'Nhóm',
   fieldLinkLabel: 'Nhãn liên kết',
   fieldLinks: 'Liên kết',
+  guidedTargetQuestion: 'Bạn muốn ứng tuyển vị trí nào?',
+  guidedTargetPlaceholder: 'Ví dụ: Backend Engineer',
+  guidedWorkedQuestion: 'Bạn đã từng đi làm chưa?',
+  guidedYes: 'Có',
+  guidedNo: 'Chưa',
+  guidedProjectFocusOK: 'Không sao — tập trung vào dự án là hoàn toàn hợp lệ.',
+  guidedStartFromLatest: 'Bắt đầu từ công việc gần nhất.',
+  guidedBodyProject: 'Tên dự án',
+  guidedBodyRole: 'Chức danh / vai trò gần nhất',
+  guidedOrganization: 'Công ty / tổ chức',
+  guidedWhatDidYouDo: 'Bạn đã làm gì?',
+  guidedFullName: 'Họ và tên',
+  guidedCreateFailed: 'Không tạo được CV từ luồng hướng dẫn',
+  untitledCV: 'CV chưa đặt tên',
 } as const
 
 export type MessageKey = keyof typeof vi
