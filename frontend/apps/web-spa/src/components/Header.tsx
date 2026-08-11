@@ -28,10 +28,14 @@ export const Header: React.FC<HeaderProps> = ({
   const isEditor = location.pathname.startsWith('/builder');
   const { email, signOut } = useSession();
   const userEmail = email ?? 'Chưa đăng nhập';
-  const { t } = useLocale();
-  // Vắng `language` nghĩa là không có CV nào đang mở, nên bộ chọn tự biến mất
-  // ngoài trình sửa mà không cần thêm điều kiện nào ở đây.
+  const { t, locale, setLocale } = useLocale();
+  // Nút ngôn ngữ là nút chung: nó đổi giao diện toàn ứng dụng, và khi có CV
+  // đang mở thì ghi luôn `cv.language`. Ghi vào CV là điều kiện để bản PDF in
+  // đúng ngôn ngữ — máy chủ dựng PDF đọc CV đã lưu, nó không thấy được tuỳ chọn
+  // nằm trong localStorage của trình duyệt.
   const { language, setLanguage } = useBuilderLocale();
+  const selected = language ?? locale;
+  const changeLanguage = (next: Locale) => { setLocale(next); setLanguage(next); };
 
   return (
     <header className="h-[88px] bg-white border-b border-slate-200/80 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xs">
@@ -90,25 +94,23 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Controls */}
       <div className="flex items-center space-x-2.5">
+        <label className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600">
+          <span className="sr-only">{t('cvLanguage')}</span>
+          <select
+            id="btn-header-cv-language"
+            aria-label={t('cvLanguage')}
+            value={selected}
+            onChange={(event) => changeLanguage(event.target.value as Locale)}
+            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:border-violet-400 focus:outline-none"
+          >
+            <option value="vi">{t('cvLanguageVi')}</option>
+            <option value="en">{t('cvLanguageEn')}</option>
+          </select>
+        </label>
+
         {isEditor ? (
           /* Editor Actions */
           <>
-            {language && (
-              <label className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600">
-                <span className="sr-only">{t('cvLanguage')}</span>
-                <select
-                  id="btn-header-cv-language"
-                  aria-label={t('cvLanguage')}
-                  value={language}
-                  onChange={(event) => setLanguage(event.target.value as Locale)}
-                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:border-violet-400 focus:outline-none"
-                >
-                  <option value="vi">{t('cvLanguageVi')}</option>
-                  <option value="en">{t('cvLanguageEn')}</option>
-                </select>
-              </label>
-            )}
-
             <button
               onClick={onOpenPreview ?? (() => window.dispatchEvent(new Event('hr-agent:open-preview')))}
               id="btn-header-preview"

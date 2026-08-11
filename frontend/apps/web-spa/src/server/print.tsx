@@ -29,6 +29,18 @@ type BuiltPage =
   | { ok: true; html: string; title: string; variant: PrintVariant }
   | { ok: false; status: number; message: string }
 
+/**
+ * Phải là type guard tường minh, không thể viết `if (!page.ok)`.
+ *
+ * Project này không bật `strict`, và thiếu `strictNullChecks` thì TypeScript
+ * KHÔNG thu hẹp union theo discriminant kiểu boolean — `page.status` sau đó báo
+ * "không tồn tại trên BuiltPage". Cùng đoạn mã ấy biên dịch sạch dưới `--strict`,
+ * nên đây là cái bẫy chỉ lộ ra ở cấu hình của repo này.
+ */
+function isFailure(page: BuiltPage): page is Extract<BuiltPage, { ok: false }> {
+  return !page.ok
+}
+
 function variantOf(value: unknown): PrintVariant {
   return value === 'ats' || value === 'thumbnail' ? value : 'presentation'
 }
@@ -72,7 +84,7 @@ async function buildPrintPage(backendURL: string, cvId: string, variant: PrintVa
 export function createPrintHandler(backendURL: string): RequestHandler {
   return async (req, res) => {
     const page = await buildPrintPage(backendURL, String(req.params.cvId ?? ''), variantOf(req.query.variant), req.headers.cookie ?? '')
-    if (!page.ok) { res.status(page.status).send(page.message); return }
+    if (isFailure(page)) { res.status(page.status).send(page.message); return }
     res.type('html').send(page.html)
   }
 }
@@ -117,7 +129,7 @@ function contentDisposition(title: string): string {
 export function createPrintPDFHandler(backendURL: string): RequestHandler {
   return async (req, res) => {
     const page = await buildPrintPage(backendURL, String(req.params.cvId ?? ''), variantOf(req.query.variant), req.headers.cookie ?? '')
-    if (!page.ok) { res.status(page.status).type('text/plain').send(page.message); return }
+    if (isFailure(page)) { res.status(page.status).type('text/plain').send(page.message); return }
 
     let pdf: Buffer
     try {

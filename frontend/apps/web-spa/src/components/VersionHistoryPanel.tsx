@@ -40,6 +40,7 @@ function formatRevisionTime(createdAt: string): string {
 }
 
 function SnapshotPreview({ title, snapshot, changes }: { title: string; snapshot?: CVRevisionSnapshot; changes: CVChangeMap }) {
+  const { t } = useLocale()
   return (
     <section className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3">
       <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-700">{title}</h3>
@@ -68,7 +69,7 @@ function ChangeLegend({ changes }: { changes: CVChangeMap }) {
   ]
   return (
     <div role="status" className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-      <span className="font-semibold">{totals.total} thay đổi so với bản trước đó</span>
+      <span className="font-semibold">{t('changeCount', { n: totals.total })}</span>
       {marks.filter(([, , count]) => count > 0).map(([label, swatch, count]) => (
         <span key={label} className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-sm ${swatch}`} />
@@ -223,7 +224,7 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
               <article key={revision.id} className="rounded-xl border border-slate-200 bg-white p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900">Phiên bản {revision.number}</h3>
+                    <h3 className="text-sm font-bold text-slate-900">{t('versionNumber', { n: revision.number })}</h3>
                     <p className="mt-1 text-xs font-medium text-indigo-700">{sourceLabel(revision.source, t)}</p>
                     <p className="mt-1 text-xs text-slate-500">{formatRevisionTime(revision.createdAt)}</p>
                     {revision.message && <p className="mt-2 text-xs text-slate-700">{revision.message}</p>}
@@ -231,10 +232,10 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" aria-pressed={selectedRevisionId === revision.id} onClick={() => void openPreview(revision.id)} disabled={previewingId === revision.id || restoring} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                    {previewingId === revision.id ? t('loadingShort') : `Xem trước phiên bản ${revision.number}`}
+                    {previewingId === revision.id ? t('loadingShort') : t('previewVersion', { n: revision.number })}
                   </button>
                   <button type="button" onClick={(event) => requestRestore(revision, event.currentTarget)} disabled={restoring || dirty} className="rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">
-                    Khôi phục phiên bản {revision.number}
+                    {t('restoreVersion', { n: revision.number })}
                   </button>
                 </div>
               </article>
@@ -259,7 +260,7 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
       {restoreTarget && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/35 p-4">
           <section ref={confirmationDialogRef} role="dialog" aria-modal="true" aria-label={t('restoreConfirmLabel')} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h2 className="text-base font-bold text-slate-900">Khôi phục phiên bản {restoreTarget.number}?</h2>
+            <h2 className="text-base font-bold text-slate-900">{t('restoreVersionQuestion', { n: restoreTarget.number })}</h2>
             <p className="mt-2 text-sm text-slate-600">{t('restoreConfirmBody')}</p>
             <div className="mt-5 flex justify-end gap-2">
               <button ref={confirmationCancelRef} type="button" onClick={closeConfirmation} disabled={restoring} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">{t('cancel')}</button>

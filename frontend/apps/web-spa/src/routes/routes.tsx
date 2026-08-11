@@ -110,7 +110,15 @@ export const appRoutes: RouteObject[] = [
   {
     element: (
       <LocaleProvider>
-        <SessionProvider><Outlet /></SessionProvider>
+        {/*
+          * Bộ chọn ngôn ngữ là nút CHUNG trên header nên provider phải bọc toàn
+          * bộ cây, không riêng nhóm route trình sửa: header hiện ở mọi màn hình.
+          * Khi có CV đang mở, `BuilderRoute` đăng ký vào đây để nút ghi luôn
+          * `cv.language` — thứ mà máy chủ dựng PDF đọc được.
+          */}
+        <BuilderLocaleProvider>
+          <SessionProvider><Outlet /></SessionProvider>
+        </BuilderLocaleProvider>
       </LocaleProvider>
     ),
     children: [
@@ -124,15 +132,9 @@ export const appRoutes: RouteObject[] = [
         children: protectedChildren,
       },
       {
-        // `BuilderLocaleProvider` phải bọc CẢ `AppLayout` chứ không nằm trong
-        // `BuilderRoute`: bộ chọn ngôn ngữ sống trong `Header` do `AppLayout`
-        // dựng, tức là TRÊN route con. Bọc ở đây là cách duy nhất để Header và
-        // BuilderRoute cùng nhìn thấy một context.
         element: (
           <RequireAuth>
-            <BuilderLocaleProvider>
-              <AppLayout hideSidebar />
-            </BuilderLocaleProvider>
+            <AppLayout hideSidebar />
           </RequireAuth>
         ),
         children: builderChildren,

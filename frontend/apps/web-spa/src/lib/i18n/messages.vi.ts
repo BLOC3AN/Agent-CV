@@ -125,6 +125,22 @@ export const vi = {
   changeEdited: 'Đã sửa',
   changeRemoved: 'Đã xóa',
   sourceUser: 'Người dùng',
+
+  // Tab và panel thiết kế
+  tabSections: 'Nội dung (Sections)',
+  tabDesign: 'Thiết kế (Design)',
+  resetDefault: 'Đặt lại mặc định',
+  template: 'Mẫu CV (Template)',
+  accentColor: 'Màu chủ đạo',
+  font: 'Font chữ',
+
+  // Chuỗi có tham số
+  versionNumber: 'Phiên bản {n}',
+  previewVersion: 'Xem trước phiên bản {n}',
+  restoreVersion: 'Khôi phục phiên bản {n}',
+  restoreVersionQuestion: 'Khôi phục phiên bản {n}?',
+  changeCount: '{n} thay đổi so với bản trước đó',
+  dropPosition: 'Vị trí thả {label}',
 } as const
 
 export type MessageKey = keyof typeof vi

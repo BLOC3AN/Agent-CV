@@ -111,4 +111,18 @@ export const en: Record<MessageKey, string> = {
   changeEdited: 'Edited',
   changeRemoved: 'Removed',
   sourceUser: 'User',
+
+  tabSections: 'Content (Sections)',
+  tabDesign: 'Design',
+  resetDefault: 'Reset to default',
+  template: 'Template',
+  accentColor: 'Accent colour',
+  font: 'Font',
+
+  versionNumber: 'Version {n}',
+  previewVersion: 'Preview version {n}',
+  restoreVersion: 'Restore version {n}',
+  restoreVersionQuestion: 'Restore version {n}?',
+  changeCount: '{n} changes from the previous version',
+  dropPosition: 'Drop position for {label}',
 }

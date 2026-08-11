@@ -1,9 +1,10 @@
+import React from 'react'
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { BuilderRoute } from '../src/routes/BuilderRoute'
 import { Header } from '../src/components/Header'
-import { BuilderLocaleProvider } from '../src/lib/i18n'
+import { BuilderLocaleProvider, LocaleProvider } from '../src/lib/i18n'
 import * as api from '../src/lib/api'
 import type { CV, CVLayout } from '../src/types'
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
@@ -30,10 +31,19 @@ afterEach(() => vi.restoreAllMocks())
 function renderBuilder(language: 'vi' | 'en' = 'vi') {
   vi.spyOn(api, 'getCV').mockResolvedValue(envelope({ ...cv, language }))
   const router = createMemoryRouter([
-    { path: '/builder/:cvId', element: <BuilderLocaleProvider><Header /><BuilderRoute /></BuilderLocaleProvider> },
-    { path: '/other', element: <BuilderLocaleProvider><Header /><div data-testid="other" /></BuilderLocaleProvider> },
+    { path: '/builder/:cvId', element: <><Header /><BuilderRoute /></> },
+    { path: '/other', element: <><Header /><div data-testid="other" /></> },
   ], { initialEntries: ['/builder/cv-1'] })
-  render(<RouterProvider router={router} />)
+  // Bọc NGOÀI router, đúng như `routes.tsx`: một provider duy nhất cho cả cây.
+  // Bọc trong từng route element sẽ dựng provider mới mỗi màn hình, và React
+  // tái dùng instance giữa các route — một hình dạng mà ứng dụng thật không có.
+  render(
+    <LocaleProvider>
+      <BuilderLocaleProvider>
+        <RouterProvider router={router} />
+      </BuilderLocaleProvider>
+    </LocaleProvider>,
+  )
   return router
 }
 
@@ -47,14 +57,38 @@ describe('bộ chọn ngôn ngữ CV', () => {
     expect(selector()).toBeTruthy()
   })
 
-  it('không hiện ngoài trình sửa', async () => {
-    const router = renderBuilder()
+  /*
+   * Nút là nút CHUNG: nó ở lại header khi rời trình sửa, và giữ nguyên lựa chọn
+   * vừa đặt — lúc đó nó phản ánh tuỳ chọn giao diện thay vì ngôn ngữ của CV.
+   */
+  it('vẫn ở lại header khi rời trình sửa', async () => {
+    const router = renderBuilder('en')
     await screen.findByTestId('cv-editor')
 
     await router.navigate('/other')
 
     await waitFor(() => expect(screen.getByTestId('other')).toBeTruthy())
-    expect(screen.queryByRole('combobox', { name: /ngôn ngữ cv|cv language/i })).toBeNull()
+    expect(selector()).toBeTruthy()
+  })
+
+  /*
+   * Ngoài trình sửa, nút đổi ngôn ngữ giao diện toàn ứng dụng. Dựng thẳng
+   * `Header` thay vì dàn dựng điều hướng: điều cần đo là nút, không phải router.
+   */
+  it('đổi ngôn ngữ giao diện khi không mở CV nào', async () => {
+    render(
+      <LocaleProvider>
+        <BuilderLocaleProvider>
+          <MemoryRouter initialEntries={['/']}><Header /></MemoryRouter>
+        </BuilderLocaleProvider>
+      </LocaleProvider>,
+    )
+    expect(screen.getByRole('link', { name: 'Trang chủ' })).toBeTruthy()
+
+    fireEvent.change(selector(), { target: { value: 'en' } })
+
+    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
+    expect(localStorage.getItem('hr-locale')).toBe('en')
   })
 
   /*

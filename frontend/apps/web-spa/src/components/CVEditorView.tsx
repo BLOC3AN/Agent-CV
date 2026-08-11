@@ -140,9 +140,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 ? 'bg-white text-indigo-600 shadow-2xs font-bold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
-          >
-            Nội dung (Sections)
-          </button>
+          >{t('tabSections')}</button>
           <button
             onClick={() => setActiveTab('DESIGN')}
             id="tab-design"
@@ -151,9 +149,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 ? 'bg-white text-indigo-600 shadow-2xs font-bold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
-          >
-            Thiết kế (Design)
-          </button>
+          >{t('tabDesign')}</button>
         </div>
 
         {dirty && <p role="status" className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">{t('draftUnsaved')}</p>}
@@ -166,9 +162,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 onClick={onDiscard}
                 disabled={!dirty || saving}
                 className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Bỏ thay đổi
-              </button>
+              >{t('discard')}</button>
             )}
             {onSave && (
               <button
@@ -187,9 +181,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 onClick={() => setHistoryOpen(true)}
                 disabled={saving}
                 className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Lịch sử phiên bản
-              </button>
+              >{t('versionHistory')}</button>
             )}
           </div>
         )}
@@ -198,7 +190,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {activeTab === 'SECTIONS' ? (
             <div className="space-y-4">
-              <section aria-label="Bố cục CV" className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-2">
+              <section aria-label={t('cvLayout')} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">{t('cvLayout')}</h3>
                   <button
@@ -206,9 +198,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                     onClick={() => updateLayout(resetDefaultLayout(layout))}
                     disabled={hasDefaultNodeOrder(layout)}
                     className="rounded-md px-2 py-1 text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                  >
-                    Đặt lại mặc định
-                  </button>
+                  >{t('resetDefault')}</button>
                 </div>
                 {!hasDefaultNodeOrder(layout) && <p className="rounded-md bg-amber-50 px-2 py-1 text-[10px] leading-relaxed text-amber-700">{t('nonDefaultOrder')}</p>}
                 <ComponentTree
@@ -239,9 +229,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
             <div className="space-y-5 text-xs">
               {/* Template Picker */}
               <div className="space-y-2">
-                <label className="block font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
-                  Mẫu CV (Template)
-                </label>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider text-[11px]">{t('template')}</label>
                 <div className="grid grid-cols-3 gap-2">
                   {['modern', 'classic', 'professional'].map((tpl) => (
                     <button
@@ -261,9 +249,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
               {/* Accent Color */}
               <div className="space-y-2">
-                <label className="block font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
-                  Màu chủ đạo
-                </label>
+                <label className="block font-semibold text-slate-700 uppercase tracking-wider text-[11px]">{t('accentColor')}</label>
                 <div className="flex items-center space-x-3">
                   {colorOptions.map((c) => (
                     <button
@@ -287,12 +273,10 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
               {/* Font */}
               <div className="space-y-2">
-                <label htmlFor="cv-font" className="block font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
-                  Font chữ
-                </label>
+                <label htmlFor="cv-font" className="block font-semibold text-slate-700 uppercase tracking-wider text-[11px]">{t('font')}</label>
                 <select
                   id="cv-font"
-                  aria-label="Font chữ"
+                  aria-label={t('font')}
                   value={cv.design.font}
                   onChange={(e) => updateDesign('font', e.target.value)}
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-indigo-500"
@@ -375,7 +359,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 </div>
                 <div className="space-y-1">
                   <label htmlFor="cv-textAlign" className="block text-xs font-semibold text-slate-700">{t('textAlign')}</label>
-                  <select id="cv-textAlign" aria-label="Căn lề nội dung" value={typography.textAlign} onChange={(e) => updateDesign('textAlign', e.target.value as CVDesign['textAlign'])} className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none">
+                  <select id="cv-textAlign" aria-label={t('textAlign')} value={typography.textAlign} onChange={(e) => updateDesign('textAlign', e.target.value as CVDesign['textAlign'])} className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none">
                     <option value="left">{t('alignLeft')}</option>
                     <option value="right">{t('alignRight')}</option>
                     <option value="justify">{t('alignJustify')}</option>

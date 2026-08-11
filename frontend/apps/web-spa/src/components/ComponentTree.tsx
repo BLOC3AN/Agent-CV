@@ -126,7 +126,7 @@ export function ComponentTree({ cv, layout, selectedNodeId, selectedItemId, onMo
       key={key}
       data-testid="component-tree-drop-placeholder"
       data-drop-placeholder={key}
-      aria-label={`Vị trí thả ${label}`}
+      aria-label={t('dropPosition', { label })}
       className="my-1 h-9 rounded-lg border border-dashed border-indigo-400 bg-indigo-50/70 shadow-inner transition-all duration-150 ease-out"
     />
   )

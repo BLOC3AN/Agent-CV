@@ -7,13 +7,25 @@ export type { MessageKey }
 
 const messages: Record<Locale, Record<MessageKey, string>> = { vi, en }
 
-interface LocaleValue { locale: Locale; setLocale: (locale: Locale) => void; t: (key: MessageKey) => string }
+export type MessageParams = Record<string, string | number>
+
+/**
+ * Chèn tham số dạng `{n}` — chuỗi như "Phiên bản {n}" phải giữ nguyên câu chữ
+ * của từng ngôn ngữ thay vì bị nối chuỗi ngoài chỗ dùng, vì trật tự từ giữa hai
+ * ngôn ngữ không giống nhau.
+ */
+function format(template: string, params?: MessageParams): string {
+  if (!params) return template
+  return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in params ? String(params[name]) : whole))
+}
+
+interface LocaleValue { locale: Locale; setLocale: (locale: Locale) => void; t: (key: MessageKey, params?: MessageParams) => string }
 const Context = createContext<LocaleValue | null>(null)
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocale] = useState<Locale>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('hr-locale') === 'en' ? 'en' : 'vi'))
   function change(next: Locale) { setLocale(next); if (typeof localStorage !== 'undefined') localStorage.setItem('hr-locale', next) }
-  const value = useMemo(() => ({ locale, setLocale: change, t: (key: MessageKey) => messages[locale][key] }), [locale])
+  const value = useMemo(() => ({ locale, setLocale: change, t: (key: MessageKey, params?: MessageParams) => format(messages[locale][key], params) }), [locale])
   return <Context.Provider value={value}>{children}</Context.Provider>
 }
 
@@ -21,7 +33,7 @@ export function useLocale(): LocaleValue {
   const value = useContext(Context)
   // Components remain independently testable and embeddable (the route tree
   // provides the real context); standalone renders use Vietnamese defaults.
-  return value ?? { locale: 'vi', setLocale: () => {}, t: (key: MessageKey) => messages.vi[key] }
+  return value ?? { locale: 'vi', setLocale: () => {}, t: (key: MessageKey, params?: MessageParams) => format(messages.vi[key], params) }
 }
 
 interface BuilderLocaleValue {
@@ -73,7 +85,7 @@ export function BuilderLocaleProvider({ children }: { children: React.ReactNode 
    * mount lại, rồi đăng ký lại — một vòng lặp không dừng.
    */
   const localeValue = useMemo<LocaleValue>(() => (registered
-    ? { locale: registered.language, setLocale: () => {}, t: (key: MessageKey) => messages[registered.language][key] }
+    ? { locale: registered.language, setLocale: () => {}, t: (key: MessageKey, params?: MessageParams) => format(messages[registered.language][key], params) }
     : outer), [registered, outer])
 
   return (
