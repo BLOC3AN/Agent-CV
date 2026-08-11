@@ -145,7 +145,7 @@ export const en: Record<MessageKey, string> = {
   atsBenchmark: 'ATS BENCHMARK',
   profileCompleteness: 'Profile completeness',
   completenessHint: 'Open the details to see what is covered and what AI suggests improving.',
-  meetsStandard: 'ON STANDARD',
+  meetsStandard: 'COMPLETE',
   managedCVs: '{n} CV managed',
   noProfileToScore: 'No profile to score yet',
   aiTipBadge: 'AI ASSISTANT TIP',

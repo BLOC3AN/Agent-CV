@@ -162,7 +162,7 @@ export const vi = {
   atsBenchmark: 'ĐIỂM CHUẨN ATS',
   profileCompleteness: 'Độ hoàn thiện hồ sơ',
   completenessHint: 'Mở chi tiết để xem phần nào đã đủ và gợi ý cải thiện từ AI.',
-  meetsStandard: 'ĐẠT CHUẨN',
+  meetsStandard: 'ĐỦ THÔNG TIN',
   managedCVs: '{n} CV đang được quản lý',
   noProfileToScore: 'Chưa có hồ sơ để đánh giá',
   aiTipBadge: 'GỢI Ý TỪ AI TRỢ LÝ',

@@ -6,6 +6,8 @@ import { DashboardRoute } from '../src/routes/DashboardRoute'
 import { MyCVsRoute } from '../src/routes/MyCVsRoute'
 import { Sidebar } from '../src/components/Sidebar'
 import { greetingKey } from '../src/components/DashboardView'
+import { cvCompleteness } from '../src/lib/cv-completeness'
+import type { CV } from '../src/types'
 import { LocaleProvider, BuilderLocaleProvider } from '../src/lib/i18n'
 import { vietnameseIn, vietnameseLabelsIn } from './helpers/vietnamese'
 import * as api from '../src/lib/api'
@@ -233,5 +235,30 @@ describe('lời chào theo giờ máy người dùng', () => {
 
     const expected = { greetingMorning: 'Good morning,', greetingAfternoon: 'Good afternoon,', greetingEvening: 'Good evening,' }[greetingKey(new Date().getHours())]
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(expected)
+  })
+})
+
+describe('độ hoàn thiện hồ sơ trên trang tổng quan', () => {
+  it('hiện 0% khi chưa có CV nào, không phải một điểm mặc định', async () => {
+    vi.spyOn(api, 'listCVs').mockResolvedValue([])
+    renderInEnglish(<DashboardRoute />)
+
+    expect(await screen.findByText('0%')).toBeTruthy()
+  })
+
+  /*
+   * Điểm phải suy từ CV thật. Trước đây chỗ này cứng ở 85% nên mọi hồ sơ —
+   * kể cả một CV gần như trống — đều trông như đã đạt chuẩn.
+   */
+  it('tính điểm từ nội dung CV thật chứ không cố định', async () => {
+    const base = profileSnapshot as never as CV
+    const sparse = { ...base, sections: { ...base.sections, intro: { fullName: 'Alex Tran', title: '', email: '', phone: '', location: '', summary: '' } } } as CV
+    vi.spyOn(api, 'listCVs').mockResolvedValue([summary])
+    vi.spyOn(api, 'getCV').mockResolvedValue({ id: 'cv-1', profileId: 'p1', profileSnapshot: sparse } as never)
+    renderInEnglish(<DashboardRoute />)
+    await screen.findByText('Alex Tran')
+
+    expect(screen.getByText(`${cvCompleteness(sparse)}%`)).toBeTruthy()
+    expect(screen.queryByText('85%')).toBeNull()
   })
 })

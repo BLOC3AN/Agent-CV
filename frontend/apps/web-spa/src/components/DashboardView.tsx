@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLocale } from '../lib/i18n';
+import { cvCompleteness } from '../lib/cv-completeness';
 import { CV } from '../types';
 import {
   ArrowRight,
@@ -42,6 +43,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const userName = userEmail.split('@')[0];
   const activeCV = cvs[0] || null;
   const hasCV = cvCount > 0;
+  // Suy thẳng từ CV đang mở — không có job, không chờ. Không có CV thì 0, chứ
+  // không phải một con số mặc định trông như đã chấm.
+  const completeness = activeCV ? cvCompleteness(activeCV) : 0;
 
   return (
     <div className="p-6 md:p-8 max-w-[1216px] mx-auto space-y-8 animate-fade-in">
@@ -135,7 +139,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="relative w-20 h-20 shrink-0 flex items-center justify-center bg-emerald-50/80 border border-emerald-100 rounded-2xl">
               <div className="flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-extrabold text-emerald-700 leading-none">
-                  {hasCV ? '85%' : '0%'}
+                  {completeness}%
                 </span>
                 <span className="text-[9px] font-semibold text-emerald-600 uppercase tracking-wider mt-1">{t('meetsStandard')}</span>
               </div>
@@ -156,7 +160,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
               <div
                 className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                style={{ width: hasCV ? '85%' : '0%' }}
+                style={{ width: `${completeness}%` }}
               ></div>
             </div>
 
