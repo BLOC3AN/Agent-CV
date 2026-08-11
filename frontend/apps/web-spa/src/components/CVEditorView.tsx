@@ -49,16 +49,47 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const [activeTab, setActiveTab] = useState<'SECTIONS' | 'DESIGN'>('SECTIONS');
   const [inlineTarget, setInlineTarget] = useState<InlineTarget | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
+  const [selectedItemId, setSelectedItemId] = useState<string>();
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyInvokerRef = React.useRef<HTMLButtonElement>(null);
+  const paperRef = React.useRef<HTMLDivElement>(null);
   const layout = normalizeLayout(providedLayout ?? cv.layout);
   const typography = resolveCVTypography(cv.design);
+
+  /**
+   * Scroll the A4 preview to the block the tree points at. Nodes are split
+   * across pages, so the same node id can appear more than once — the item
+   * search walks every occurrence rather than trusting the first.
+   */
+  const revealInPaper = (nodeId: string, itemId?: string) => {
+    // Scoped to the rendered pages: the composer keeps an off-screen copy of
+    // every block for measurement, and scrolling to that would jump nowhere.
+    const paper = paperRef.current?.querySelector<HTMLElement>('#a4-cv-paper');
+    if (!paper) return;
+    const nodes = Array.from(paper.querySelectorAll<HTMLElement>('[data-cv-node-id]')).filter(
+      (element) => element.dataset.cvNodeId === nodeId,
+    );
+    const target = itemId
+      ? nodes
+          .flatMap((element) => Array.from(element.querySelectorAll<HTMLElement>('[data-cv-item-id]')))
+          .find((element) => element.dataset.cvItemId === itemId)
+      : nodes[0];
+    if (typeof target?.scrollIntoView === 'function') target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const selectAndReveal = (nodeId: string, itemId?: string) => {
+    setSelectedNodeId(nodeId);
+    setSelectedItemId(itemId);
+    revealInPaper(nodeId, itemId);
+  };
 
   const openInlineEditor = (nodeId: string, itemId?: string) => {
     const node = layout.nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
     setSelectedNodeId(node.id);
+    setSelectedItemId(itemId);
     setInlineTarget({ node, itemId });
+    revealInPaper(node.id, itemId);
   };
 
   const itemIdsFor = (nodeId: string): string[] => {
@@ -186,10 +217,11 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                   cv={cv}
                   layout={layout}
                   selectedNodeId={selectedNodeId}
+                  selectedItemId={selectedItemId}
                   onMoveNode={(nodeId, beforeNodeId) => updateLayout(moveNode(layout, nodeId, beforeNodeId))}
                   onMoveItem={(nodeId, itemId, beforeItemId) => updateLayout(moveItem(materializeItemOrder(layout, nodeId, itemIdsFor(nodeId)), nodeId, itemId, beforeItemId))}
                   onSetNodeVisible={(nodeId, visible) => updateLayout(setNodeVisible(layout, nodeId, visible))}
-                  onSelect={(nodeId) => setSelectedNodeId(nodeId)}
+                  onSelect={selectAndReveal}
                   onEdit={openInlineEditor}
                 />
               </section>
@@ -358,7 +390,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
       </div>
 
       {/* 2. Middle - A4 Live Paper Preview */}
-      <div className="flex-1 overflow-y-auto p-6 md:p-10 flex justify-center bg-slate-100/90 custom-scrollbar">
+      <div ref={paperRef} className="flex-1 overflow-y-auto p-6 md:p-10 flex justify-center bg-slate-100/90 custom-scrollbar">
         <CVPageComposer
           id="a4-cv-paper"
           cv={cv}
@@ -368,7 +400,9 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
           style={{
             ...cvTypographyStyle(cv.design),
           }}
-          onSelect={setSelectedNodeId}
+          selectedNodeId={selectedNodeId}
+          selectedItemId={selectedItemId}
+          onSelect={(nodeId, itemId) => { setSelectedNodeId(nodeId); setSelectedItemId(itemId); }}
           onEdit={openInlineEditor}
         />
       </div>

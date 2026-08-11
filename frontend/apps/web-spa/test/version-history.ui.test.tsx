@@ -79,6 +79,41 @@ describe('CV version history', () => {
     expect(screen.getByText('After name')).toBeInTheDocument()
   })
 
+  it('highlights what the revision changed on both sides of the comparison', async () => {
+    const before = { ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'Before name', title: 'Same title' } } }
+    const after = { ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'After name', title: 'Same title' } } }
+    vi.spyOn(api, 'listCVRevisions').mockResolvedValue([revision('revision-5', 5, 'ai')])
+    vi.spyOn(api, 'getCVRevision').mockResolvedValue({
+      before: { profileSnapshot: before, layout },
+      revision: { ...revision('revision-5', 5, 'ai'), profileSnapshot: after, layout },
+    } as never)
+    renderBuilder()
+
+    const dialog = await openHistory()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xem trước phiên bản 5' }))
+
+    expect(await within(dialog).findByText('1 thay đổi so với bản trước đó')).toBeInTheDocument()
+    // Both snapshots carry the mark, which is what makes the two panels
+    // comparable at a glance instead of two walls of identical-looking text.
+    expect(within(dialog).getByText('Before name')).toHaveAttribute('data-cv-change', 'changed')
+    expect(within(dialog).getByText('After name')).toHaveAttribute('data-cv-change', 'changed')
+    expect(within(dialog).getAllByText('Same title')[0]).not.toHaveAttribute('data-cv-change')
+  })
+
+  it('says so plainly when a revision changed no content', async () => {
+    vi.spyOn(api, 'listCVRevisions').mockResolvedValue([revision('revision-5', 5, 'restore')])
+    vi.spyOn(api, 'getCVRevision').mockResolvedValue({
+      before: { profileSnapshot: cv, layout },
+      revision: { ...revision('revision-5', 5, 'restore'), profileSnapshot: structuredClone(cv), layout },
+    } as never)
+    renderBuilder()
+
+    const dialog = await openHistory()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xem trước phiên bản 5' }))
+
+    expect(await within(dialog).findByText('Không có thay đổi nội dung so với bản trước đó.')).toBeInTheDocument()
+  })
+
   it('keeps the latest selected revision when preview responses resolve out of order', async () => {
     const previewFive = deferred<Awaited<ReturnType<typeof api.getCVRevision>>>()
     const previewFour = deferred<Awaited<ReturnType<typeof api.getCVRevision>>>()

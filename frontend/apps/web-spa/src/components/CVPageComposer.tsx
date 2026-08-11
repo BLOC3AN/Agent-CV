@@ -22,6 +22,8 @@ interface CVPageComposerProps {
   style?: React.CSSProperties
   className?: string
   id?: string
+  selectedNodeId?: string
+  selectedItemId?: string
   onSelect?: (nodeId: string, itemId?: string) => void
   onEdit?: (nodeId: string, itemId?: string) => void
 }
@@ -50,7 +52,7 @@ function segmentItemId(segment: string): string | undefined {
   return separator === -1 ? undefined : segment.slice(separator + SEGMENT_SEPARATOR.length)
 }
 
-export function CVPageComposer({ cv, layout, variant, style, className = '', id, onSelect, onEdit }: CVPageComposerProps) {
+export function CVPageComposer({ cv, layout, variant, style, className = '', id, selectedNodeId, selectedItemId, onSelect, onEdit }: CVPageComposerProps) {
   const visibleNodeIds = layout.nodes.filter((node) => node.visible).map((node) => node.id)
   const itemIdsByNode = new Map<string, string[]>([
     ['experience', orderedItemIds(cv.sections.experience, layout.nodes.find((node) => node.type === 'experience' && 'itemOrder' in node)?.itemOrder)],
@@ -117,7 +119,7 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
           }, {})
           return (
           <div className="cv-page-flow" style={{ lineHeight: 'var(--cv-line-height)' }}>
-            <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={nodeIds} itemIds={itemIds} onSelect={onSelect} onEdit={onEdit} />
+            <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={nodeIds} itemIds={itemIds} selectedNodeId={selectedNodeId} selectedItemId={selectedItemId} onSelect={onSelect} onEdit={onEdit} />
           </div>
           )
         }}

@@ -7,6 +7,103 @@
   font-family: inherit;
 }
 
+/*
+ * Entry heads for every dated section. The print surface ships its own copy of
+ * these rules in print-css.ts; keeping the two in step is what makes the editor
+ * and the exported PDF read the same: "<title> - <organisation>" on the left,
+ * date range flushed right on the same line.
+ */
+.cv-entry-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.25rem;
+  text-align: left;
+}
+.cv-entry-heading {
+  min-width: 0;
+  text-align: left;
+}
+.cv-entry-title {
+  font-weight: 700;
+}
+.cv-entry-sep {
+  color: #94a3b8;
+}
+.cv-entry-org {
+  color: #334155;
+}
+.cv-entry-date {
+  flex: none;
+  margin-left: auto;
+  white-space: nowrap;
+  text-align: right;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Tailwind's preflight strips list markers, so the highlight bullets rendered
+ * as a <ul> came out as bare lines on screen while the exported PDF showed
+ * discs. Restoring them here keeps the editor honest about the print result.
+ */
+.cv-bullets {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+  list-style: disc outside;
+}
+.cv-bullets li {
+  margin-bottom: 0.15rem;
+}
+
+/* The block the Sections tree currently points at. */
+[data-cv-selected='true'] {
+  outline: 2px solid #6366f1;
+  outline-offset: 4px;
+  border-radius: 4px;
+  scroll-margin: 4rem;
+}
+
+/*
+ * Version history diff. `data-cv-change` is only emitted when a diff map is
+ * handed to the renderer, so these rules stay dormant in the editor and the
+ * preview surfaces.
+ */
+[data-cv-item-id][data-cv-change] {
+  border-left: 3px solid transparent;
+  padding-left: 0.5rem;
+  border-radius: 0 4px 4px 0;
+}
+[data-cv-item-id][data-cv-change='changed'] {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+[data-cv-item-id][data-cv-change='added'] {
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+[data-cv-item-id][data-cv-change='removed'] {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+[data-cv-change]:not([data-cv-item-id]) {
+  border-radius: 3px;
+}
+[data-cv-change='changed']:not([data-cv-item-id]) {
+  background: #fde68a;
+  box-shadow: 0 0 0 2px #fde68a;
+}
+[data-cv-change='added']:not([data-cv-item-id]) {
+  background: #bbf7d0;
+  box-shadow: 0 0 0 2px #bbf7d0;
+}
+[data-cv-change='removed']:not([data-cv-item-id]) {
+  background: #fecaca;
+  box-shadow: 0 0 0 2px #fecaca;
+  text-decoration: line-through;
+  text-decoration-color: #ef4444;
+}
+
 @layer utilities {
   /* Clean Minimalist & Corporate Tech Styles */
   .custom-scrollbar::-webkit-scrollbar {

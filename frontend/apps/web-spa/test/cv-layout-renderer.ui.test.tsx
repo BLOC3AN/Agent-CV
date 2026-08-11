@@ -125,6 +125,43 @@ describe('CVBlockRenderer', () => {
     expect(container.querySelector('[data-cv-node="experience"]')?.textContent).toMatch(/bTaskee[\s\S]*IMESPRO/)
   })
 
+  it.each(['editor', 'preview', 'print'] as const)('lays out an experience head as "role - company" with the dates split off in %s', (variant) => {
+    const { container } = render(<CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={['experience']} />)
+    const head = container.querySelector('[data-cv-node="experience"] .cv-entry-head')
+    const heading = head?.querySelector('.cv-entry-heading')
+    const item = cv.sections.experience.find((entry) => entry.id === 'exp-2')!
+
+    // The dates live outside the heading so the row can push them to the far
+    // right; keeping them inside is what glued the three values together.
+    expect(heading?.textContent).toBe(`${item.title} - ${item.company}`)
+    expect(heading?.querySelector('.cv-entry-date')).toBeNull()
+    expect(head?.querySelector('.cv-entry-date')?.textContent).toBe([item.startDate, item.current ? 'Present' : item.endDate].filter(Boolean).join(' – '))
+  })
+
+  it('drops the separator when an entry has no company rather than leaving a dangling dash', () => {
+    const soloCV = structuredClone(cv)
+    soloCV.sections.experience[0]!.company = ''
+    const { container } = render(<CVBlockRenderer cv={soloCV} layout={layout} variant="editor" nodeIds={['experience']} itemIds={{ experience: ['exp-1'] }} />)
+
+    const heading = container.querySelector('[data-cv-node="experience"] .cv-entry-heading')
+    expect(heading?.textContent).toBe(soloCV.sections.experience[0]!.title)
+    expect(heading?.querySelector('.cv-entry-sep')).toBeNull()
+  })
+
+  it('marks changed fields and entries when a diff is supplied, and nothing otherwise', () => {
+    const target = cv.sections.experience[0]!
+    const changes = { [`experience.${target.id}`]: 'changed', [`experience.${target.id}.company`]: 'changed' } as const
+
+    const plain = render(<CVBlockRenderer cv={cv} layout={layout} variant="preview" nodeIds={['experience']} />)
+    expect(plain.container.querySelectorAll('[data-cv-change]')).toHaveLength(0)
+    plain.unmount()
+
+    const { container } = render(<CVBlockRenderer cv={cv} layout={layout} variant="preview" nodeIds={['experience']} changes={changes} />)
+    expect(container.querySelector(`[data-cv-item-id="${target.id}"]`)).toHaveAttribute('data-cv-change', 'changed')
+    expect(container.querySelector(`[data-cv-item-id="${target.id}"] [data-cv-field="company"]`)).toHaveAttribute('data-cv-change', 'changed')
+    expect(container.querySelector(`[data-cv-item-id="${target.id}"] [data-cv-field="role"]`)).not.toHaveAttribute('data-cv-change')
+  })
+
   it('renders only the nested items assigned to a composed page segment', () => {
     const { container } = render(
       <CVBlockRenderer

@@ -1,8 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { ApiError, getCVRevision, listCVRevisions } from '../lib/api'
 import type { CVRevisionSnapshot, CVRevisionSummary } from '../lib/api'
+import { countCVChanges, diffCVSnapshots } from '../lib/cv-diff'
+import type { CVChangeMap } from '../lib/cv-diff'
 import type { CV, CVLayout } from '../types'
 import { CVBlockRenderer } from './CVBlockRenderer'
 
@@ -36,16 +38,42 @@ function formatRevisionTime(createdAt: string): string {
   }).format(date)
 }
 
-function SnapshotPreview({ title, snapshot }: { title: string; snapshot?: CVRevisionSnapshot }) {
+function SnapshotPreview({ title, snapshot, changes }: { title: string; snapshot?: CVRevisionSnapshot; changes: CVChangeMap }) {
   return (
     <section className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3">
       <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-700">{title}</h3>
       {snapshot ? (
         <div className="max-h-96 overflow-auto rounded-lg bg-white px-5 py-6 shadow-sm">
-          <CVBlockRenderer cv={snapshot.profileSnapshot as CV} layout={snapshot.layout as CVLayout} variant="preview" />
+          <CVBlockRenderer cv={snapshot.profileSnapshot as CV} layout={snapshot.layout as CVLayout} variant="preview" changes={changes} />
         </div>
       ) : <p className="text-xs text-slate-500">Không có bản trước đó cho phiên bản này.</p>}
     </section>
+  )
+}
+
+/**
+ * Reading the two panels side by side only tells you a version exists, not what
+ * moved in it. The legend names the three marks the renderer paints so the diff
+ * is readable without guessing at the colours.
+ */
+function ChangeLegend({ changes }: { changes: CVChangeMap }) {
+  const totals = countCVChanges(changes)
+  if (!totals.total) return <p role="status" className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">Không có thay đổi nội dung so với bản trước đó.</p>
+  const marks: Array<[string, string, number]> = [
+    ['Đã sửa', 'bg-amber-200', totals.changed],
+    ['Thêm mới', 'bg-green-200', totals.added],
+    ['Đã xóa', 'bg-red-200', totals.removed],
+  ]
+  return (
+    <div role="status" className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+      <span className="font-semibold">{totals.total} thay đổi so với bản trước đó</span>
+      {marks.filter(([, , count]) => count > 0).map(([label, swatch, count]) => (
+        <span key={label} className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-sm ${swatch}`} />
+          {label}: {count}
+        </span>
+      ))}
+    </div>
   )
 }
 
@@ -167,6 +195,11 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
     }
   }
 
+  const changes = useMemo(
+    () => diffCVSnapshots(preview?.before?.profileSnapshot as CV | undefined, preview?.revision?.profileSnapshot as CV | undefined),
+    [preview],
+  )
+
   const panel = (
     <>
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">
@@ -208,10 +241,13 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
             {error && <p role="alert" className="mb-4 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
             {previewingId && <p className="text-sm text-slate-500">Đang tải bản xem trước…</p>}
             {!previewingId && preview ? (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <SnapshotPreview title="Trước khi thay đổi" snapshot={preview.before} />
-                <SnapshotPreview title="Sau thay đổi" snapshot={preview.revision} />
-              </div>
+              <>
+                <ChangeLegend changes={changes} />
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <SnapshotPreview title="Trước khi thay đổi" snapshot={preview.before} changes={changes} />
+                  <SnapshotPreview title="Sau thay đổi" snapshot={preview.revision} changes={changes} />
+                </div>
+              </>
             ) : !previewingId && !error && !loading && <p className="text-sm text-slate-500">Chọn một phiên bản để xem trước thay đổi.</p>}
           </div>
         </div>

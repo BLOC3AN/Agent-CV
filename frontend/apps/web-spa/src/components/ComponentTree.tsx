@@ -6,6 +6,7 @@ interface ComponentTreeProps {
   cv: CV
   layout: CVLayout
   selectedNodeId?: string
+  selectedItemId?: string
   onMoveNode: (nodeId: string, beforeNodeId: string | null) => void
   onMoveItem: (nodeId: string, itemId: string, beforeItemId: string | null) => void
   onSetNodeVisible: (nodeId: string, visible: boolean) => void
@@ -47,7 +48,38 @@ function activateEditFromKeyboard(event: React.KeyboardEvent<HTMLElement>, onEdi
   onEdit?.(nodeId, itemId)
 }
 
-export function ComponentTree({ cv, layout, selectedNodeId, onMoveNode, onMoveItem, onSetNodeVisible, onSelect, onEdit }: ComponentTreeProps) {
+/**
+ * A drop lands *before* the hovered row while the pointer is in its top half
+ * and *before the next row* once it crosses the midpoint. Without the second
+ * half, dragging a row onto its immediate neighbour resolves to "insert before
+ * the neighbour" — which is exactly where the row already sits, so the drop
+ * silently does nothing.
+ *
+ * jsdom reports a zero rect for every element, which lands on the top half and
+ * keeps the "insert before the hovered row" behaviour the unit tests assert.
+ */
+function dropsAfterMidpoint(event: React.DragEvent<HTMLElement>): boolean {
+  const rect = event.currentTarget.getBoundingClientRect()
+  if (!rect.height) return false
+  return event.clientY > rect.top + rect.height / 2
+}
+
+/**
+ * Native drag only starts in Firefox once the drag carries a payload. jsdom
+ * dispatches drag events without a DataTransfer, hence the guard.
+ */
+function beginDrag(event: React.DragEvent<HTMLElement>, payload: string) {
+  if (!event.dataTransfer) return
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', payload)
+}
+
+function allowDrop(event: React.DragEvent<HTMLElement>) {
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+}
+
+export function ComponentTree({ cv, layout, selectedNodeId, selectedItemId, onMoveNode, onMoveItem, onSetNodeVisible, onSelect, onEdit }: ComponentTreeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [dragged, setDragged] = useState<Dragged>(null)
   const [dropTarget, setDropTarget] = useState<DropTarget>(null)
@@ -97,8 +129,39 @@ export function ComponentTree({ cv, layout, selectedNodeId, onMoveNode, onMoveIt
     />
   )
 
+  /** Insert position for a node drop, honouring which half of the row was hit. */
+  const nodeTargetFor = (event: React.DragEvent<HTMLElement>, nodeId: string): string | null => {
+    if (!dropsAfterMidpoint(event)) return nodeId
+    const index = layout.nodes.findIndex((candidate) => candidate.id === nodeId)
+    return layout.nodes[index + 1]?.id ?? null
+  }
+
+  const itemTargetFor = (event: React.DragEvent<HTMLElement>, items: Array<{ id: string }>, itemId: string): string | null => {
+    if (!dropsAfterMidpoint(event)) return itemId
+    const index = items.findIndex((candidate) => candidate.id === itemId)
+    return items[index + 1]?.id ?? null
+  }
+
+  /**
+   * Committing from the tracked target is what makes the placeholder itself a
+   * valid drop surface: it is inserted above the hovered row, so it takes over
+   * the pointer the instant it appears. Without this the drop lands on an
+   * element with no handler and the reorder is thrown away.
+   */
+  const commitTrackedDrop = () => {
+    if (dragged?.kind === 'node' && dropTarget?.kind === 'node') onMoveNode(dragged.nodeId, dropTarget.beforeNodeId)
+    if (dragged?.kind === 'item' && dropTarget?.kind === 'item' && dropTarget.nodeId === dragged.nodeId) onMoveItem(dropTarget.nodeId, dragged.itemId, dropTarget.beforeItemId)
+    resetDrag()
+  }
+
   return (
-    <div role="tree" aria-label="Cấu trúc CV" className="space-y-1">
+    <div
+      role="tree"
+      aria-label="Cấu trúc CV"
+      className="space-y-1"
+      onDragOver={(event) => { if (dragged) allowDrop(event) }}
+      onDrop={(event) => { event.preventDefault(); commitTrackedDrop() }}
+    >
       {layout.nodes.map((node) => {
         const items = orderedNestedItems(cv, node)
         const expandable = items.length > 0
@@ -120,15 +183,30 @@ export function ComponentTree({ cv, layout, selectedNodeId, onMoveNode, onMoveIt
               onClick={() => onSelect?.(node.id)}
               onDoubleClick={() => onEdit?.(node.id)}
               onKeyDown={(event) => activateEditFromKeyboard(event, onEdit, node.id)}
-              onDragOver={(event) => { if (dragged?.kind === 'node' && dragged.nodeId !== node.id) { event.preventDefault(); setDropTarget({ kind: 'node', beforeNodeId: node.id }) } }}
-              onDrop={(event) => { event.preventDefault(); if (dragged?.kind === 'node' && dragged.nodeId !== node.id) onMoveNode(dragged.nodeId, node.id); resetDrag() }}
+              onDragOver={(event) => {
+                if (dragged?.kind !== 'node') return
+                allowDrop(event)
+                const beforeNodeId = nodeTargetFor(event, node.id)
+                setDropTarget(beforeNodeId === dragged.nodeId ? null : { kind: 'node', beforeNodeId })
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                if (dragged?.kind === 'node') onMoveNode(dragged.nodeId, nodeTargetFor(event, node.id))
+                resetDrag()
+              }}
             >
-              <button type="button" draggable aria-label={`Kéo ${label}`} data-dragging={dragged?.kind === 'node' && dragged.nodeId === node.id ? 'true' : undefined} className={`cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing ${dragged?.kind === 'node' && dragged.nodeId === node.id ? 'opacity-40 shadow-lg' : ''}`} onClick={(event) => event.stopPropagation()} onDragStart={() => { setDragged({ kind: 'node', nodeId: node.id }); setDropTarget(null) }} onDragEnd={resetDrag}><GripVertical className="h-3.5 w-3.5" /></button>
+              <button type="button" draggable aria-label={`Kéo ${label}`} data-dragging={dragged?.kind === 'node' && dragged.nodeId === node.id ? 'true' : undefined} className={`cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing ${dragged?.kind === 'node' && dragged.nodeId === node.id ? 'opacity-40 shadow-lg' : ''}`} onClick={(event) => event.stopPropagation()} onDragStart={(event) => { beginDrag(event, node.id); setDragged({ kind: 'node', nodeId: node.id }); setDropTarget(null) }} onDragEnd={resetDrag}><GripVertical className="h-3.5 w-3.5" /></button>
               {expandable ? <button type="button" aria-label={`${isExpanded ? 'Thu gọn' : 'Mở rộng'} ${label}`} className="rounded p-0.5 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); toggleExpanded(node.id) }}>{isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</button> : <span className="w-5" />}
               <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
               <button type="button" aria-label={`${node.visible ? 'Ẩn' : 'Hiện'} ${label}`} className="rounded p-1 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); onSetNodeVisible(node.id, !node.visible) }}>{node.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}</button>
             </div>
-            {expandable && isExpanded && <div role="group" className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-2">
+            {expandable && isExpanded && <div
+              role="group"
+              className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-2"
+              onDragOver={(event) => { if (dragged?.kind !== 'item' || dragged.nodeId !== node.id) return; allowDrop(event); event.stopPropagation() }}
+              onDrop={(event) => { if (dragged?.kind !== 'item' || dragged.nodeId !== node.id) return; event.preventDefault(); event.stopPropagation(); commitTrackedDrop() }}
+            >
               {items.map((item) => {
                 const itemPlaceholder = dropTarget?.kind === 'item' && dropTarget.nodeId === node.id && dropTarget.beforeItemId === item.id
                 return <React.Fragment key={item.id}>
@@ -139,25 +217,37 @@ export function ComponentTree({ cv, layout, selectedNodeId, onMoveNode, onMoveIt
                     role="treeitem"
                     tabIndex={0}
                     aria-label={item.label}
-                    className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-50 ${dragged?.kind === 'item' && dragged.itemId === item.id ? 'opacity-40 shadow-lg' : ''}`}
+                    aria-selected={selectedNodeId === node.id && selectedItemId === item.id}
+                    className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-50 ${selectedNodeId === node.id && selectedItemId === item.id ? 'bg-indigo-50 ring-1 ring-indigo-400' : ''} ${dragged?.kind === 'item' && dragged.itemId === item.id ? 'opacity-40 shadow-lg' : ''}`}
                     onClick={(event) => { event.stopPropagation(); onSelect?.(node.id, item.id) }}
                     onDoubleClick={(event) => { event.stopPropagation(); onEdit?.(node.id, item.id) }}
                     onKeyDown={(event) => activateEditFromKeyboard(event, onEdit, node.id, item.id)}
-                    onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id && dragged.itemId !== item.id) { event.preventDefault(); event.stopPropagation(); setDropTarget({ kind: 'item', nodeId: node.id, beforeItemId: item.id }) } }}
-                    onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id && dragged.itemId !== item.id) onMoveItem(node.id, dragged.itemId, item.id); resetDrag() }}
+                    onDragOver={(event) => {
+                      if (dragged?.kind !== 'item' || dragged.nodeId !== node.id) return
+                      allowDrop(event)
+                      event.stopPropagation()
+                      const beforeItemId = itemTargetFor(event, items, item.id)
+                      setDropTarget(beforeItemId === dragged.itemId ? null : { kind: 'item', nodeId: node.id, beforeItemId })
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (dragged?.kind === 'item' && dragged.nodeId === node.id) onMoveItem(node.id, dragged.itemId, itemTargetFor(event, items, item.id))
+                      resetDrag()
+                    }}
                   >
-                    <button type="button" draggable aria-label={`Kéo ${item.label}`} data-dragging={dragged?.kind === 'item' && dragged.itemId === item.id ? 'true' : undefined} className="cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing" onClick={(event) => event.stopPropagation()} onDragStart={() => { setDragged({ kind: 'item', nodeId: node.id, itemId: item.id }); setDropTarget(null) }} onDragEnd={resetDrag}><GripVertical className="h-3 w-3" /></button>
+                    <button type="button" draggable aria-label={`Kéo ${item.label}`} data-dragging={dragged?.kind === 'item' && dragged.itemId === item.id ? 'true' : undefined} className="cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing" onClick={(event) => event.stopPropagation()} onDragStart={(event) => { beginDrag(event, item.id); setDragged({ kind: 'item', nodeId: node.id, itemId: item.id }); setDropTarget(null) }} onDragEnd={resetDrag}><GripVertical className="h-3 w-3" /></button>
                     <span className="truncate">{item.label}</span>
                   </div>
                 </React.Fragment>
               })}
-              <div aria-label={`Thả để chuyển ${label} xuống cuối`} className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id) { event.preventDefault(); event.stopPropagation(); setDropTarget({ kind: 'item', nodeId: node.id, beforeItemId: null }) } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id) onMoveItem(node.id, dragged.itemId, null); resetDrag() }} />
+              <div aria-label={`Thả để chuyển ${label} xuống cuối`} className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id) { allowDrop(event); event.stopPropagation(); setDropTarget({ kind: 'item', nodeId: node.id, beforeItemId: null }) } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id) onMoveItem(node.id, dragged.itemId, null); resetDrag() }} />
               {dropTarget?.kind === 'item' && dropTarget.nodeId === node.id && dropTarget.beforeItemId === null && placeholder(`item:${node.id}:end`, label)}
             </div>}
           </div>
         )
       })}
-      <div aria-label="Thả để chuyển node xuống cuối" className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'node') { event.preventDefault(); setDropTarget({ kind: 'node', beforeNodeId: null }) } }} onDrop={(event) => { event.preventDefault(); if (dragged?.kind === 'node') onMoveNode(dragged.nodeId, null); resetDrag() }} />
+      <div aria-label="Thả để chuyển node xuống cuối" className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'node') { allowDrop(event); setDropTarget({ kind: 'node', beforeNodeId: null }) } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'node') onMoveNode(dragged.nodeId, null); resetDrag() }} />
       {dropTarget?.kind === 'node' && dropTarget.beforeNodeId === null && placeholder('node:end', 'cuối danh sách')}
     </div>
   )
