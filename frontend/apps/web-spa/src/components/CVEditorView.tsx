@@ -9,6 +9,7 @@ import { CVBlockRenderer } from './CVBlockRenderer';
 import { hasDefaultNodeOrder, materializeItemOrder, moveItem, moveNode, normalizeLayout, resetDefaultLayout, setNodeVisible } from '../lib/layout-draft';
 import { CV_FIELDS } from '../lib/cv-fields';
 import { InlineCVEditor } from './InlineCVEditor';
+import { cvTypographyStyle, resolveCVTypography } from '../lib/cv-typography';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 
 interface CVEditorViewProps {
@@ -248,35 +249,41 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
               {/* Font */}
               <div className="space-y-2">
-                <label className="block font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
+                <label htmlFor="cv-font" className="block font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
                   Font chữ
                 </label>
                 <select
+                  id="cv-font"
+                  aria-label="Font chữ"
                   value={cv.design.font}
                   onChange={(e) => updateDesign('font', e.target.value)}
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-indigo-500"
                 >
+                  <option value="Auto">Auto (Calibri)</option>
+                  <option value="Calibri">Calibri</option>
+                  <option value="Arial">Arial</option>
+                  <option value="Times New Roman">Times New Roman</option>
                   <option value="Roboto">Roboto</option>
                   <option value="Open Sans">Open Sans</option>
                   <option value="Lato">Lato</option>
                 </select>
               </div>
 
-              {/* Font Size Slider */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-semibold text-slate-700">
-                  <span>Cỡ chữ</span>
-                  <span className="text-indigo-600 font-bold">{cv.design.fontSize}px</span>
+              {([
+                ['bodyFontSize', 'Cỡ chữ nội dung', 9, 14],
+                ['sectionTitleFontSize', 'Cỡ tiêu đề section', 10, 16],
+                ['headerFontSize', 'Cỡ header', 16, 28],
+              ] as const).map(([field, label, min, max]) => {
+                const typography = resolveCVTypography(cv.design)
+                const value = field === 'bodyFontSize' ? typography.bodyFontSize : field === 'sectionTitleFontSize' ? typography.sectionTitleFontSize : typography.headerFontSize
+                return <div className="space-y-2" key={field}>
+                  <div className="flex justify-between text-xs font-semibold text-slate-700">
+                    <label htmlFor={`cv-${field}`}>{label}</label>
+                    <span className="text-indigo-600 font-bold">{value}pt</span>
+                  </div>
+                  <input id={`cv-${field}`} aria-label={label} type="range" min={min} max={max} step="0.5" value={value} onChange={(e) => updateDesign(field, parseFloat(e.target.value))} className="w-full accent-indigo-600 cursor-pointer" />
                 </div>
-                <input
-                  type="range"
-                  min="12"
-                  max="20"
-                  value={cv.design.fontSize}
-                  onChange={(e) => updateDesign('fontSize', parseInt(e.target.value))}
-                  className="w-full accent-indigo-600 cursor-pointer"
-                />
-              </div>
+              })}
 
               {/* Spacing Slider */}
               <div className="space-y-2">
@@ -314,13 +321,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
           className="transition-all duration-300 print:shadow-none print:m-0"
           contentClassName="px-[20mm] py-[24mm]"
           style={{
-            fontFamily:
-              cv.design.font === 'Roboto'
-                ? 'Roboto, sans-serif'
-                : cv.design.font === 'Lato'
-                ? 'Lato, sans-serif'
-                : 'Open Sans, sans-serif',
-            fontSize: `${cv.design.fontSize}px`,
+            ...cvTypographyStyle(cv.design),
             lineHeight: cv.design.spacing === 'condensed' ? '1.4' : cv.design.spacing === 'wide' ? '1.8' : '1.6',
           }}
         >

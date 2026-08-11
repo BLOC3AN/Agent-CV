@@ -5,6 +5,7 @@ import { PaginatedA4Document } from './PaginatedA4Document';
 import { CVBlockRenderer } from './CVBlockRenderer';
 import { normalizeLayout } from '../lib/layout-draft';
 import { PRINT_CSS } from '../lib/print-css';
+import { cvTypographyStyle } from '../lib/cv-typography';
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -80,7 +81,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
         data-testid="cv-print-surface"
         className="hidden cv-root"
         data-variant="print"
-        style={{ '--cv-accent': cv.design.accentColor } as React.CSSProperties}
+        style={{ '--cv-accent': cv.design.accentColor, ...cvTypographyStyle(cv.design) } as React.CSSProperties}
       >
         <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
         <article className="cv-page">
@@ -94,10 +95,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
           id="a4-cv-paper"
           className="my-auto"
           contentClassName="p-10"
-          style={{
-            fontFamily: cv.design.font,
-            fontSize: `${cv.design.fontSize}px`,
-          }}
+          style={cvTypographyStyle(cv.design)}
         >
           <CVBlockRenderer cv={cv} layout={layout} variant="preview" />
         </PaginatedA4Document>

@@ -72,7 +72,7 @@ function sectionHeading(context: RenderContext, title: string) {
   return (
     <h3
       className={variant === 'print' ? 'cv-section-title' : 'font-bold text-xs uppercase tracking-wider mb-2 border-b border-slate-200 pb-1'}
-      style={{ color: cv.design.accentColor }}
+      style={{ color: cv.design.accentColor, fontSize: 'var(--cv-section-title-size)' }}
     >
       {title}
     </h3>
@@ -131,7 +131,7 @@ function renderHeader(context: RenderContext) {
   if (variant === 'print') {
     return nodeFrame(context, <>
       {intro.avatarUrl && <img className="cv-avatar" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}
-      <h1 className="cv-name" data-cv-field="fullName">{intro.fullName}</h1>
+      <h1 className="cv-name" style={{ fontSize: 'var(--cv-header-size)' }} data-cv-field="fullName">{intro.fullName}</h1>
       <p className="cv-headline" data-cv-field="title">{intro.title}</p>
       <div className="cv-contact">{intro.email && <span data-cv-field="email">{intro.email}</span>}{intro.phone && <span data-cv-field="phone">{intro.phone}</span>}{intro.location && <RegisteredValue fieldKey="location" value={intro.location} />}{intro.website && <span data-cv-field="website">{intro.website}</span>}</div>
       <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>
@@ -141,7 +141,7 @@ function renderHeader(context: RenderContext) {
   return nodeFrame(context, <>
     <div className="absolute top-0 bottom-0 left-[-20mm] w-2.5" style={{ backgroundColor: cv.design.accentColor }} />
     {intro.avatarUrl && <img className="cv-avatar mb-2" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}
-    <h1 className="text-2xl md:text-3xl font-extrabold uppercase tracking-tight text-slate-900" data-cv-field="fullName">{intro.fullName || 'LE THANH HAI'}</h1>
+    <h1 className="text-2xl md:text-3xl font-extrabold uppercase tracking-tight text-slate-900" style={{ fontSize: 'var(--cv-header-size)' }} data-cv-field="fullName">{intro.fullName || 'LE THANH HAI'}</h1>
     <p className="text-base font-bold mt-0.5" style={{ color: cv.design.accentColor }} data-cv-field="title">{intro.title || 'AI Engineer'}</p>
     <div className="flex flex-wrap items-center gap-x-3 text-xs text-slate-600 mt-2 font-medium">
       <span data-cv-field="email">{intro.email}</span>

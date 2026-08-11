@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CVSchema, PII_PATHS_V2 } from '../src/cv.js'
+import { CVDesignSchema, CVSchema, PII_PATHS_V2 } from '../src/cv.js'
 
 const minimal = {
   schemaVersion: 2,
@@ -21,6 +21,23 @@ const minimal = {
 }
 
 describe('CV v2', () => {
+  it('supports independent typography sizes and the Auto font', () => {
+    const design = CVDesignSchema.parse({
+      template: 'modern', accentColor: '#4F46E5', font: 'Auto', fontSize: 14, spacing: 'normal',
+      bodyFontSize: 10.5, sectionTitleFontSize: 11, headerFontSize: 20,
+    })
+    expect(design.font).toBe('Auto')
+    expect(design.bodyFontSize).toBe(10.5)
+    expect(design.sectionTitleFontSize).toBe(11)
+    expect(design.headerFontSize).toBe(20)
+  })
+
+  it('rejects typography sizes outside the supported ranges', () => {
+    expect(() => CVDesignSchema.parse({ font: 'Arial', bodyFontSize: 8 })).toThrow()
+    expect(() => CVDesignSchema.parse({ font: 'Arial', sectionTitleFontSize: 17 })).toThrow()
+    expect(() => CVDesignSchema.parse({ font: 'Arial', headerFontSize: 29 })).toThrow()
+  })
+
   it('nhận hồ sơ tối thiểu hợp lệ', () => {
     expect(CVSchema.parse(minimal).schemaVersion).toBe(2)
   })

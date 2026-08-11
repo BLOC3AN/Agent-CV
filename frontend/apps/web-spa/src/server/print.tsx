@@ -6,13 +6,14 @@ import { CVBlockRenderer } from '../components/CVBlockRenderer'
 import type { CV as WebCV, CVLayout as WebCVLayout } from '../types'
 import type { CVEnvelope } from '../lib/api'
 import { PRINT_CSS } from '../lib/print-css'
+import { cvTypographyStyle } from '../lib/cv-typography'
 
 interface Envelope {
   cv?: Partial<CVEnvelope>
 }
 
 function PrintDocument({ cv, layout, variant }: { cv: WebCV; layout: WebCVLayout; variant: 'presentation' | 'ats' | 'thumbnail' }) {
-  return <main className="cv-root" data-variant={variant} style={{ '--cv-accent': cv.design.accentColor } as CSSProperties}>
+  return <main className="cv-root" data-variant={variant} style={{ '--cv-accent': cv.design.accentColor, ...cvTypographyStyle(cv.design) } as CSSProperties}>
     <article className="cv-page">
       <CVBlockRenderer cv={cv} layout={layout} variant="print" />
     </article>

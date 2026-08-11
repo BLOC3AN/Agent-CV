@@ -157,8 +157,11 @@ export const CVSectionsSchema = z.object({
 export const CVDesignSchema = z.object({
   template: z.enum(['modern', 'classic', 'professional']).default('modern'),
   accentColor: z.string().default('#4F46E5'),
-  font: z.enum(['Roboto', 'Open Sans', 'Lato']).default('Roboto'),
-  fontSize: z.number().default(14),
+  font: z.enum(['Auto', 'Calibri', 'Arial', 'Times New Roman', 'Roboto', 'Open Sans', 'Lato']).default('Auto'),
+  fontSize: z.number().default(10.5),
+  bodyFontSize: z.number().min(9).max(14).optional(),
+  sectionTitleFontSize: z.number().min(10).max(16).optional(),
+  headerFontSize: z.number().min(16).max(28).optional(),
   spacing: z.enum(['condensed', 'normal', 'wide']).default('normal'),
 }).strict()
 

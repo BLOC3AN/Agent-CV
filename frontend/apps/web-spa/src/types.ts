@@ -125,8 +125,11 @@ export interface CVSections {
 export interface CVDesign {
   template: 'modern' | 'classic' | 'professional';
   accentColor: string; // e.g. '#00897B', '#2563EB', '#7C3AED', '#EA580C'
-  font: 'Roboto' | 'Open Sans' | 'Lato';
+  font: 'Auto' | 'Calibri' | 'Arial' | 'Times New Roman' | 'Roboto' | 'Open Sans' | 'Lato';
   fontSize: number; // e.g. 12 - 24
+  bodyFontSize?: number;
+  sectionTitleFontSize?: number;
+  headerFontSize?: number;
   spacing: 'condensed' | 'normal' | 'wide';
 }
 

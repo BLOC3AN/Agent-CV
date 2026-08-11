@@ -25,6 +25,10 @@ describe('PreviewModal print mode', () => {
     render(<PreviewModal isOpen cv={cv} layout={reorderedAndHidden} onClose={() => undefined} onDownloadPDF={() => undefined} />)
 
     const surface = screen.getByTestId('cv-print-surface')
+    expect(surface).toHaveStyle('--cv-font-family: "Open Sans", Arial, sans-serif')
+    expect(surface).toHaveStyle('--cv-body-size: 14pt')
+    expect(surface).toHaveStyle('--cv-section-title-size: 11pt')
+    expect(surface).toHaveStyle('--cv-header-size: 20pt')
     expect(surface).toHaveAttribute('data-variant', 'print')
     expect(surface.querySelector('[data-cv-node="experience"]')).toBeNull()
     expect([...surface.querySelectorAll('[data-cv-node]')].map((node) => node.getAttribute('data-cv-node'))).toEqual(['footer', 'header', 'summary'])
