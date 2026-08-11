@@ -1,7 +1,9 @@
 export const PRINT_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;600;700&family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');
 @page{size:A4;margin:0}
 *{box-sizing:border-box}
-.cv-root{font-family:var(--cv-font-family,Calibri,Arial,sans-serif);color:#111827;line-height:1.5;font-size:var(--cv-body-size,10.5pt)}
+.cv-root,.cv-root *{font-family:var(--cv-font-family,Calibri,Arial,sans-serif)}
+.cv-root{color:#111827;line-height:1.5;font-size:var(--cv-body-size,10.5pt)}
 .cv-page{width:210mm;min-height:297mm;padding:14mm;background:#fff;margin:0 auto}
 .cv-header{margin-bottom:5mm}
 .cv-avatar{width:24mm;height:24mm;border-radius:50%;object-fit:cover}

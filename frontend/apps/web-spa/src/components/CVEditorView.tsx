@@ -322,7 +322,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
       <div className="flex-1 overflow-y-auto p-6 md:p-10 flex justify-center bg-slate-100/90 custom-scrollbar">
         <PaginatedA4Document
           id="a4-cv-paper"
-          className="transition-all duration-300 print:shadow-none print:m-0"
+          className="cv-font-surface transition-all duration-300 print:shadow-none print:m-0"
           contentClassName="px-[20mm] py-[24mm]"
           style={{
             ...cvTypographyStyle(cv.design),

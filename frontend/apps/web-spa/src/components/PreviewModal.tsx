@@ -93,7 +93,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
       <div className="flex-1 overflow-y-auto my-4 w-full flex justify-center custom-scrollbar">
         <PaginatedA4Document
           id="a4-cv-paper"
-          className="my-auto"
+          className="cv-font-surface my-auto"
           contentClassName="p-10"
           style={cvTypographyStyle(cv.design)}
         >

@@ -53,4 +53,16 @@ describe('CV typography controls', () => {
       fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 11, headerFontSize: 20,
     })
   })
+
+  it('applies the selected font family to the live CV surface', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: /thiết kế/i }))
+    const select = screen.getByLabelText('Font chữ')
+    const paper = document.querySelector('#a4-cv-paper') as HTMLElement
+
+    fireEvent.change(select, { target: { value: 'Arial' } })
+    expect(paper.style.getPropertyValue('--cv-font-family')).toBe('Arial, Helvetica, sans-serif')
+    fireEvent.change(select, { target: { value: 'Times New Roman' } })
+    expect(paper.style.getPropertyValue('--cv-font-family')).toBe('"Times New Roman", Times, serif')
+  })
 })
