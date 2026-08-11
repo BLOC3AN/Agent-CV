@@ -47,19 +47,17 @@ interface BuilderLocaleValue {
 const BuilderContext = createContext<BuilderLocaleValue | null>(null)
 
 /**
- * Nối ngôn ngữ của CV đang mở với `Header` — và ghim giao diện theo nó.
+ * Nối bộ chọn ngôn ngữ trên `Header` với CV đang mở.
  *
  * `Header` do `AppLayout` dựng nên nằm TRÊN `BuilderRoute` trong cây React, vì
  * vậy nó không đọc được CV. Provider này bọc cả hai, `BuilderRoute` đăng ký
  * `cv.language` cùng hàm đổi, `Header` lấy ra để dựng bộ chọn.
  *
  * Provider KHÔNG giữ bản sao ngôn ngữ nào của riêng nó: `setLanguage` chỉ gọi
- * lại đúng hàm đã đăng ký, và giá trị hiển thị luôn là thứ `BuilderRoute` vừa
- * đăng ký. Nhờ vậy "CV là nguồn sự thật" đúng theo cấu trúc, không có trạng
- * thái thứ hai để trôi lệch.
+ * lại đúng hàm đã đăng ký. Nó cũng không còn quyết định ngôn ngữ giao diện —
+ * việc đó thuộc về `LocaleProvider` và tuỳ chọn của người dùng.
  */
 export function BuilderLocaleProvider({ children }: { children: React.ReactNode }) {
-  const outer = useLocale()
   const [registered, setRegistered] = useState<{ language: Locale; onChange: (next: Locale) => void }>()
 
   const register = useCallback((language: Locale, onChange: (next: Locale) => void) => {
@@ -75,24 +73,15 @@ export function BuilderLocaleProvider({ children }: { children: React.ReactNode 
   }), [registered, register, unregister])
 
   /*
-   * Khi có CV, `useLocale()` bị ghim theo ngôn ngữ của nó; `setLocale` cố tình
-   * vô hiệu vì trong trình sửa đường đổi ngôn ngữ duy nhất là bộ chọn — nó ghi
-   * vào CV rồi giao diện đi theo. Không có CV thì chuyển tiếp nguyên giá trị
-   * bên ngoài.
+   * Provider KHÔNG ghi đè `useLocale()` nữa.
    *
-   * Provider LUÔN dựng cùng một hình dạng cây. Bọc có điều kiện sẽ làm React
-   * unmount toàn bộ nhánh con mỗi lần đăng ký đổi, kéo theo gỡ đăng ký, rồi
-   * mount lại, rồi đăng ký lại — một vòng lặp không dừng.
+   * Bản trước ghim giao diện theo `cv.language`, nên chọn English ở trang tổng
+   * quan rồi mở một CV tiếng Việt là cả trình sửa quay về tiếng Việt — một luật
+   * ẩn không ai nói trước, và người dùng chỉ thấy "tôi chọn English mà nó vẫn
+   * tiếng Việt". Giờ tuỳ chọn của người dùng luôn thắng; provider chỉ còn làm
+   * một việc là nối bộ chọn trên `Header` với CV đang mở.
    */
-  const localeValue = useMemo<LocaleValue>(() => (registered
-    ? { locale: registered.language, setLocale: () => {}, t: (key: MessageKey, params?: MessageParams) => format(messages[registered.language][key], params) }
-    : outer), [registered, outer])
-
-  return (
-    <BuilderContext.Provider value={builderValue}>
-      <Context.Provider value={localeValue}>{children}</Context.Provider>
-    </BuilderContext.Provider>
-  )
+  return <BuilderContext.Provider value={builderValue}>{children}</BuilderContext.Provider>
 }
 
 export function useBuilderLocale(): BuilderLocaleValue {

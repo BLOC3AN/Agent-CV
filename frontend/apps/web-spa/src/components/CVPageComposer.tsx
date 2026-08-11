@@ -26,6 +26,8 @@ interface CVPageComposerProps {
   selectedItemId?: string
   onSelect?: (nodeId: string, itemId?: string) => void
   onEdit?: (nodeId: string, itemId?: string) => void
+  /** Ngôn ngữ hiển thị tiêu đề mục; vắng mặt thì theo `cv.language`. */
+  language?: string
 }
 
 function pageGroupsForNodes(nodeIds: string[], heights: Map<string, number>, capacity: number): string[][] {
@@ -52,7 +54,7 @@ function segmentItemId(segment: string): string | undefined {
   return separator === -1 ? undefined : segment.slice(separator + SEGMENT_SEPARATOR.length)
 }
 
-export function CVPageComposer({ cv, layout, variant, style, className = '', id, selectedNodeId, selectedItemId, onSelect, onEdit }: CVPageComposerProps) {
+export function CVPageComposer({ cv, layout, variant, style, className = '', id, selectedNodeId, selectedItemId, onSelect, onEdit, language }: CVPageComposerProps) {
   const visibleNodeIds = layout.nodes.filter((node) => node.visible).map((node) => node.id)
   const itemIdsByNode = new Map<string, string[]>([
     ['experience', orderedItemIds(cv.sections.experience, layout.nodes.find((node) => node.type === 'experience' && 'itemOrder' in node)?.itemOrder)],
@@ -64,7 +66,7 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
     const itemIds = itemIdsByNode.get(node.type) ?? []
     return itemIds.map((itemId) => `${node.id}${SEGMENT_SEPARATOR}${itemId}`)
   })
-  const measurementKey = `${variant}:${JSON.stringify(cv)}:${JSON.stringify(layout)}`
+  const measurementKey = `${variant}:${language ?? ''}:${JSON.stringify(cv)}:${JSON.stringify(layout)}`
   const measurementRef = useRef<HTMLDivElement>(null)
   const [pageGroups, setPageGroups] = useState<string[][]>(() => [visibleNodeIds])
   const [measuredKey, setMeasuredKey] = useState<string | null>(null)
@@ -102,7 +104,7 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
         className="pointer-events-none absolute -left-[100000px] top-0 w-[210mm] box-border opacity-0"
         style={{ ...style, paddingTop: 'var(--cv-padding-top)', paddingBottom: 'var(--cv-padding-bottom)', paddingLeft: 'var(--cv-padding-left)', paddingRight: 'var(--cv-padding-right)', lineHeight: 'var(--cv-line-height)' }}
       >
-        <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={visibleNodeIds} />
+        <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={visibleNodeIds} language={language} />
       </div>}
       <PaginatedA4Document
         id={id}
@@ -119,7 +121,7 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
           }, {})
           return (
           <div className="cv-page-flow" style={{ lineHeight: 'var(--cv-line-height)' }}>
-            <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={nodeIds} itemIds={itemIds} selectedNodeId={selectedNodeId} selectedItemId={selectedItemId} onSelect={onSelect} onEdit={onEdit} />
+            <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={nodeIds} itemIds={itemIds} selectedNodeId={selectedNodeId} selectedItemId={selectedItemId} onSelect={onSelect} onEdit={onEdit} language={language} />
           </div>
           )
         }}

@@ -34,7 +34,10 @@ export const Header: React.FC<HeaderProps> = ({
   // đúng ngôn ngữ — máy chủ dựng PDF đọc CV đã lưu, nó không thấy được tuỳ chọn
   // nằm trong localStorage của trình duyệt.
   const { language, setLanguage } = useBuilderLocale();
-  const selected = language ?? locale;
+  // Bộ chọn phản ánh tuỳ chọn của người dùng. `language` (ngôn ngữ CV đang mở)
+  // chỉ dùng để biết có nên hiện bộ chọn hay không — nó KHÔNG lấn át lựa chọn
+  // của người dùng nữa.
+  const selected = locale;
   const changeLanguage = (next: Locale) => { setLocale(next); setLanguage(next); };
 
   return (

@@ -92,15 +92,29 @@ describe('bộ chọn ngôn ngữ CV', () => {
   })
 
   /*
-   * `cv.language` là nguồn sự thật. Tuỳ chọn giao diện trong localStorage KHÔNG
-   * được lấn át nó, nếu không sẽ có hai trạng thái để trôi lệch nhau.
+   * TUỲ CHỌN CỦA NGƯỜI DÙNG LUÔN THẮNG. Mở một CV tiếng Việt trong khi đang
+   * chọn English thì giao diện PHẢI ở nguyên tiếng Anh — kể cả tiêu đề mục
+   * trong trang giấy. Bản trước để `cv.language` lấn át, và nó tạo ra đúng
+   * tình huống khó hiểu: chọn English ở ngoài, vào trình sửa lại thấy tiếng
+   * Việt mà không rõ vì sao.
    */
-  it('mở CV tiếng Anh thì hiện English dù localStorage đang vi', async () => {
-    localStorage.setItem('hr-locale', 'vi')
-    renderBuilder('en')
-    await screen.findByTestId('cv-editor')
+  it('mở CV tiếng Việt vẫn giữ giao diện tiếng Anh của người dùng', async () => {
+    localStorage.setItem('hr-locale', 'en')
+    renderBuilder('vi')
+    const editor = await screen.findByTestId('cv-editor')
 
     expect((selector() as HTMLSelectElement).value).toBe('en')
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeTruthy()
+    expect(within(editor).getByText('WORK EXPERIENCE')).toBeTruthy()
+  })
+
+  it('mở CV tiếng Anh khi đang chọn tiếng Việt thì giao diện vẫn tiếng Việt', async () => {
+    localStorage.setItem('hr-locale', 'vi')
+    renderBuilder('en')
+    const editor = await screen.findByTestId('cv-editor')
+
+    expect((selector() as HTMLSelectElement).value).toBe('vi')
+    expect(within(editor).getByText('KINH NGHIỆM LÀM VIỆC')).toBeTruthy()
   })
 
   it('đổi selector thì tiêu đề mục trong trang giấy sang tiếng Anh', async () => {

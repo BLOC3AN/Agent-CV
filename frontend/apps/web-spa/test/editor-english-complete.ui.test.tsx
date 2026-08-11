@@ -1,8 +1,8 @@
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { BuilderRoute } from '../src/routes/BuilderRoute'
-import { BuilderLocaleProvider } from '../src/lib/i18n'
+import { BuilderLocaleProvider, LocaleProvider } from '../src/lib/i18n'
 import * as api from '../src/lib/api'
 import type { CV, CVLayout } from '../src/types'
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
@@ -30,7 +30,10 @@ const layout = structuredClone(DEFAULT_CV_LAYOUT) as CVLayout
 
 const revision = (number: number) => ({ id: `rev-${number}`, cvId: 'cv-1', number, source: 'user' as const, message: 'Updated contact details', createdAt: '2026-08-10T09:00:00Z' })
 
-afterEach(() => vi.restoreAllMocks())
+// Giao diện đi theo TUỲ CHỌN NGƯỜI DÙNG, không theo `cv.language` — nên muốn
+// kiểm bản tiếng Anh thì phải đặt đúng tuỳ chọn đó.
+beforeEach(() => localStorage.setItem('hr-locale', 'en'))
+afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
 
 /**
  * Dấu tiếng Việt. Chữ giao diện chưa dịch gần như luôn chứa ít nhất một dấu,
@@ -50,9 +53,13 @@ function vietnameseIn(root: HTMLElement): string[] {
 function renderBuilder() {
   vi.spyOn(api, 'getCV').mockResolvedValue({ id: 'cv-1', profileId: 'profile-1', layout, profileSnapshot: cv, revisionNumber: 2 } as never)
   render(
-    <RouterProvider
-      router={createMemoryRouter([{ path: '/builder/:cvId', element: <BuilderLocaleProvider><BuilderRoute /></BuilderLocaleProvider> }], { initialEntries: ['/builder/cv-1'] })}
-    />,
+    <LocaleProvider>
+      <BuilderLocaleProvider>
+        <RouterProvider
+          router={createMemoryRouter([{ path: '/builder/:cvId', element: <BuilderRoute /> }], { initialEntries: ['/builder/cv-1'] })}
+        />
+      </BuilderLocaleProvider>
+    </LocaleProvider>,
   )
 }
 

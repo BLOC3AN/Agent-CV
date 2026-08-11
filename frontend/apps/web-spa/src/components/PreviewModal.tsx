@@ -22,7 +22,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   layout: providedLayout,
   onDownloadPDF,
 }) => {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   if (!isOpen) return null;
@@ -99,6 +99,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
           cv={cv}
           layout={layout}
           variant="preview"
+          language={locale}
           style={cvTypographyStyle(cv.design)}
         />
       </div>

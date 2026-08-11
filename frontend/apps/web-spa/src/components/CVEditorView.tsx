@@ -43,7 +43,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   onRestoreVersion,
 }) => {
   // Navigation & Edit state
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [activeTab, setActiveTab] = useState<'SECTIONS' | 'DESIGN'>('SECTIONS');
   const [inlineTarget, setInlineTarget] = useState<InlineTarget | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
@@ -378,6 +378,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
           cv={cv}
           layout={layout}
           variant="editor"
+          language={locale}
           className="cv-font-surface transition-all duration-300 print:shadow-none print:m-0"
           style={{
             ...cvTypographyStyle(cv.design),
