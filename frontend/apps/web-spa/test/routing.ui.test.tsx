@@ -189,7 +189,9 @@ describe('bản đồ URL', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }))
     const history = await screen.findByRole('dialog', { name: 'Lịch sử phiên bản' })
-    fireEvent.click(within(history).getByRole('button', { name: 'Khôi phục phiên bản 1' }))
+    // Khung dialog hiện ngay, danh sách phiên bản đến từ một request riêng —
+    // truy vấn đồng bộ vào nó là một cuộc đua, và nó thua khi máy bận.
+    fireEvent.click(await within(history).findByRole('button', { name: 'Khôi phục phiên bản 1' }))
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Xác nhận khôi phục phiên bản' })).getByRole('button', { name: 'Tạo phiên bản khôi phục' }))
     await waitFor(() => expect(restore).toHaveBeenCalledWith('cv-structured', 'revision-1', 2))
     expect(await screen.findByText('Restored candidate')).toBeInTheDocument()
