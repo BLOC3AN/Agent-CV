@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { errorMessageKey, jobErrorCode } from '../src/lib/error-messages'
+import { errorMessageKey, jobErrorCode, stepText } from '../src/lib/error-messages'
+import { en } from '../src/lib/i18n/messages.en'
+import type { MessageKey } from '../src/lib/i18n'
 import { ApiError } from '../src/lib/api'
 
 describe('mã lỗi của máy chủ', () => {
@@ -35,5 +37,28 @@ describe('mã lỗi của máy chủ', () => {
 
     expect(error.code).toBe('NO_CV_SECTIONS')
     expect(error.status).toBe(422)
+  })
+})
+
+describe('nhãn tiến trình do máy chủ bắn qua SSE', () => {
+  /*
+   * Khác `NO_CV_SECTIONS`, các nhãn này KHÔNG kèm mã — máy chủ gửi thẳng câu
+   * tiếng Việt (`server.go`, `sendStep("Đang suy nghĩ")`). Không sửa được ở
+   * backend lúc này, nên tra theo đúng câu chữ; câu lạ thì giữ nguyên.
+   */
+  it('dịch các nhãn đã biết', () => {
+    const t = (key: MessageKey) => en[key]
+
+    expect(stepText('Đang suy nghĩ', t)).toBe(en.stepThinking)
+    expect(stepText('Đang hiểu yêu cầu của bạn', t)).toBe(en.stepUnderstanding)
+    expect(stepText('Đang xem lại hồ sơ để trả lời', t)).toBe(en.stepReviewingProfile)
+    expect(stepText('Đang kiểm tra đề xuất', t)).toBe(en.stepCheckingProposal)
+  })
+
+  it('nhãn lạ thì giữ nguyên thay vì nuốt mất', () => {
+    const t = (key: MessageKey) => en[key]
+
+    expect(stepText('Một bước mới nào đó', t)).toBe('Một bước mới nào đó')
+    expect(stepText(undefined, t)).toBeUndefined()
   })
 })

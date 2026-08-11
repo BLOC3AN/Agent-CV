@@ -364,7 +364,6 @@ export const vi = {
   errorUnknownJobKind: 'Loại tác vụ không được hỗ trợ.',
   // Trợ lý AI — trạng thái lúc chạy
   justNow: 'Vừa xong',
-  thinking: 'Đang suy nghĩ…',
   sendFailed: 'Không gửi được tin nhắn',
   jobFailed: 'CV xử lý thất bại. Vui lòng thử lại.',
   dashboardLoadFailed: 'Không tải được trang tổng quan',
@@ -460,6 +459,10 @@ export const vi = {
   errorAIPatchInvalidCV: 'Đề xuất AI tạo ra một CV không hợp lệ.',
   errorAIPatchInvalidLayout: 'Đề xuất AI tạo ra một bố cục không hợp lệ.',
   errorAIPatchLayoutReplace: 'Không thể thay thế toàn bộ bố cục từ đề xuất AI.',
+  stepThinking: 'Đang suy nghĩ',
+  stepUnderstanding: 'Đang hiểu yêu cầu của bạn',
+  stepReviewingProfile: 'Đang xem lại hồ sơ để trả lời',
+  stepCheckingProposal: 'Đang kiểm tra đề xuất',
 } as const
 
 export type MessageKey = keyof typeof vi

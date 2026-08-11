@@ -330,7 +330,6 @@ export const en: Record<MessageKey, string> = {
   errorProfileCreateFailed: 'We could not build a profile from this file.',
   errorUnknownJobKind: 'This job type is not supported.',
   justNow: 'Just now',
-  thinking: 'Thinking…',
   sendFailed: 'Could not send the message',
   jobFailed: 'Processing this CV failed. Please try again.',
   dashboardLoadFailed: 'Could not load the dashboard',
@@ -425,4 +424,8 @@ export const en: Record<MessageKey, string> = {
   errorAIPatchInvalidCV: 'The AI proposal produced an invalid CV.',
   errorAIPatchInvalidLayout: 'The AI proposal produced an invalid layout.',
   errorAIPatchLayoutReplace: 'The whole layout cannot be replaced from an AI proposal.',
+  stepThinking: 'Thinking',
+  stepUnderstanding: 'Understanding your request',
+  stepReviewingProfile: 'Reviewing your profile to answer',
+  stepCheckingProposal: 'Checking the proposal',
 }

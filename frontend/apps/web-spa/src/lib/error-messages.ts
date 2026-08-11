@@ -86,3 +86,27 @@ export function jobErrorText(
   const key = errorMessageKey(jobErrorCode(message))
   return key ? t(key) : message
 }
+
+/**
+ * Nhãn tiến trình máy chủ bắn qua SSE (`server.go`, `sendStep(...)`).
+ *
+ * Khác thông báo lỗi, các nhãn này KHÔNG kèm mã — máy chủ gửi thẳng câu tiếng
+ * Việt. Vậy nên tra theo đúng câu chữ. Cách này mong manh hơn tra theo mã: đổi
+ * câu ở backend là bảng hết khớp. Nhưng nhãn lạ vẫn hiện nguyên văn nên tệ nhất
+ * là quay về hành vi cũ, không mất chữ. Sửa đúng gốc là cho backend gửi mã.
+ */
+const STEP_TO_KEY: Record<string, MessageKey> = {
+  'Đang suy nghĩ': 'stepThinking',
+  'Đang hiểu yêu cầu của bạn': 'stepUnderstanding',
+  'Đang xem lại hồ sơ để trả lời': 'stepReviewingProfile',
+  'Đang kiểm tra đề xuất': 'stepCheckingProposal',
+}
+
+export function stepText(
+  label: string | undefined,
+  t: (key: MessageKey) => string,
+): string | undefined {
+  if (!label) return undefined
+  const key = STEP_TO_KEY[label.trim()]
+  return key ? t(key) : label
+}
