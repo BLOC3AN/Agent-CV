@@ -6,7 +6,7 @@ import { CVEditorView } from '../components/CVEditorView'
 import { ChatPanel } from '../components/ChatPanel'
 import { PreviewModal } from '../components/PreviewModal'
 import { downloadCVPDF } from '../lib/download-pdf'
-import { ApiError } from '../lib/api'
+import { errorText } from '../lib/error-messages'
 import { useBuilderLocale, useLocale, type Locale } from '../lib/i18n'
 import { cvLocale } from '../lib/cv-section-titles'
 
@@ -63,7 +63,7 @@ export function BuilderRoute() {
     try {
       await downloadCVPDF(cvId)
     } catch (error) {
-      setExportError(error instanceof ApiError ? error.message : t('downloadFailed'))
+      setExportError(errorText(error, t, t('downloadFailed')))
     }
   }, [cvId])
 

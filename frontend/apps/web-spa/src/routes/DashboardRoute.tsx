@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError, getCV, listCVs, type CVSummary } from '../lib/api'
 import { useSession } from '../lib/session'
 import { DashboardView } from '../components/DashboardView'
+import { errorText } from '../lib/error-messages'
+import { useLocale } from '../lib/i18n'
 import type { CV } from '../types'
 
 export function DashboardRoute() {
   const navigate = useNavigate()
   const { email } = useSession()
+  const { t } = useLocale()
   const [items, setItems] = useState<CVSummary[] | null>(null)
   const [active, setActive] = useState<CV | null>(null)
   const [error, setError] = useState<string>()
@@ -27,7 +30,7 @@ export function DashboardRoute() {
         setActive(null)
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Không tải được trang tổng quan')
+      setError(errorText(err, t, t('dashboardLoadFailed')))
     }
   }, [])
 

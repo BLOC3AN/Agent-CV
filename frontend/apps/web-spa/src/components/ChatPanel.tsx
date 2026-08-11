@@ -48,7 +48,7 @@ function readAt(root: unknown, pointer: string): unknown {
 }
 
 function display(value: unknown): string {
-  if (value === undefined) return '(trống)'
+  if (value === undefined) return '—'
   if (typeof value === 'string') return value
   return JSON.stringify(value)
 }
@@ -79,7 +79,7 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
     controller.current = ac
     setBusy(true)
     setError(undefined)
-    setStep('Đang chuẩn bị')
+    setStep(t('thinking'))
     setClarify(undefined)
     setMessages((m) => [...m, { role: 'user', text }])
     const requestDraftVersion = effectiveDraftVersion
@@ -98,7 +98,7 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
         setError(`${result.message}${result.requestId ? ` (requestId: ${result.requestId})` : ''}`)
       }
     } catch (err) {
-      if (!ac.signal.aborted) setError(err instanceof Error ? err.message : 'Không gửi được tin nhắn')
+      if (!ac.signal.aborted) setError(err instanceof Error ? err.message : t('sendFailed'))
     } finally {
       if (!ac.signal.aborted) { setBusy(false); setStep(undefined) }
     }
@@ -118,7 +118,7 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
         : await settleChatProposal(proposal.id, profileId, { cvId, draftVersion: proposal.draftVersion }, accept)
       if (!proposal.settledOps && currentDraftRef.current.draftVersion !== proposal.draftVersion) {
         setProposal({ ...proposal, settledOps: result.selectedOps })
-        throw new Error('Bản nháp đã thay đổi trong lúc chờ settlement. Đề xuất được giữ lại để bạn thử lại.')
+        throw new Error(t('draftChangedDuringSettle'))
       }
       if (result.selectedOps.length) {
         try {
@@ -129,9 +129,9 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
         }
       }
       setProposal(undefined)
-      setMessages((m) => [...m, { role: 'assistant', text: result.selectedOps.length ? `Đã đưa ${result.applied} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.` : 'Đã bỏ qua đề xuất.' }])
+      setMessages((m) => [...m, { role: 'assistant', text: result.selectedOps.length ? t('appliedToDraft', { n: result.applied }) : t('proposalSkipped') }])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không áp dụng được đề xuất')
+      setError(err instanceof Error ? err.message : t('applyFailed'))
     } finally {
       setBusy(false)
     }
@@ -173,15 +173,15 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
         {messages.map((message, i) => (
           <div key={`${message.role}-${i}`} className={`flex flex-col gap-1 ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
             <div className={message.role === 'user' ? 'max-w-[90%] rounded-2xl rounded-br-md bg-violet-600 px-3 py-3 leading-relaxed text-white shadow-sm' : 'max-w-[95%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-3 leading-relaxed text-slate-700 shadow-sm'}>
-              {message.role === 'assistant' && <div className="mb-2 flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />AI GỢI Ý</div>}
+              {message.role === 'assistant' && <div className="mb-2 flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />{t('aiSuggestion')}</div>}
               <span className="whitespace-pre-line">{message.text}</span>
             </div>
-            <span className="px-1 text-[10px] text-slate-400">Vừa xong</span>
+            <span className="px-1 text-[10px] text-slate-400">{t('justNow')}</span>
           </div>
         ))}
-        {busy && <p role="status" className="animate-pulse rounded-xl border border-violet-100 bg-violet-50 p-3 font-medium text-violet-700">{step ?? 'AI đang phân tích'}…</p>}
+        {busy && <p role="status" className="animate-pulse rounded-xl border border-violet-100 bg-violet-50 p-3 font-medium text-violet-700">{step ?? t('aiAnalysing')}…</p>}
         {clarify && <form onSubmit={(e) => { e.preventDefault(); void send(clarify.original, clarify.request.questions.map((q) => ({ question: q.question, answer: answers[q.id] ?? '' })).filter((a) => a.answer.trim())) }} className="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3"><p className="font-medium">{clarify.request.reason}</p>{clarify.request.questions.map((q) => <label key={q.id} className="block">{q.question}<input value={answers[q.id] ?? ''} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} placeholder={q.placeholder} className="mt-1 w-full rounded border px-2 py-1" /></label>)}<button disabled={busy || !Object.values(answers).some(Boolean)} className="rounded bg-violet-600 px-3 py-1.5 text-white">Gửi câu trả lời</button><button type="button" onClick={() => void send(clarify.original, [{ question: 'Có số liệu không?', answer: 'Không có số liệu cụ thể' }])} className="ml-2 underline">Không có số liệu</button></form>}
-        {proposal && <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm"><div className="flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />AI GỢI Ý</div><p className="font-medium">{proposal.summary}</p>{proposal.ops.map((op, i) => <label key={`${op.path}-${i}`} className="flex gap-2"><input type="checkbox" checked={checked.includes(i)} onChange={() => setChecked((c) => c.includes(i) ? c.filter((x) => x !== i) : [...c, i])} /><span><code>{op.path}</code>{op.op !== 'add' && <><br /><del>{display(readAt(cv, op.path))}</del> → </>}{display(op.value)}</span></label>)}<div className="mt-3 border-t border-slate-100 pt-2"><button disabled={busy || !checked.length} onClick={() => void applyProposal(checked)} className="flex w-full items-center justify-center gap-1 rounded-lg bg-violet-600 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"><Zap className="h-3.5 w-3.5" />Áp dụng vào CV</button><button disabled={busy} onClick={() => void applyProposal([])} className="mt-2 w-full text-xs text-slate-500 underline">Bỏ qua</button></div></div>}
+        {proposal && <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm"><div className="flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />{t('aiSuggestion')}</div><p className="font-medium">{proposal.summary}</p>{proposal.ops.map((op, i) => <label key={`${op.path}-${i}`} className="flex gap-2"><input type="checkbox" checked={checked.includes(i)} onChange={() => setChecked((c) => c.includes(i) ? c.filter((x) => x !== i) : [...c, i])} /><span><code>{op.path}</code>{op.op !== 'add' && <><br /><del>{display(readAt(cv, op.path))}</del> → </>}{display(op.value)}</span></label>)}<div className="mt-3 border-t border-slate-100 pt-2"><button disabled={busy || !checked.length} onClick={() => void applyProposal(checked)} className="flex w-full items-center justify-center gap-1 rounded-lg bg-violet-600 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"><Zap className="h-3.5 w-3.5" />Áp dụng vào CV</button><button disabled={busy} onClick={() => void applyProposal([])} className="mt-2 w-full text-xs text-slate-500 underline">Bỏ qua</button></div></div>}
         {error && <p role="alert" className="rounded bg-rose-50 p-2 text-rose-700">{error}</p>}
       </div>
 

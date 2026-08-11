@@ -354,6 +354,26 @@ export const vi = {
   guidedFullName: 'Họ và tên',
   guidedCreateFailed: 'Không tạo được CV từ luồng hướng dẫn',
   untitledCV: 'CV chưa đặt tên',
+  // Thông báo lỗi từ máy chủ, tra theo mã
+  errorV2NotBackfilled: 'CV này chưa có bản v2. Vui lòng chạy backfill rồi thử lại.',
+  errorSchemaV2Invalid: 'Dữ liệu CV không đúng định dạng. Vui lòng tải lại trang và thử lại.',
+  errorNoCVSections: 'Không nhận ra mục CV như học vấn, kinh nghiệm hoặc kỹ năng.',
+  errorFileMissing: 'Không tìm thấy file đã tải lên. Hãy thử tải lại.',
+  errorPDFExtractFailed: 'Không đọc được nội dung file PDF này.',
+  errorProfileCreateFailed: 'Không tạo được hồ sơ từ file này.',
+  errorUnknownJobKind: 'Loại tác vụ không được hỗ trợ.',
+  // Trợ lý AI — trạng thái lúc chạy
+  justNow: 'Vừa xong',
+  thinking: 'Đang suy nghĩ…',
+  sendFailed: 'Không gửi được tin nhắn',
+  jobFailed: 'CV xử lý thất bại. Vui lòng thử lại.',
+  dashboardLoadFailed: 'Không tải được trang tổng quan',
+  aiSuggestion: 'AI GỢI Ý',
+  appliedToDraft: 'Đã đưa {n} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.',
+  proposalSkipped: 'Đã bỏ qua đề xuất.',
+  applyFailed: 'Không áp dụng được đề xuất',
+  aiAnalysing: 'AI đang phân tích',
+  draftChangedDuringSettle: 'Bản nháp đã thay đổi trong lúc chờ. Đề xuất được giữ lại để bạn thử lại.',
 } as const
 
 export type MessageKey = keyof typeof vi

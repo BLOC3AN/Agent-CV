@@ -7,6 +7,10 @@ import { MyCVsRoute } from '../src/routes/MyCVsRoute'
 import { Sidebar } from '../src/components/Sidebar'
 import { greetingKey } from '../src/components/DashboardView'
 import { cvCompleteness } from '../src/lib/cv-completeness'
+import { errorText, jobErrorText } from '../src/lib/error-messages'
+import { ApiError } from '../src/lib/api'
+import { en } from '../src/lib/i18n/messages.en'
+import type { MessageKey } from '../src/lib/i18n'
 import type { CV } from '../src/types'
 import { LocaleProvider, BuilderLocaleProvider } from '../src/lib/i18n'
 import { vietnameseIn, vietnameseLabelsIn } from './helpers/vietnamese'
@@ -260,5 +264,32 @@ describe('độ hoàn thiện hồ sơ trên trang tổng quan', () => {
 
     expect(screen.getByText(`${cvCompleteness(sparse)}%`)).toBeTruthy()
     expect(screen.queryByText('85%')).toBeNull()
+  })
+})
+
+describe('thông báo lỗi và trạng thái theo ngôn ngữ giao diện', () => {
+  /*
+   * Máy chủ trả câu chữ tiếng Việt cố định kèm một MÃ. Giao diện dịch theo mã;
+   * đây là ca người dùng gặp thật: worker Go trả
+   * `NO_CV_SECTIONS: Không nhận ra mục CV...`.
+   */
+  it('dịch lỗi của job theo mã, không hiện nguyên văn tiếng Việt', () => {
+    const t = (key: MessageKey) => en[key]
+
+    expect(jobErrorText('NO_CV_SECTIONS: Không nhận ra mục CV như học vấn, kinh nghiệm hoặc kỹ năng', t))
+      .toBe(en.errorNoCVSections)
+  })
+
+  it('mã lạ thì giữ nguyên văn của máy chủ thay vì nuốt lỗi', () => {
+    const t = (key: MessageKey) => en[key]
+
+    expect(jobErrorText('BRAND_NEW_CODE: something went wrong', t)).toBe('BRAND_NEW_CODE: something went wrong')
+  })
+
+  it('lỗi API dịch theo mã đã biết', () => {
+    const t = (key: MessageKey) => en[key]
+
+    expect(errorText(new ApiError(409, 'raw', 'V2_NOT_BACKFILLED'), t, 'fallback')).toBe(en.errorV2NotBackfilled)
+    expect(errorText(new ApiError(500, '', undefined), t, 'fallback')).toBe('fallback')
   })
 })

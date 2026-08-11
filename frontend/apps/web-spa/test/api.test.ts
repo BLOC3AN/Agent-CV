@@ -163,10 +163,15 @@ describe('getCV', () => {
     expect(result.profileSnapshot).toEqual(sampleCV)
   })
 
-  it('409 V2_NOT_BACKFILLED thành thông điệp người đọc hiểu được', async () => {
-    mockFetch(409, { error: '...', code: 'V2_NOT_BACKFILLED' })
+  /*
+   * `api.ts` là tầng vận chuyển: nó GIỮ mã lỗi chứ không tự dịch. Bảng dịch
+   * nằm ở `lib/error-messages.ts`, tầng có `t` — trước đây dịch ngay tại đây
+   * nên mọi thông báo lỗi kẹt lại tiếng Việt kể cả khi giao diện đang tiếng Anh.
+   */
+  it('409 V2_NOT_BACKFILLED giữ nguyên mã để giao diện dịch', async () => {
+    mockFetch(409, { error: 'raw server text', code: 'V2_NOT_BACKFILLED' })
 
-    await expect(getCV('cv-1')).rejects.toThrow(/chưa có bản v2/i)
+    await expect(getCV('cv-1')).rejects.toMatchObject({ code: 'V2_NOT_BACKFILLED', status: 409 })
   })
 })
 
@@ -183,10 +188,10 @@ describe('saveCV', () => {
     expect(body.profile).toBeUndefined()
   })
 
-  it('400 SCHEMA_V2_INVALID thành thông điệp người đọc hiểu được', async () => {
-    mockFetch(400, { error: '...', code: 'SCHEMA_V2_INVALID' })
+  it('400 SCHEMA_V2_INVALID giữ nguyên mã để giao diện dịch', async () => {
+    mockFetch(400, { error: 'raw server text', code: 'SCHEMA_V2_INVALID' })
 
-    await expect(saveCV('cv-1', sampleCV)).rejects.toThrow(/định dạng/i)
+    await expect(saveCV('cv-1', sampleCV)).rejects.toMatchObject({ code: 'SCHEMA_V2_INVALID', status: 400 })
   })
 })
 

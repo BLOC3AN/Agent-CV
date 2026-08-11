@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useLocale } from '../lib/i18n'
+import { useLocale, type MessageKey } from '../lib/i18n'
+import { jobErrorText } from '../lib/error-messages'
 import { useNavigate } from 'react-router-dom';
 import { Upload, AlertCircle } from 'lucide-react';
 import { ApiError, type Job, type UploadCVResult } from '../lib/api';
@@ -40,10 +41,9 @@ const STATUS_LABEL: Record<string, string> = {
  * chuỗi. Không tin tuyệt đối vào đó: nếu tương lai đổi hình dạng, người dùng
  * vẫn thấy một câu đọc được thay vì "undefined" hay object in thẳng ra màn hình.
  */
-function jobErrorMessage(job: Job): string {
-  return typeof job.error === 'string' && job.error.trim() !== ''
-    ? job.error
-    : 'CV xử lý thất bại. Vui lòng thử lại.';
+function jobErrorMessage(job: Job, t: (key: MessageKey) => string): string {
+  const raw = typeof job.error === 'string' ? job.error : undefined;
+  return jobErrorText(raw, t) ?? t('jobFailed');
 }
 
 /**
@@ -114,7 +114,7 @@ export function ImportRoute({ uploadCV, getJob, pollIntervalMs = 2000 }: ImportR
       }
       if (!NON_TERMINAL_STATUSES.has(current.status)) {
         // 'failed' hoặc 'cancelled' — trạng thái cuối, nhưng không thành công.
-        setError(jobErrorMessage(current));
+        setError(jobErrorMessage(current, t));
         return;
       }
       setStatus(current.status);
@@ -169,9 +169,7 @@ export function ImportRoute({ uploadCV, getJob, pollIntervalMs = 2000 }: ImportR
           type="button"
           onClick={retry}
           className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition"
-        >
-          Thử lại
-        </button>
+        >{t('retry')}</button>
       </div>
     );
   }

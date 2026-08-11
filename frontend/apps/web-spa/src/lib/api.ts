@@ -10,10 +10,20 @@ import type { CV, CVLayout } from '@hr/schema'
 
 export class ApiError extends Error {
   readonly status: number
-  constructor(status: number, message: string) {
+  /**
+   * Mã lỗi của máy chủ, giữ nguyên để giao diện dịch được.
+   *
+   * Trước đây `request()` dùng mã để tra một bảng câu chữ TIẾNG VIỆT ngay tại
+   * đây rồi vứt mã đi — nên mọi thông báo lỗi kẹt lại tiếng Việt kể cả khi
+   * người dùng đã chuyển sang tiếng Anh. Bảng dịch nay nằm ở
+   * `lib/error-messages.ts`, tầng có `t`.
+   */
+  readonly code?: string
+  constructor(status: number, message: string, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -37,10 +47,6 @@ const SCHEMA_HEADER = { 'X-CV-Schema': '2' } as const
  * phải tự dịch theo `code` khi biết mã đó, để "409" không hiện ra thành
  * "Request failed" mù mờ.
  */
-const ERROR_MESSAGES_BY_CODE: Record<string, string> = {
-  V2_NOT_BACKFILLED: 'CV này chưa có bản v2. Vui lòng chạy backfill rồi thử lại.',
-  SCHEMA_V2_INVALID: 'Dữ liệu CV không đúng định dạng. Vui lòng tải lại trang và thử lại.',
-}
 
 export interface CVSummary {
   id: string
@@ -98,11 +104,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
         ? (body as { error: string }).error
         : undefined
-    // Mã lỗi đã biết được ưu tiên hơn text thô của server: server có thể đổi
-    // câu chữ bất cứ lúc nào (hoặc một cổng trung gian có thể nuốt mất nó),
-    // còn `code` là hợp đồng ổn định giữa hai phía.
-    const message = (code && ERROR_MESSAGES_BY_CODE[code]) ?? serverMessage ?? 'Máy chủ trả về lỗi'
-    throw new ApiError(res.status, message)
+    // Giữ nguyên văn của máy chủ làm chỗ lùi; giao diện ưu tiên dịch theo
+    // `code` qua `lib/error-messages.ts`.
+    throw new ApiError(res.status, serverMessage ?? 'Máy chủ trả về lỗi', code)
   }
 
   return body as T

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useLocale } from '../lib/i18n'
 import { useNavigate } from 'react-router-dom';
 import { ApiError, deleteCV, listCVs, type CVSummary } from '../lib/api';
 import { MyCVsView } from '../components/MyCVsView';
@@ -11,6 +12,7 @@ import { MyCVsView } from '../components/MyCVsView';
  * bằng props thuần.
  */
 export function MyCVsRoute() {
+  const { t } = useLocale()
   const navigate = useNavigate();
   const [items, setItems] = useState<CVSummary[] | null>(null);
   const [error, setError] = useState<string | undefined>();
@@ -49,9 +51,7 @@ export function MyCVsRoute() {
         <button
           onClick={() => void load()}
           className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition"
-        >
-          Thử lại
-        </button>
+        >{t('retry')}</button>
       </div>
     );
   }

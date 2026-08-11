@@ -515,9 +515,7 @@ export function ImportReviewRoute({
           type="button"
           onClick={() => void load()}
           className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition"
-        >
-          Thử lại
-        </button>
+        >{t('retry')}</button>
       </div>
     );
   }
