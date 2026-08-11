@@ -558,3 +558,21 @@ func TestParseChatModelOutputKeepsPlainTextReply(t *testing.T) {
 		t.Fatalf("văn bản thuần phải giữ nguyên làm reply: %#v", out)
 	}
 }
+
+// Trần output 1800 token là gốc của cả hai lỗi người dùng gặp: một yêu cầu
+// "tối ưu kinh nghiệm" sinh ~18 ops (đo thật: ~140 token/op ≈ 2520 token) nên
+// JSON bị cắt giữa chừng; còn model reasoning tiêu hết ngân sách đó cho phần
+// suy luận và trả về rỗng. `config.yml` khai `max_output` nhưng code không hề
+// đọc — con số trong config chỉ là trang trí.
+func TestChatMaxOutputComesFromConfig(t *testing.T) {
+	if got := chatMaxOutputTokens(chatModelConfig{MaxOutput: 32000}); got != 32000 {
+		t.Fatalf("phải dùng max_output của config, nhận %d", got)
+	}
+	if got := chatMaxOutputTokens(chatModelConfig{}); got != defaultChatMaxOutput {
+		t.Fatalf("thiếu cấu hình phải lùi về mặc định %d, nhận %d", defaultChatMaxOutput, got)
+	}
+	// Mặc định phải đủ cho 20 ops mà prompt cho phép — 1800 thì không.
+	if defaultChatMaxOutput < 20*140 {
+		t.Fatalf("mặc định %d không đủ cho 20 ops", defaultChatMaxOutput)
+	}
+}

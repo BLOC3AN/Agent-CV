@@ -1763,11 +1763,13 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	// văn (đã cắt bớt) để còn chẩn đoán được, nhưng KHÔNG đưa nó ra giao diện —
 	// người dùng không đọc được một khối JSON thô.
 	if modelOutput.Kind == "unparsable" {
-		snippet := answer
-		if len(snippet) > 500 {
-			snippet = snippet[:500] + "…"
+		// Ghi ĐUÔI chứ không phải đầu: output bị cắt thì chỗ hỏng luôn nằm ở
+		// cuối, và độ dài cho biết ngay có chạm trần token hay không.
+		tail := answer
+		if len(tail) > 400 {
+			tail = "…" + tail[len(tail)-400:]
 		}
-		log.Printf("chat model output unparsable requestId=%s modelRef=%q session=%s raw=%q", requestID, body.ModelRef, sessionID, snippet)
+		log.Printf("chat model output unparsable requestId=%s modelRef=%q session=%s len=%d tail=%q", requestID, body.ModelRef, sessionID, len(answer), tail)
 		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "MODEL_OUTPUT_UNPARSABLE")
 		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_OUTPUT_UNPARSABLE", "message": "Mô hình trả về dữ liệu không đọc được", "requestId": requestID, "sessionId": sessionID})
 		fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
@@ -2307,6 +2309,25 @@ type chatModelConfig struct {
 	StructuredOutput any    `yaml:"structured_output"`
 	Thinking         string `yaml:"thinking"`
 	ReasoningEffort  string `yaml:"reasoning_effort"`
+	MaxOutput        int    `yaml:"max_output"`
+}
+
+// defaultChatMaxOutput dùng khi model không khai `max_output`.
+//
+// Bản trước ghim cứng 1800 ở hai chỗ, và đó là gốc của hai lỗi thật: prompt cho
+// phép tới 20 ops, đo thật một op ≈ 140 token, nên một yêu cầu rộng cần ~2800
+// token và bị cắt giữa chừng thành JSON hỏng. Model reasoning còn tệ hơn — nó
+// tiêu ngân sách đó cho phần suy luận rồi trả về rỗng.
+const defaultChatMaxOutput = 8000
+
+// chatMaxOutputTokens: `max_output` của config, hoặc mặc định khi không khai.
+// Đây là TRẦN, không phải lượng bị tính tiền — nhà cung cấp chỉ tính token thật
+// sinh ra, nên để rộng an toàn hơn là để chật rồi nhận output cụt.
+func chatMaxOutputTokens(mc chatModelConfig) int {
+	if mc.MaxOutput > 0 {
+		return mc.MaxOutput
+	}
+	return defaultChatMaxOutput
 }
 type chatRuntimeConfig struct {
 	Providers struct {
@@ -2386,7 +2407,7 @@ func postLocalChat(ctx context.Context, messages []map[string]string, pc chatPro
 		return "", fmt.Errorf("local model thiếu base_url hoặc port")
 	}
 	endpoint := strings.TrimRight(base, "/") + ":" + fmt.Sprint(mc.Port) + "/v1/chat/completions"
-	request := map[string]any{"model": mc.ModelID, "messages": messages, "temperature": 0.2, "max_tokens": 1800, "response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "cv_chat_result", "schema": chatResponseSchema()}}}
+	request := map[string]any{"model": mc.ModelID, "messages": messages, "temperature": 0.2, "max_tokens": chatMaxOutputTokens(mc), "response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "cv_chat_result", "schema": chatResponseSchema()}}}
 	return postChatCompletion(ctx, endpoint, request, "")
 }
 
@@ -2401,10 +2422,10 @@ func postCloudChat(ctx context.Context, messages []map[string]string, provider s
 	endpoint := strings.TrimRight(pc.BaseURL, "/") + "/chat/completions"
 	request := map[string]any{"model": mc.ModelID, "messages": messages}
 	if provider == "openai" && strings.HasPrefix(mc.ModelID, "gpt-5") {
-		request["max_completion_tokens"] = 1800
+		request["max_completion_tokens"] = chatMaxOutputTokens(mc)
 	} else {
 		request["temperature"] = 0.2
-		request["max_tokens"] = 1800
+		request["max_tokens"] = chatMaxOutputTokens(mc)
 	}
 	if provider == "openai" && strings.HasPrefix(mc.ModelID, "gpt-5") {
 		// OpenAI's strict subset rejects the polymorphic patch schema; the
