@@ -60,3 +60,7 @@ __pycache__/
 
 # Worktree cô lập do Claude Code tạo — không bao giờ commit
 .claude/worktrees/
+
+# CV tải về từ nút "Tải PDF" rơi vào thư mục repo — dữ liệu cá nhân của người
+# dùng, không phải mã nguồn. Tài liệu PDF cần theo dõi thì thêm bằng `git add -f`.
+*.pdf
