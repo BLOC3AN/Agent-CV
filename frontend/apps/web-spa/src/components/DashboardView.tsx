@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLocale } from '../lib/i18n';
 import { CV } from '../types';
@@ -8,10 +8,6 @@ import {
   Plus,
   Upload,
   CheckCircle2,
-  FileText,
-  Building2,
-  ChevronRight,
-  Info,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -43,7 +39,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // dashboard qua ranh giới buổi rồi mong nó tự đổi.
   const now = new Date();
   const navigate = useNavigate();
-  const [showCompletionDetails, setShowCompletionDetails] = useState(false);
   const userName = userEmail.split('@')[0];
   const activeCV = cvs[0] || null;
   const hasCV = cvCount > 0;
@@ -155,14 +150,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {hasCV ? t('managedCVs', { n: cvCount }) : t('noProfileToScore')}
                 </span>
               </div>
-              <button
-                onClick={() => setShowCompletionDetails(!showCompletionDetails)}
-                id="btn-gom-nhung-gi"
-                className="text-indigo-600 hover:text-indigo-700 font-semibold text-xs flex items-center space-x-1"
-              >
-                <span>{t('details')}</span>
-                <Info className="w-3.5 h-3.5" />
-              </button>
             </div>
 
             {/* Progress Bar */}
@@ -173,26 +160,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ></div>
             </div>
 
-            {showCompletionDetails && (
-              <div className="mt-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-2">
-                <div className="flex justify-between text-slate-700">
-                  <span>{t('checkContact')}</span>
-                  <span className="text-emerald-600 font-semibold">{t('covered')}</span>
-                </div>
-                <div className="flex justify-between text-slate-700">
-                  <span>{t('checkExperience')}</span>
-                  <span className="text-emerald-600 font-semibold">{t('covered')}</span>
-                </div>
-                <div className="flex justify-between text-slate-700">
-                  <span>{t('checkSkills')}</span>
-                  <span className="text-emerald-600 font-semibold">{t('covered')}</span>
-                </div>
-                <div className="flex justify-between text-slate-700">
-                  <span>{t('checkCertifications')}</span>
-                  <span className="text-amber-600 font-semibold">{t('recommended')}</span>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -210,37 +177,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Row 2: Recent Match & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Card 1: Đối chiếu gần đây */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('recentMatching')}</h3>
-
-          <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-200/80">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 font-bold flex items-center justify-center text-sm border border-indigo-100">
-                AI
-              </div>
-              <div>
-                <h4 className="font-semibold text-slate-900 text-sm">{t('sampleRole')}</h4>
-                <span className="text-xs text-slate-500">{t('minutesAgo', { n: 55 })}</span>
-              </div>
-            </div>
-
-            <div className="text-right bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100">
-              <span className="text-lg font-bold text-emerald-700">88%</span>
-              <p className="text-[9px] text-emerald-600 font-medium uppercase">{t('compatible')}</p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => activeCV && navigate(`/analyze/${activeCV.id}`)}
-            id="btn-xem-phan-tich-chi-tiet"
-            className="inline-flex items-center space-x-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition"
-          >
-            <span>{t('analyzeJD')}</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-
         {/* Card 2: Hành động nhanh */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('quickActions')}</h3>
