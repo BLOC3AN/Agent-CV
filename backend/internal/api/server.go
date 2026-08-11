@@ -1759,6 +1759,23 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	modelOutput := parseChatModelOutput(answer)
+	// Output hỏng thường là JSON bị cắt vì chạm giới hạn token. Ghi log nguyên
+	// văn (đã cắt bớt) để còn chẩn đoán được, nhưng KHÔNG đưa nó ra giao diện —
+	// người dùng không đọc được một khối JSON thô.
+	if modelOutput.Kind == "unparsable" {
+		snippet := answer
+		if len(snippet) > 500 {
+			snippet = snippet[:500] + "…"
+		}
+		log.Printf("chat model output unparsable requestId=%s modelRef=%q session=%s raw=%q", requestID, body.ModelRef, sessionID, snippet)
+		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "MODEL_OUTPUT_UNPARSABLE")
+		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_OUTPUT_UNPARSABLE", "message": "Mô hình trả về dữ liệu không đọc được", "requestId": requestID, "sessionId": sessionID})
+		fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return
+	}
 	var assistantContent = modelOutput.Text
 	if modelOutput.Kind == "clarify" && len(modelOutput.Request) > 0 {
 		payload, _ := json.Marshal(map[string]any{"kind": "clarify", "request": json.RawMessage(modelOutput.Request), "sessionId": sessionID, "userMessageId": userMessageID})
@@ -1874,8 +1891,15 @@ func parseChatModelOutput(raw string) chatModelOutput {
 		}
 		clean = strings.TrimSuffix(strings.TrimSpace(clean), "```")
 	}
+	// Văn bản thuần vẫn là câu trả lời hợp lệ; chỉ khi output TRÔNG như JSON mà
+	// hỏng thì mới là lỗi. Mô hình bị cắt giữa chừng vì chạm giới hạn token rơi
+	// vào đúng đây, và bản trước đổ nguyên văn khối JSON đó ra khung chat.
+	looksLikeJSON := strings.HasPrefix(clean, "{")
 	var out chatModelOutput
 	if json.Unmarshal([]byte(clean), &out) != nil {
+		if looksLikeJSON {
+			return chatModelOutput{Kind: "unparsable"}
+		}
 		return chatModelOutput{Kind: "reply", Text: raw}
 	}
 	if out.Kind == "patch" && out.Summary != "" && len(out.Ops) > 0 {
@@ -1887,7 +1911,8 @@ func parseChatModelOutput(raw string) chatModelOutput {
 	if out.Kind == "reply" && out.Text != "" {
 		return out
 	}
-	return chatModelOutput{Kind: "reply", Text: raw}
+	// JSON hợp lệ nhưng không khớp hình dạng nào — không có gì để hiển thị.
+	return chatModelOutput{Kind: "unparsable"}
 }
 
 func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {

@@ -428,4 +428,6 @@ export const en: Record<MessageKey, string> = {
   stepUnderstanding: 'Understanding your request',
   stepReviewingProfile: 'Reviewing your profile to answer',
   stepCheckingProposal: 'Checking the proposal',
+  errorModelUnavailable: 'The AI assistant is unavailable. Please try again later.',
+  errorModelOutputUnparsable: 'The AI assistant returned data we could not read — usually because the answer grew too long and was cut off. Try a narrower request, for example one section at a time.',
 }

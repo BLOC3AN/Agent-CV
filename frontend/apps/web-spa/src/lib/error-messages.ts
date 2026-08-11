@@ -36,6 +36,8 @@ const CODE_TO_KEY: Record<string, MessageKey> = {
   AI_PATCH_INVALID_LAYOUT: 'errorAIPatchInvalidLayout',
   AI_PATCH_LAYOUT_REPLACE: 'errorAIPatchLayoutReplace',
   PDF_DOWNLOAD_FAILED: 'downloadFailed',
+  MODEL_UNAVAILABLE: 'errorModelUnavailable',
+  MODEL_OUTPUT_UNPARSABLE: 'errorModelOutputUnparsable',
 }
 
 export function errorMessageKey(code: string | undefined): MessageKey | undefined {

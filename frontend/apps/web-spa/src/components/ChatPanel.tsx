@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useLocale } from '../lib/i18n'
-import { stepText } from '../lib/error-messages'
+import { errorMessageKey, stepText } from '../lib/error-messages'
 import { Bot, Check, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
 import type { CV, CVLayout } from '../types'
 import { applyChatOpsToDraft } from '../lib/cv-patch'
@@ -96,7 +96,11 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
         setProposal({ id: result.proposalId, summary: result.summary, ops: result.ops, rejected: result.rejected, draftVersion: requestDraftVersion })
         setChecked(result.ops.map((op, i) => op.grounding.type === 'inference' ? -1 : i).filter((i) => i >= 0))
       } else {
-        setError(`${result.message}${result.requestId ? ` (requestId: ${result.requestId})` : ''}`)
+        // Dịch theo MÃ; `message` của máy chủ chỉ là chỗ lùi cho mã chưa biết.
+        // Giữ `requestId` vì đó là thứ duy nhất tra được log khi người dùng báo lỗi.
+        const key = errorMessageKey(result.code)
+        const text = key ? t(key) : result.message
+        setError(`${text}${result.requestId ? ` (requestId: ${result.requestId})` : ''}`)
       }
     } catch (err) {
       if (!ac.signal.aborted) setError(err instanceof Error ? err.message : t('sendFailed'))

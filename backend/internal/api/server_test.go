@@ -523,3 +523,38 @@ func TestChatStepLabelsAreCodes(t *testing.T) {
 		}
 	}
 }
+
+// Khi mô hình trả JSON hỏng — thường là bị cắt giữa chừng vì chạm giới hạn
+// token — bản trước đổ NGUYÊN VĂN output vào khung chat. Người dùng nhận một
+// khối JSON thô dài hàng chục dòng thay vì một câu đọc được.
+func TestParseChatModelOutputMarksUnparsableInsteadOfDumpingRaw(t *testing.T) {
+	truncated := `{"kind":"patch","ops":[{"op":"replace","path":"/sections/experience/0/highlights/0","value":"Architected the platform`
+
+	out := parseChatModelOutput(truncated)
+
+	if out.Kind != "unparsable" {
+		t.Fatalf("JSON hỏng phải cho kind=unparsable, nhận %q", out.Kind)
+	}
+	if strings.Contains(out.Text, "Architected the platform") {
+		t.Fatal("không được mang nguyên văn output của mô hình ra giao diện")
+	}
+}
+
+// Một object JSON hợp lệ nhưng sai hình dạng cũng vậy: không có gì để hiển thị
+// nên phải báo lỗi, không đổ raw.
+func TestParseChatModelOutputRejectsUnknownShape(t *testing.T) {
+	if got := parseChatModelOutput(`{"kind":"patch","summary":"","ops":[]}`); got.Kind != "unparsable" {
+		t.Fatalf("patch rỗng phải là unparsable, nhận %q", got.Kind)
+	}
+	if got := parseChatModelOutput(`{"foo":"bar"}`); got.Kind != "unparsable" {
+		t.Fatalf("hình dạng lạ phải là unparsable, nhận %q", got.Kind)
+	}
+}
+
+// Văn bản thuần (không phải JSON) vẫn là câu trả lời hợp lệ của mô hình.
+func TestParseChatModelOutputKeepsPlainTextReply(t *testing.T) {
+	out := parseChatModelOutput("Hồ sơ của bạn đã khá đầy đủ.")
+	if out.Kind != "reply" || out.Text != "Hồ sơ của bạn đã khá đầy đủ." {
+		t.Fatalf("văn bản thuần phải giữ nguyên làm reply: %#v", out)
+	}
+}

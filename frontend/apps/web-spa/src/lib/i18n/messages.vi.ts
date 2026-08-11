@@ -463,6 +463,8 @@ export const vi = {
   stepUnderstanding: 'Đang hiểu yêu cầu của bạn',
   stepReviewingProfile: 'Đang xem lại hồ sơ để trả lời',
   stepCheckingProposal: 'Đang kiểm tra đề xuất',
+  errorModelUnavailable: 'Trợ lý AI đang không sẵn sàng. Vui lòng thử lại sau.',
+  errorModelOutputUnparsable: 'Trợ lý AI trả về dữ liệu không đọc được — thường vì câu trả lời quá dài và bị cắt. Hãy thử yêu cầu hẹp hơn, ví dụ chỉ một mục.',
 } as const
 
 export type MessageKey = keyof typeof vi

@@ -69,3 +69,18 @@ describe('nhãn tiến trình do máy chủ bắn qua SSE', () => {
     expect(stepText(undefined, t)).toBeUndefined()
   })
 })
+
+describe('lỗi của trợ lý AI', () => {
+  /*
+   * Bản trước, khi mô hình trả JSON hỏng (thường vì bị cắt do chạm giới hạn
+   * token), backend đổ NGUYÊN VĂN khối JSON đó vào khung chat. Giờ nó gửi mã
+   * và giao diện dịch thành câu người đọc hiểu được.
+   */
+  it('dịch mã lỗi của mô hình', () => {
+    const t = (key: MessageKey) => en[key]
+
+    expect(errorMessageKey('MODEL_OUTPUT_UNPARSABLE')).toBe('errorModelOutputUnparsable')
+    expect(errorMessageKey('MODEL_UNAVAILABLE')).toBe('errorModelUnavailable')
+    expect(t(errorMessageKey('MODEL_OUTPUT_UNPARSABLE')!)).toContain('cut off')
+  })
+})
