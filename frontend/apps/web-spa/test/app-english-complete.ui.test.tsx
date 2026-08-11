@@ -5,6 +5,7 @@ import { MemoryRouter, createMemoryRouter, RouterProvider } from 'react-router-d
 import { DashboardRoute } from '../src/routes/DashboardRoute'
 import { MyCVsRoute } from '../src/routes/MyCVsRoute'
 import { Sidebar } from '../src/components/Sidebar'
+import { greetingKey } from '../src/components/DashboardView'
 import { LocaleProvider, BuilderLocaleProvider } from '../src/lib/i18n'
 import { vietnameseIn, vietnameseLabelsIn } from './helpers/vietnamese'
 import * as api from '../src/lib/api'
@@ -212,5 +213,25 @@ describe('giao diện tiếng Anh — rà soát import và trợ lý AI', () => 
 
     expect(vietnameseIn(container)).toEqual([])
     expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+})
+
+describe('lời chào theo giờ máy người dùng', () => {
+  it('chia buổi theo giờ, không cố định một lời chào', () => {
+    expect(greetingKey(0)).toBe('greetingMorning')
+    expect(greetingKey(11)).toBe('greetingMorning')
+    expect(greetingKey(12)).toBe('greetingAfternoon')
+    expect(greetingKey(17)).toBe('greetingAfternoon')
+    expect(greetingKey(18)).toBe('greetingEvening')
+    expect(greetingKey(23)).toBe('greetingEvening')
+  })
+
+  it('trang tổng quan dùng lời chào khớp giờ hiện tại của máy', async () => {
+    vi.spyOn(api, 'listCVs').mockResolvedValue([])
+    renderInEnglish(<DashboardRoute />)
+    await screen.findByText('0%')
+
+    const expected = { greetingMorning: 'Good morning,', greetingAfternoon: 'Good afternoon,', greetingEvening: 'Good evening,' }[greetingKey(new Date().getHours())]
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(expected)
   })
 })

@@ -1,4 +1,12 @@
-import { CV } from './types';
+/**
+ * Bộ CV mẫu — CHỈ dùng cho test.
+ *
+ * Trước đây file này nằm trong `src/` với tên `mockData.ts`, nên trông như
+ * dữ liệu của ứng dụng. Không màn hình nào import nó; mọi màn hình đọc dữ
+ * liệu thật qua `lib/api.ts`. Chuyển vào `test/fixtures/` để chỗ đứng khớp
+ * với vai trò, và để không ai còn tưởng ứng dụng đang chạy bằng dữ liệu giả.
+ */
+import { CV } from '../../src/types';
 
 export const initialCVs: CV[] = [
   {

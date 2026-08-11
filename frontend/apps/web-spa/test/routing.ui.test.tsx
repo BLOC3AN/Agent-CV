@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { appRoutes } from '../src/routes/routes.js'
 import * as api from '../src/lib/api.js'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 import type { CV } from '../src/types'
 
 function renderAt(path: string) {

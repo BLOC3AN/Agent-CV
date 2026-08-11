@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ChatPanel } from '../src/components/ChatPanel'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 
 const { sendChat, settleChatProposal } = vi.hoisted(() => ({
   sendChat: vi.fn().mockResolvedValue({ kind: 'reply', text: 'Đã phân tích CV.' }),

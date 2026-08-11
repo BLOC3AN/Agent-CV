@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { countCVChanges, diffCVSnapshots } from '../src/lib/cv-diff'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 import type { CV } from '../src/types'
 
 const base = initialCVs[0]!

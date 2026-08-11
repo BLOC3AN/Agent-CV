@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { PreviewModal } from '../src/components/PreviewModal'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 import type { CVLayout } from '../src/types'
 

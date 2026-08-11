@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { ComponentTree } from '../src/components/ComponentTree'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 import type { CVLayout } from '../src/types'
 
 const cv = initialCVs[0]!

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { CVEditorView } from '../src/components/CVEditorView'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 
 const noop = () => {}
 const cv = initialCVs[0]!

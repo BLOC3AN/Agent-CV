@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import { CVBlockRenderer } from '../src/components/CVBlockRenderer'
 import { materializeItemOrder, moveItem, moveNode, normalizeLayout, resetDefaultLayout, setNodeVisible, synchronizeCVActiveSections } from '../src/lib/layout-draft'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 import type { CVLayout } from '../src/types'
 import { CV_FIELD_CATALOG } from '@hr/schema'
 

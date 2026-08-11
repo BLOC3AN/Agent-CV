@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { CVEditorView } from '../src/components/CVEditorView'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 import type { CV } from '../src/types'
 
 const noop = () => {}

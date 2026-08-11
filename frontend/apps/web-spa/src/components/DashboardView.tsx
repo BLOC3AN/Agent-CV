@@ -21,6 +21,16 @@ interface DashboardViewProps {
   userEmail?: string;
 }
 
+/**
+ * Sáng < 12h, chiều < 18h, còn lại là tối — theo cách nói thông thường của
+ * tiếng Việt, và trùng với cách tiếng Anh chia morning/afternoon/evening.
+ */
+export function greetingKey(hour: number): 'greetingMorning' | 'greetingAfternoon' | 'greetingEvening' {
+  if (hour < 12) return 'greetingMorning';
+  if (hour < 18) return 'greetingAfternoon';
+  return 'greetingEvening';
+}
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   cvs,
   cvCount = cvs.length,
@@ -28,6 +38,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   userEmail = 'tester',
 }) => {
   const { t } = useLocale();
+  // Giờ của MÁY NGƯỜI DÙNG, không phải giờ máy chủ: lời chào phải khớp với
+  // đồng hồ họ đang nhìn. Đọc một lần mỗi lần render là đủ — không ai mở
+  // dashboard qua ranh giới buổi rồi mong nó tự đổi.
+  const now = new Date();
   const navigate = useNavigate();
   const [showCompletionDetails, setShowCompletionDetails] = useState(false);
   const userName = userEmail.split('@')[0];
@@ -41,7 +55,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div>
           <span className="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-400/30 rounded-full text-[11px] font-semibold text-indigo-300 uppercase mb-2 tracking-wider">{t('welcomeBadge')}</span>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-            {t('greetingMorning')} {userName}! 👋
+            {t(greetingKey(now.getHours()))} {userName}! 👋
           </h1>
           <p className="text-slate-300 font-normal text-xs md:text-sm mt-1 max-w-xl">{t('dashboardIntro')}</p>
         </div>

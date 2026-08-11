@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { CVEditorView } from '../src/components/CVEditorView'
-import { initialCVs } from '../src/mockData'
+import { initialCVs } from './fixtures/cvs'
 import { getCVFieldDraftValue, updateCVFieldDraft } from '../src/lib/cv-store'
 import type { CV, CVLayout } from '../src/types'
 
