@@ -9,7 +9,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useSession } from '../lib/session';
-import { useLocale } from '../lib/i18n';
+import { useBuilderLocale, useLocale, type Locale } from '../lib/i18n';
 
 interface HeaderProps {
   onOpenPreview?: () => void;
@@ -29,6 +29,9 @@ export const Header: React.FC<HeaderProps> = ({
   const { email, signOut } = useSession();
   const userEmail = email ?? 'Chưa đăng nhập';
   const { t } = useLocale();
+  // Vắng `language` nghĩa là không có CV nào đang mở, nên bộ chọn tự biến mất
+  // ngoài trình sửa mà không cần thêm điều kiện nào ở đây.
+  const { language, setLanguage } = useBuilderLocale();
 
   return (
     <header className="h-[88px] bg-white border-b border-slate-200/80 px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 transition-all shadow-xs">
@@ -90,6 +93,22 @@ export const Header: React.FC<HeaderProps> = ({
         {isEditor ? (
           /* Editor Actions */
           <>
+            {language && (
+              <label className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600">
+                <span className="sr-only">{t('cvLanguage')}</span>
+                <select
+                  id="btn-header-cv-language"
+                  aria-label={t('cvLanguage')}
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value as Locale)}
+                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:border-violet-400 focus:outline-none"
+                >
+                  <option value="vi">{t('cvLanguageVi')}</option>
+                  <option value="en">{t('cvLanguageEn')}</option>
+                </select>
+              </label>
+            )}
+
             <button
               onClick={onOpenPreview ?? (() => window.dispatchEvent(new Event('hr-agent:open-preview')))}
               id="btn-header-preview"

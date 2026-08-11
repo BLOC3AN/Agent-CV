@@ -1,3 +1,7 @@
+import { useLocale } from '../lib/i18n'
+import { nodeLabel } from '../lib/cv-section-titles'
+
+const NODE_TYPES = ['header', 'summary', 'experience', 'projects', 'education', 'skills', 'activities', 'certifications', 'languages', 'footer'] as const
 import React, { useLayoutEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical } from 'lucide-react'
 import type { CV, CVLayout, CVNodeType, LayoutNode } from '../types'
@@ -16,10 +20,6 @@ interface ComponentTreeProps {
 
 type Dragged = { kind: 'node'; nodeId: string } | { kind: 'item'; nodeId: string; itemId: string } | null
 type DropTarget = { kind: 'node'; beforeNodeId: string | null } | { kind: 'item'; nodeId: string; beforeItemId: string | null } | null
-
-const labels: Record<CVNodeType, string> = {
-  header: 'Thông tin cá nhân', summary: 'Giới thiệu bản thân', experience: 'Kinh nghiệm làm việc', projects: 'Dự án nổi bật', education: 'Học vấn & Bằng cấp', skills: 'Kỹ năng & Công nghệ', activities: 'Hoạt động & Ngoại khóa', certifications: 'Chứng chỉ', languages: 'Ngoại ngữ', footer: 'Footer',
-}
 
 function nestedItems(cv: CV, node: LayoutNode): Array<{ id: string; label: string }> {
   if (node.type === 'experience') return cv.sections.experience.map((item) => ({ id: item.id, label: `${item.title} — ${item.company}` }))
@@ -80,6 +80,8 @@ function allowDrop(event: React.DragEvent<HTMLElement>) {
 }
 
 export function ComponentTree({ cv, layout, selectedNodeId, selectedItemId, onMoveNode, onMoveItem, onSetNodeVisible, onSelect, onEdit }: ComponentTreeProps) {
+  const { t } = useLocale()
+  const labels = Object.fromEntries(NODE_TYPES.map((type) => [type, nodeLabel(type, cv.language)])) as Record<CVNodeType, string>
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [dragged, setDragged] = useState<Dragged>(null)
   const [dropTarget, setDropTarget] = useState<DropTarget>(null)
@@ -157,7 +159,7 @@ export function ComponentTree({ cv, layout, selectedNodeId, selectedItemId, onMo
   return (
     <div
       role="tree"
-      aria-label="Cấu trúc CV"
+      aria-label={t('cvStructure')}
       className="space-y-1"
       onDragOver={(event) => { if (dragged) allowDrop(event) }}
       onDrop={(event) => { event.preventDefault(); commitTrackedDrop() }}
@@ -196,10 +198,10 @@ export function ComponentTree({ cv, layout, selectedNodeId, selectedItemId, onMo
                 resetDrag()
               }}
             >
-              <button type="button" draggable aria-label={`Kéo ${label}`} data-dragging={dragged?.kind === 'node' && dragged.nodeId === node.id ? 'true' : undefined} className={`cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing ${dragged?.kind === 'node' && dragged.nodeId === node.id ? 'opacity-40 shadow-lg' : ''}`} onClick={(event) => event.stopPropagation()} onDragStart={(event) => { beginDrag(event, node.id); setDragged({ kind: 'node', nodeId: node.id }); setDropTarget(null) }} onDragEnd={resetDrag}><GripVertical className="h-3.5 w-3.5" /></button>
-              {expandable ? <button type="button" aria-label={`${isExpanded ? 'Thu gọn' : 'Mở rộng'} ${label}`} className="rounded p-0.5 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); toggleExpanded(node.id) }}>{isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</button> : <span className="w-5" />}
+              <button type="button" draggable aria-label={`${t('drag')} ${label}`} data-dragging={dragged?.kind === 'node' && dragged.nodeId === node.id ? 'true' : undefined} className={`cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing ${dragged?.kind === 'node' && dragged.nodeId === node.id ? 'opacity-40 shadow-lg' : ''}`} onClick={(event) => event.stopPropagation()} onDragStart={(event) => { beginDrag(event, node.id); setDragged({ kind: 'node', nodeId: node.id }); setDropTarget(null) }} onDragEnd={resetDrag}><GripVertical className="h-3.5 w-3.5" /></button>
+              {expandable ? <button type="button" aria-label={`${isExpanded ? t('collapse') : t('expand')} ${label}`} className="rounded p-0.5 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); toggleExpanded(node.id) }}>{isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</button> : <span className="w-5" />}
               <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
-              <button type="button" aria-label={`${node.visible ? 'Ẩn' : 'Hiện'} ${label}`} className="rounded p-1 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); onSetNodeVisible(node.id, !node.visible) }}>{node.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}</button>
+              <button type="button" aria-label={`${node.visible ? t('hide') : t('show')} ${label}`} className="rounded p-1 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); onSetNodeVisible(node.id, !node.visible) }}>{node.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}</button>
             </div>
             {expandable && isExpanded && <div
               role="group"
@@ -236,19 +238,19 @@ export function ComponentTree({ cv, layout, selectedNodeId, selectedItemId, onMo
                       resetDrag()
                     }}
                   >
-                    <button type="button" draggable aria-label={`Kéo ${item.label}`} data-dragging={dragged?.kind === 'item' && dragged.itemId === item.id ? 'true' : undefined} className="cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing" onClick={(event) => event.stopPropagation()} onDragStart={(event) => { beginDrag(event, item.id); setDragged({ kind: 'item', nodeId: node.id, itemId: item.id }); setDropTarget(null) }} onDragEnd={resetDrag}><GripVertical className="h-3 w-3" /></button>
+                    <button type="button" draggable aria-label={`${t('drag')} ${item.label}`} data-dragging={dragged?.kind === 'item' && dragged.itemId === item.id ? 'true' : undefined} className="cursor-grab rounded p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing" onClick={(event) => event.stopPropagation()} onDragStart={(event) => { beginDrag(event, item.id); setDragged({ kind: 'item', nodeId: node.id, itemId: item.id }); setDropTarget(null) }} onDragEnd={resetDrag}><GripVertical className="h-3 w-3" /></button>
                     <span className="truncate">{item.label}</span>
                   </div>
                 </React.Fragment>
               })}
-              <div aria-label={`Thả để chuyển ${label} xuống cuối`} className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id) { allowDrop(event); event.stopPropagation(); setDropTarget({ kind: 'item', nodeId: node.id, beforeItemId: null }) } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id) onMoveItem(node.id, dragged.itemId, null); resetDrag() }} />
+              <div aria-label={`${t('dropToEnd')}: ${label}`} className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'item' && dragged.nodeId === node.id) { allowDrop(event); event.stopPropagation(); setDropTarget({ kind: 'item', nodeId: node.id, beforeItemId: null }) } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'item' && dragged.nodeId === node.id) onMoveItem(node.id, dragged.itemId, null); resetDrag() }} />
               {dropTarget?.kind === 'item' && dropTarget.nodeId === node.id && dropTarget.beforeItemId === null && placeholder(`item:${node.id}:end`, label)}
             </div>}
           </div>
         )
       })}
-      <div aria-label="Thả để chuyển node xuống cuối" className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'node') { allowDrop(event); setDropTarget({ kind: 'node', beforeNodeId: null }) } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'node') onMoveNode(dragged.nodeId, null); resetDrag() }} />
-      {dropTarget?.kind === 'node' && dropTarget.beforeNodeId === null && placeholder('node:end', 'cuối danh sách')}
+      <div aria-label={t('dropToEnd')} className="h-2 rounded border border-dashed border-transparent" onDragOver={(event) => { if (dragged?.kind === 'node') { allowDrop(event); setDropTarget({ kind: 'node', beforeNodeId: null }) } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged?.kind === 'node') onMoveNode(dragged.nodeId, null); resetDrag() }} />
+      {dropTarget?.kind === 'node' && dropTarget.beforeNodeId === null && placeholder('node:end', t('endOfList'))}
     </div>
   )
 }

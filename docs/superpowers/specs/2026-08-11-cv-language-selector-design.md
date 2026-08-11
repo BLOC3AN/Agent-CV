@@ -173,5 +173,4 @@ chỉ bật/tắt hiển thị.
 
 - Dịch trợ lý AI, màn rà soát import, dashboard, cài đặt.
 - Dịch tự động nội dung người dùng nhập.
-- Thêm ngôn ngữ thứ ba. Cấu trúc bảng message không cản việc đó, nhưng không làm
-  bây giờ.
+- Thêm ngôn ngữ thứ ba. Cấu trúc bảng message không cản việc đó, nhưng không làm bây giờ.

@@ -1,3 +1,5 @@
+import { useLocale } from '../lib/i18n'
+import { nodeLabel } from '../lib/cv-section-titles'
 import React, { useState } from 'react'
 import { FieldCatalog } from './FieldCatalog'
 import { getCVFieldDraftValue, updateCVFieldDraft, type CVFieldDraftValue } from '../lib/cv-store'
@@ -30,11 +32,9 @@ function initialValues(draft: CV, node: LayoutNode, itemId: string | undefined, 
   return Object.fromEntries(keys.map((key) => [key, getCVFieldDraftValue(draft, node, itemId, key)])) as Record<string, CVFieldDraftValue>
 }
 
-const nodeLabels: Record<LayoutNode['type'], string> = {
-  header: 'Thông tin cá nhân', summary: 'Giới thiệu bản thân', experience: 'Kinh nghiệm làm việc', projects: 'Dự án nổi bật', education: 'Học vấn & Bằng cấp', skills: 'Kỹ năng & Công nghệ', activities: 'Hoạt động & Ngoại khóa', certifications: 'Chứng chỉ', languages: 'Ngoại ngữ', footer: 'Footer',
-}
-
 export function InlineCVEditor({ node, item, fieldDefinitions, draft, onDraftChange, onClose }: InlineCVEditorProps) {
+  const { t, locale } = useLocale()
+  const label = nodeLabel(node.type, locale)
   const [keys, setKeys] = useState(() => initialKeys(node))
   const [values, setValues] = useState<Record<string, CVFieldDraftValue>>(() => initialValues(draft, node, item?.id, initialKeys(node)))
   const definitions = keys.flatMap((key) => {
@@ -66,21 +66,22 @@ export function InlineCVEditor({ node, item, fieldDefinitions, draft, onDraftCha
   }
   const setValue = (key: string, value: CVFieldDraftValue) => setValues((current) => ({ ...current, [key]: value }))
 
-  return <div role="dialog" aria-modal="false" aria-label={`Chỉnh sửa ${nodeLabels[node.type]}`} onKeyDown={onKeyDown} className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-2xs">
+  return <div role="dialog" aria-modal="false" aria-label={`${t('edit')} ${label}`} onKeyDown={onKeyDown} className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-2xs">
     <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">Chỉnh sửa: {nodeLabels[node.type]}</h4>
-      <button type="button" aria-label="Đóng trình sửa nội tuyến" onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-200">×</button>
+      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">{t('edit')}: {label}</h4>
+      <button type="button" aria-label={t('closeInlineEditor')} onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-200">×</button>
     </div>
     {definitions.map((definition) => <FieldControl key={definition.key} definition={definition} value={values[definition.key] ?? ''} onChange={(value) => setValue(definition.key, value)} />)}
     <FieldCatalog node={node} fieldDefinitions={fieldDefinitions} selectedKeys={keys} onAdd={addField} />
     <div className="flex justify-end gap-2">
-      <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200">Hủy</button>
-      <button type="button" onClick={apply} className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700">Cập nhật bản nháp</button>
+      <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200">{t('cancel')}</button>
+      <button type="button" onClick={apply} className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700">{t('updateDraft')}</button>
     </div>
   </div>
 }
 
 function FieldControl({ definition, value, onChange }: { definition: CVFieldDefinition; value: CVFieldDraftValue; onChange: (value: CVFieldDraftValue) => void }) {
+  const { t } = useLocale()
   const className = 'w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-medium focus:border-indigo-500 focus:outline-none'
   if (definition.valueType === 'multiline') return <label className="block text-xs font-semibold text-slate-700">{definition.label}<textarea aria-label={definition.label} rows={3} value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} className={`${className} mt-1`} /></label>
   if (definition.valueType === 'date') {
@@ -89,7 +90,7 @@ function FieldControl({ definition, value, onChange }: { definition: CVFieldDefi
   }
   if (definition.valueType === 'tag-list') {
     const tags = Array.isArray(value) ? value : []
-    return <label className="block text-xs font-semibold text-slate-700">{definition.label}<input aria-label={definition.label} value={tags.join(', ')} onChange={(event) => onChange(event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean))} className={`${className} mt-1`} /><span className="mt-1 block text-[10px] font-normal text-slate-500">Ngăn cách thẻ bằng dấu phẩy.</span></label>
+    return <label className="block text-xs font-semibold text-slate-700">{definition.label}<input aria-label={definition.label} value={tags.join(', ')} onChange={(event) => onChange(event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean))} className={`${className} mt-1`} /><span className="mt-1 block text-[10px] font-normal text-slate-500">{t('commaSeparatedHint')}</span></label>
   }
   return <label className="block text-xs font-semibold text-slate-700">{definition.label}<input aria-label={definition.label} value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)} className={`${className} mt-1`} /></label>
 }

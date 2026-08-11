@@ -2,6 +2,7 @@ import React from 'react'
 import { CV_FIELD_CATALOG } from '@hr/schema'
 import type { CVChangeKind, CVChangeMap } from '../lib/cv-diff'
 import type { CV, CVLayout, CVNodeType, LayoutNode } from '../types'
+import { nodeLabel, sectionTitle } from '../lib/cv-section-titles'
 
 export type CVRenderVariant = 'editor' | 'preview' | 'print'
 
@@ -22,30 +23,6 @@ export interface CVBlockRendererProps {
 
 interface RenderContext extends CVBlockRendererProps {
   node: LayoutNode
-}
-
-const nodeLabels: Record<CVNodeType, string> = {
-  header: 'Thông tin cá nhân',
-  summary: 'Giới thiệu bản thân',
-  experience: 'Kinh nghiệm làm việc',
-  projects: 'Dự án nổi bật',
-  education: 'Học vấn & Bằng cấp',
-  skills: 'Kĩ năng & Công nghệ',
-  activities: 'Hoạt động & Ngoại khóa',
-  certifications: 'Chứng chỉ',
-  languages: 'Ngoại ngữ',
-  footer: 'Footer',
-}
-
-const sectionTitles: Partial<Record<CVNodeType, string>> = {
-  summary: 'GIỚI THIỆU BẢN THÂN',
-  experience: 'KINH NGHIỆM LÀM VIỆC',
-  projects: 'DỰ ÁN NỔI BẬT',
-  education: 'HỌC VẤN & BẰNG CẤP',
-  skills: 'KĨ NĂNG & CÔNG NGHỆ',
-  activities: 'HOẠT ĐỘNG & NGOẠI KHÓA',
-  certifications: 'CHỨNG CHỈ',
-  languages: 'NGOẠI NGỮ',
 }
 
 function orderedItems<T extends { id: string }>(items: T[], itemOrder?: string[]): T[] {
@@ -170,7 +147,7 @@ function nodeFrame(context: RenderContext, children: React.ReactNode, element: '
       data-cv-node={context.node.type}
       data-cv-node-id={context.node.id}
       data-testid={`cv-block-${context.node.type}`}
-      aria-label={nodeLabels[context.node.type]}
+      aria-label={nodeLabel(context.node.type, context.cv.language)}
       className={context.node.type === 'header'
         ? context.variant === 'print' ? 'cv-header' : 'mb-6 pb-4 border-b border-slate-200 relative'
         : undefined}
@@ -224,8 +201,8 @@ function renderSummary(context: RenderContext) {
   if (!intro.summary && !intro.careerObjective && !(fallbackAvailability && intro.availability) && !(fallbackLocation && intro.location)) return null
   const changed = (field: string) => context.changes?.[`intro.${field}`]
   const fallbackContact = fallbackLocation && <>{intro.website && <p><span data-cv-field="website" data-cv-change={changed('website')}>{intro.website}</span></p>}{intro.avatarUrl && <img className="cv-avatar" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}</>
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary" data-cv-change={changed('summary')}>{intro.summary}</p>{intro.careerObjective && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} change={changed('careerObjective')} /></p>}{fallbackAvailability && <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" change={changed('availability')} /></p>}{fallbackLocation && <p><RegisteredValue fieldKey="location" value={intro.location} label="Location" change={changed('location')} /></p>}{fallbackContact}</section>)
-  return nodeFrame(context, <div className="mb-6 text-slate-700">{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary" data-cv-change={changed('summary')}>{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} change={changed('careerObjective')} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" change={changed('availability')} /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" change={changed('location')} /></p>}{fallbackContact}</div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<p data-cv-field="summary" data-cv-change={changed('summary')}>{intro.summary}</p>{intro.careerObjective && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} change={changed('careerObjective')} /></p>}{fallbackAvailability && <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" change={changed('availability')} /></p>}{fallbackLocation && <p><RegisteredValue fieldKey="location" value={intro.location} label="Location" change={changed('location')} /></p>}{fallbackContact}</section>)
+  return nodeFrame(context, <div className="mb-6 text-slate-700">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<p data-cv-field="summary" data-cv-change={changed('summary')}>{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} change={changed('careerObjective')} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" change={changed('availability')} /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" change={changed('location')} /></p>}{fallbackContact}</div>)
 }
 
 function renderExperience(context: RenderContext) {
@@ -245,8 +222,8 @@ function renderExperience(context: RenderContext) {
       <RegisteredHighlights itemId={item.id} values={item.highlights} changes={context.changes} changePath={`experience.${item.id}.highlights`} />
     </div>
   })
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'KINH NGHIỆM')}<div>{entries}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.experience!)}<div className="space-y-4">{entries}</div></div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div>{entries}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div className="space-y-4">{entries}</div></div>)
 }
 
 function renderProjects(context: RenderContext) {
@@ -268,8 +245,8 @@ function renderProjects(context: RenderContext) {
       <RegisteredHighlights itemId={item.id} values={item.highlights} changes={context.changes} changePath={`projects.${item.id}.highlights`} />
     </div>
   })
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'DỰ ÁN')}<div>{entries}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.projects!)}<div className="space-y-3">{entries}</div></div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div>{entries}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div className="space-y-3">{entries}</div></div>)
 }
 
 function renderEducation(context: RenderContext) {
@@ -289,8 +266,8 @@ function renderEducation(context: RenderContext) {
       <RegisteredHighlights itemId={item.id} values={item.highlights ?? []} changes={context.changes} changePath={`education.${item.id}.highlights`} />
     </div>
   })
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'HỌC VẤN')}<div>{entries}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.education!)}<div className="space-y-2">{entries}</div></div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div>{entries}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div className="space-y-2">{entries}</div></div>)
 }
 
 function renderSkills(context: RenderContext) {
@@ -298,8 +275,8 @@ function renderSkills(context: RenderContext) {
   if (!cv.sections.skills.length) return null
   const groups = orderedItems(cv.sections.skills, 'itemOrder' in node ? node.itemOrder : undefined)
   const skillsChange = (group: { id: string }) => changeAt(context, 'skills', group.id)('skills')
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'KỸ NĂNG')}<div>{groups.map((group) => <p key={group.id} {...interactiveProps(context, group.id)}><strong><RegisteredValue fieldKey="category" value={group.category} change={changeAt(context, 'skills', group.id)('category')} />: </strong><span className="cv-skills"><span data-cv-field="skills" data-print-style="tags" data-cv-change={skillsChange(group)}>{group.skills.join(', ')}</span></span></p>)}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.skills!)}<div className="space-y-1.5 text-slate-800">{groups.map((group) => <div key={group.id} className="flex" {...interactiveProps(context, group.id)}><span className="font-bold w-40 shrink-0 text-slate-900"><RegisteredValue fieldKey="category" value={group.category} change={changeAt(context, 'skills', group.id)('category')} />:</span><span className="text-slate-700"><span data-cv-field="skills" data-print-style="tags" data-cv-change={skillsChange(group)}>{group.skills.join(', ')}</span></span></div>)}</div></div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div>{groups.map((group) => <p key={group.id} {...interactiveProps(context, group.id)}><strong><RegisteredValue fieldKey="category" value={group.category} change={changeAt(context, 'skills', group.id)('category')} />: </strong><span className="cv-skills"><span data-cv-field="skills" data-print-style="tags" data-cv-change={skillsChange(group)}>{group.skills.join(', ')}</span></span></p>)}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div className="space-y-1.5 text-slate-800">{groups.map((group) => <div key={group.id} className="flex" {...interactiveProps(context, group.id)}><span className="font-bold w-40 shrink-0 text-slate-900"><RegisteredValue fieldKey="category" value={group.category} change={changeAt(context, 'skills', group.id)('category')} />:</span><span className="text-slate-700"><span data-cv-field="skills" data-print-style="tags" data-cv-change={skillsChange(group)}>{group.skills.join(', ')}</span></span></div>)}</div></div>)
 }
 
 function renderActivities(context: RenderContext) {
@@ -317,8 +294,8 @@ function renderActivities(context: RenderContext) {
       <RegisteredHighlights itemId={item.id} values={item.highlights} changes={context.changes} changePath={`activities.${item.id}.highlights`} />
     </div>
   })
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'HOẠT ĐỘNG')}<div>{entries}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.activities!)}<div className="space-y-2">{entries}</div></div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div>{entries}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div className="space-y-2">{entries}</div></div>)
 }
 
 function renderCertifications(context: RenderContext) {
@@ -335,16 +312,16 @@ function renderCertifications(context: RenderContext) {
       {item.link && <RegisteredValue fieldKey="link" value={item.link} change={changed('link')} />}
     </div>
   })
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'CHỨNG CHỈ')}<div>{entries}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.certifications!)}<div className="space-y-1 text-slate-700">{entries}</div></div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div>{entries}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div className="space-y-1 text-slate-700">{entries}</div></div>)
 }
 
 function renderLanguages(context: RenderContext) {
   const { cv, node, variant } = context
   if (!cv.sections.languages.length) return null
   const languages = orderedItems(cv.sections.languages, 'itemOrder' in node ? node.itemOrder : undefined)
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'NGOẠI NGỮ')}<div className="cv-skills">{languages.map((item) => <span className="cv-skill" key={item.id} {...interactiveProps(context, item.id)}><RegisteredValue fieldKey="language" value={item.language} change={changeAt(context, 'languages', item.id)('language')} /> — <RegisteredValue fieldKey="proficiency" value={item.proficiency} change={changeAt(context, 'languages', item.id)('proficiency')} /></span>)}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.languages!)}<ul className="text-slate-700 space-y-1">{languages.map((item) => <li key={item.id} className="flex justify-between" {...interactiveProps(context, item.id)}><span className="font-bold text-slate-900"><RegisteredValue fieldKey="language" value={item.language} change={changeAt(context, 'languages', item.id)('language')} />:</span><span className="text-slate-600"><RegisteredValue fieldKey="proficiency" value={item.proficiency} change={changeAt(context, 'languages', item.id)('proficiency')} /></span></li>)}</ul></div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<div className="cv-skills">{languages.map((item) => <span className="cv-skill" key={item.id} {...interactiveProps(context, item.id)}><RegisteredValue fieldKey="language" value={item.language} change={changeAt(context, 'languages', item.id)('language')} /> — <RegisteredValue fieldKey="proficiency" value={item.proficiency} change={changeAt(context, 'languages', item.id)('proficiency')} /></span>)}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitle(context.node.type, context.cv.language))}<ul className="text-slate-700 space-y-1">{languages.map((item) => <li key={item.id} className="flex justify-between" {...interactiveProps(context, item.id)}><span className="font-bold text-slate-900"><RegisteredValue fieldKey="language" value={item.language} change={changeAt(context, 'languages', item.id)('language')} />:</span><span className="text-slate-600"><RegisteredValue fieldKey="proficiency" value={item.proficiency} change={changeAt(context, 'languages', item.id)('proficiency')} /></span></li>)}</ul></div>)
 }
 
 function renderFooter(context: RenderContext) {

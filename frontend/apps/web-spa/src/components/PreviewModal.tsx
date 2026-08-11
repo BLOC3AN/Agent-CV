@@ -5,6 +5,7 @@ import { CVPageComposer } from './CVPageComposer';
 import { CVPrintSurface } from './CVPrintSurface';
 import { normalizeLayout } from '../lib/layout-draft';
 import { cvTypographyStyle } from '../lib/cv-typography';
+import { useLocale } from '../lib/i18n';
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   layout: providedLayout,
   onDownloadPDF,
 }) => {
+  const { t } = useLocale();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   if (!isOpen) return null;
@@ -32,7 +34,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
     try {
       await onDownloadPDF();
     } catch {
-      setExportError('Không thể chuẩn bị PDF. Bản nháp chưa được xuất.');
+      setExportError(t('previewExportFailed'));
     } finally {
       setExporting(false);
     }
@@ -42,13 +44,13 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Xem trước CV"
+      aria-label={t('previewTitle')}
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-between p-4 md:p-6 overflow-hidden"
     >
       {/* Top Modal Header */}
       <div className="w-full max-w-5xl bg-white rounded-2xl p-4 flex items-center justify-between shadow-lg shrink-0">
         <h3 className="font-bold text-gray-900 text-base">
-          Xem trước CV A4 — {cv.sections.intro.fullName || cv.title}
+          {t('previewTitle')} — {cv.sections.intro.fullName || cv.title}
         </h3>
 
         <div className="flex items-center space-x-3">
@@ -57,7 +59,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
             className="px-3.5 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition flex items-center space-x-1.5"
           >
             <Printer className="w-4 h-4" />
-            <span>In / Print</span>
+            <span>{t('print')}</span>
           </button>
 
           <button
@@ -66,12 +68,12 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
             className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition flex items-center space-x-1.5 shadow-xs"
           >
             <Download className="w-4 h-4" />
-            <span>{exporting ? 'Đang chuẩn bị PDF…' : 'Tải PDF'}</span>
+            <span>{exporting ? t('preparingPDF') : t('download')}</span>
           </button>
 
           <button
             onClick={onClose}
-            aria-label="Đóng xem trước"
+            aria-label={t('previewClose')}
             className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
           >
             <X className="w-5 h-5" />

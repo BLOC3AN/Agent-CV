@@ -1,0 +1,114 @@
+/**
+ * Chữ tiếng Anh trên giao diện.
+ *
+ * Kiểu `Record<MessageKey, string>` lấy khoá từ `messages.vi.ts`, nên thiếu một
+ * khoá là lỗi biên dịch — không có cách nào để một chuỗi lặng lẽ rơi về tiếng
+ * Việt khi người dùng đang ở chế độ tiếng Anh.
+ */
+import type { MessageKey } from './messages.vi'
+
+export const en: Record<MessageKey, string> = {
+  home: 'Home',
+  cvs: 'My CVs',
+  analyze: 'Job matching',
+  settings: 'Settings',
+  templates: 'Templates',
+  preview: 'Preview',
+  share: 'Share',
+  download: 'Download PDF',
+  logout: 'Sign out',
+  locale: 'Interface language',
+
+  cvLanguage: 'CV language',
+  cvLanguageVi: 'Tiếng Việt',
+  cvLanguageEn: 'English',
+
+  statusDirty: 'Unsaved',
+  statusSaving: 'Saving…',
+  statusSaved: 'Saved',
+  statusSaveFailed: 'Save failed',
+  loadingCV: 'Loading CV…',
+  cvNotFound: 'CV not found',
+  invalidCVId: 'Invalid CV id',
+  retry: 'Try again',
+
+  save: 'Save changes',
+  discard: 'Discard changes',
+  cancel: 'Cancel',
+  close: 'Close',
+
+  unsavedTitle: 'Unsaved changes',
+  unsavedBody: 'Do you want to save this draft before leaving the editor?',
+  saveAndLeave: 'Save and leave',
+
+  downloadDialogTitle: 'This CV has unsaved changes',
+  downloadDialogBody: 'Choose which version to export. Only “Save and download” creates a revision.',
+  downloadDialogLabel: 'Export PDF with unsaved changes',
+  discardAndDownload: 'Discard and download',
+  saveAndDownload: 'Save and download',
+  downloadFailed: 'Could not download the PDF',
+
+  openAssistant: 'Open AI assistant',
+
+  previewTitle: 'A4 CV preview',
+  previewClose: 'Close preview',
+  print: 'Print',
+  preparingPDF: 'Preparing PDF…',
+  previewExportFailed: 'Could not prepare the PDF. The draft was not exported.',
+
+  cvLayout: 'CV layout',
+  draftUnsaved: 'Unsaved draft',
+  textAlign: 'Text alignment',
+  alignLeft: 'Left',
+  alignRight: 'Right',
+  alignJustify: 'Justified',
+  bodyFontSize: 'Body text size',
+  sectionTitleFontSize: 'Section title size',
+  headerFontSize: 'Header size',
+  lineHeight: 'Line height',
+  pageMargin: 'Page margin',
+  paddingTop: 'Padding top',
+  paddingBottom: 'Padding bottom',
+  paddingLeft: 'Padding left',
+  paddingRight: 'Padding right',
+  nonDefaultOrder: 'This order differs from the standard CV layout. The content still prints in the order you chose.',
+
+  cvStructure: 'CV structure',
+  collapse: 'Collapse',
+  expand: 'Expand',
+  hide: 'Hide',
+  show: 'Show',
+  drag: 'Drag',
+  endOfList: 'end of list',
+  dropToEnd: 'Drop to move this block to the end',
+
+  edit: 'Edit',
+  updateDraft: 'Update draft',
+  closeInlineEditor: 'Close inline editor',
+  commaSeparatedHint: 'Separate tags with commas.',
+
+  versionHistory: 'Version history',
+  versionHistoryHint: 'Review changes or restore a saved version.',
+  versionPickHint: 'Pick a version to preview its changes.',
+  noSavedVersions: 'No saved versions yet.',
+  loadingHistory: 'Loading version history…',
+  loadingPreview: 'Loading preview…',
+  loadingShort: 'Loading…',
+  restoring: 'Restoring…',
+  restore: 'Restore',
+  restoreConfirmLabel: 'Confirm version restore',
+  restoreConfirmBody: 'This creates a new version and keeps the existing history.',
+  createRestoreRevision: 'Create restore version',
+  restoreBlockedByDraft: 'Save or discard the draft changes before restoring a version.',
+  beforeChange: 'Before',
+  afterChange: 'After',
+  noPreviousRevision: 'There is no earlier version to compare with.',
+  noContentChange: 'No content changed compared with the previous version.',
+  historyLoadFailed: 'Could not load the version history',
+  previewLoadFailed: 'Could not load the preview',
+  restoreFailed: 'Could not restore this version',
+  changeAdded: 'Added',
+  changeEdited: 'Edited',
+  changeRemoved: 'Removed',
+  sourceUser: 'User',
+}

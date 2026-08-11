@@ -25,7 +25,7 @@ import { SettingsRoute } from './SettingsRoute';
 import { GuidedRoute } from './GuidedRoute';
 import { KBRoute } from './KBRoute';
 import { RequireAuth, SessionProvider } from '../lib/session';
-import { LocaleProvider } from '../lib/i18n';
+import { BuilderLocaleProvider, LocaleProvider } from '../lib/i18n';
 
 /**
  * Bản đồ URL — một chỗ duy nhất.
@@ -124,9 +124,15 @@ export const appRoutes: RouteObject[] = [
         children: protectedChildren,
       },
       {
+        // `BuilderLocaleProvider` phải bọc CẢ `AppLayout` chứ không nằm trong
+        // `BuilderRoute`: bộ chọn ngôn ngữ sống trong `Header` do `AppLayout`
+        // dựng, tức là TRÊN route con. Bọc ở đây là cách duy nhất để Header và
+        // BuilderRoute cùng nhìn thấy một context.
         element: (
           <RequireAuth>
-            <AppLayout hideSidebar />
+            <BuilderLocaleProvider>
+              <AppLayout hideSidebar />
+            </BuilderLocaleProvider>
           </RequireAuth>
         ),
         children: builderChildren,

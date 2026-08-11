@@ -11,6 +11,7 @@ import { InlineCVEditor } from './InlineCVEditor';
 import { cvTypographyStyle, resolveCVTypography } from '../lib/cv-typography';
 import { lineHeightForSpacing } from '../lib/a4-settings';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
+import { useLocale } from '../lib/i18n';
 
 interface CVEditorViewProps {
   cv: CV;
@@ -42,6 +43,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   onRestoreVersion,
 }) => {
   // Navigation & Edit state
+  const { t } = useLocale();
   const [activeTab, setActiveTab] = useState<'SECTIONS' | 'DESIGN'>('SECTIONS');
   const [inlineTarget, setInlineTarget] = useState<InlineTarget | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
@@ -154,7 +156,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
           </button>
         </div>
 
-        {dirty && <p role="status" className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">Bản nháp chưa lưu</p>}
+        {dirty && <p role="status" className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">{t('draftUnsaved')}</p>}
 
         {(onSave || onDiscard) && (
           <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
@@ -175,7 +177,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 disabled={!dirty || saving}
                 className="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {saving ? 'Đang lưu…' : 'Lưu thay đổi'}
+                {saving ? t('statusSaving') : t('save')}
               </button>
             )}
             {cvId && onRestoreVersion && (
@@ -198,7 +200,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
             <div className="space-y-4">
               <section aria-label="Bố cục CV" className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Bố cục CV</h3>
+                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">{t('cvLayout')}</h3>
                   <button
                     type="button"
                     onClick={() => updateLayout(resetDefaultLayout(layout))}
@@ -208,7 +210,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                     Đặt lại mặc định
                   </button>
                 </div>
-                {!hasDefaultNodeOrder(layout) && <p className="rounded-md bg-amber-50 px-2 py-1 text-[10px] leading-relaxed text-amber-700">Thứ tự này khác bố cục CV tiêu chuẩn. Nội dung vẫn được in theo đúng thứ tự đang chọn.</p>}
+                {!hasDefaultNodeOrder(layout) && <p className="rounded-md bg-amber-50 px-2 py-1 text-[10px] leading-relaxed text-amber-700">{t('nonDefaultOrder')}</p>}
                 <ComponentTree
                   cv={cv}
                   layout={layout}
@@ -306,9 +308,9 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               </div>
 
               {([
-                ['bodyFontSize', 'Cỡ chữ nội dung', 9, 14],
-                ['sectionTitleFontSize', 'Cỡ tiêu đề section', 10, 16],
-                ['headerFontSize', 'Cỡ header', 16, 28],
+                ['bodyFontSize', t('bodyFontSize'), 9, 14],
+                ['sectionTitleFontSize', t('sectionTitleFontSize'), 10, 16],
+                ['headerFontSize', t('headerFontSize'), 16, 28],
               ] as const).map(([field, label, min, max]) => {
                 const value = field === 'bodyFontSize' ? typography.bodyFontSize : field === 'sectionTitleFontSize' ? typography.sectionTitleFontSize : typography.headerFontSize
                 return <div className="space-y-2" key={field}>
@@ -323,7 +325,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               {/* Spacing Slider */}
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-semibold text-slate-700">
-                  <span>Khoảng cách dòng</span>
+                  <span>{t('lineHeight')}</span>
                   <span className="text-indigo-600 font-bold capitalize">
                     {cv.design.spacing}
                   </span>
@@ -346,12 +348,12 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
               </div>
 
               <div className="space-y-3 border-t border-slate-200 pt-3">
-                <div className="font-semibold uppercase tracking-wider text-[11px] text-slate-700">Khoảng cách trang</div>
+                <div className="font-semibold uppercase tracking-wider text-[11px] text-slate-700">{t('pageMargin')}</div>
                 {([
-                  ['paddingTop', 'Padding trên'],
-                  ['paddingBottom', 'Padding dưới'],
-                  ['paddingLeft', 'Padding trái'],
-                  ['paddingRight', 'Padding phải'],
+                  ['paddingTop', t('paddingTop')],
+                  ['paddingBottom', t('paddingBottom')],
+                  ['paddingLeft', t('paddingLeft')],
+                  ['paddingRight', t('paddingRight')],
                   ['pageMargin', 'Margin trang'],
                 ] as const).map(([field, label]) => {
                   const value = typography[field]
@@ -372,11 +374,11 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                   <input id="cv-lineHeight" aria-label="Line-height" type="range" min="1" max="2" step="0.05" value={typography.lineHeight} onChange={(e) => updateDesign('lineHeight', parseFloat(e.target.value))} className="w-full accent-indigo-600 cursor-pointer" />
                 </div>
                 <div className="space-y-1">
-                  <label htmlFor="cv-textAlign" className="block text-xs font-semibold text-slate-700">Căn lề nội dung</label>
+                  <label htmlFor="cv-textAlign" className="block text-xs font-semibold text-slate-700">{t('textAlign')}</label>
                   <select id="cv-textAlign" aria-label="Căn lề nội dung" value={typography.textAlign} onChange={(e) => updateDesign('textAlign', e.target.value as CVDesign['textAlign'])} className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none">
-                    <option value="left">Căn trái</option>
-                    <option value="right">Căn phải</option>
-                    <option value="justify">Căn đều hai bên</option>
+                    <option value="left">{t('alignLeft')}</option>
+                    <option value="right">{t('alignRight')}</option>
+                    <option value="justify">{t('alignJustify')}</option>
                   </select>
                 </div>
               </div>

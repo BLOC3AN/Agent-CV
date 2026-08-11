@@ -6,6 +6,7 @@ import type { CVRevisionSnapshot, CVRevisionSummary } from '../lib/api'
 import { countCVChanges, diffCVSnapshots } from '../lib/cv-diff'
 import type { CVChangeMap } from '../lib/cv-diff'
 import type { CV, CVLayout } from '../types'
+import { useLocale, type MessageKey } from '../lib/i18n'
 import { CVBlockRenderer } from './CVBlockRenderer'
 
 interface VersionHistoryPanelProps {
@@ -24,10 +25,10 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
   )).filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true')
 }
 
-function sourceLabel(source: CVRevisionSummary['source']): string {
+function sourceLabel(source: CVRevisionSummary['source'], t: (key: MessageKey) => string): string {
   if (source === 'ai') return 'AI'
-  if (source === 'restore') return 'Khôi phục'
-  return 'Người dùng'
+  if (source === 'restore') return t('restore')
+  return t('sourceUser')
 }
 
 function formatRevisionTime(createdAt: string): string {
@@ -46,7 +47,7 @@ function SnapshotPreview({ title, snapshot, changes }: { title: string; snapshot
         <div className="max-h-96 overflow-auto rounded-lg bg-white px-5 py-6 shadow-sm">
           <CVBlockRenderer cv={snapshot.profileSnapshot as CV} layout={snapshot.layout as CVLayout} variant="preview" changes={changes} />
         </div>
-      ) : <p className="text-xs text-slate-500">Không có bản trước đó cho phiên bản này.</p>}
+      ) : <p className="text-xs text-slate-500">{t('noPreviousRevision')}</p>}
     </section>
   )
 }
@@ -57,12 +58,13 @@ function SnapshotPreview({ title, snapshot, changes }: { title: string; snapshot
  * is readable without guessing at the colours.
  */
 function ChangeLegend({ changes }: { changes: CVChangeMap }) {
+  const { t } = useLocale()
   const totals = countCVChanges(changes)
-  if (!totals.total) return <p role="status" className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">Không có thay đổi nội dung so với bản trước đó.</p>
+  if (!totals.total) return <p role="status" className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">{t('noContentChange')}</p>
   const marks: Array<[string, string, number]> = [
-    ['Đã sửa', 'bg-amber-200', totals.changed],
-    ['Thêm mới', 'bg-green-200', totals.added],
-    ['Đã xóa', 'bg-red-200', totals.removed],
+    [t('changeEdited'), 'bg-amber-200', totals.changed],
+    [t('changeAdded'), 'bg-green-200', totals.added],
+    [t('changeRemoved'), 'bg-red-200', totals.removed],
   ]
   return (
     <div role="status" className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
@@ -78,6 +80,7 @@ function ChangeLegend({ changes }: { changes: CVChangeMap }) {
 }
 
 export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFocusRef }: VersionHistoryPanelProps) {
+  const { t } = useLocale()
   const [revisions, setRevisions] = useState<CVRevisionSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
@@ -144,7 +147,7 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
     void listCVRevisions(cvId)
       .then((items) => { if (active) setRevisions(items) })
       .catch((cause: unknown) => {
-        if (active) setError(cause instanceof ApiError ? cause.message : 'Không tải được lịch sử phiên bản')
+        if (active) setError(cause instanceof ApiError ? cause.message : t('historyLoadFailed'))
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -160,7 +163,7 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
       const nextPreview = await getCVRevision(cvId, revisionId)
       if (generation === previewGenerationRef.current) setPreview(nextPreview)
     } catch (cause) {
-      if (generation === previewGenerationRef.current) setError(cause instanceof ApiError ? cause.message : 'Không tải được bản xem trước')
+      if (generation === previewGenerationRef.current) setError(cause instanceof ApiError ? cause.message : t('previewLoadFailed'))
     } finally {
       if (generation === previewGenerationRef.current) setPreviewingId(undefined)
     }
@@ -189,7 +192,7 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
       closeHistory()
     } catch (cause) {
       setRestoreTarget(undefined)
-      setError(cause instanceof ApiError ? cause.message : 'Không thể khôi phục phiên bản')
+      setError(cause instanceof ApiError ? cause.message : t('restoreFailed'))
     } finally {
       setRestoring(false)
     }
@@ -203,32 +206,32 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
   const panel = (
     <>
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">
-      <section ref={historyDialogRef} role="dialog" aria-modal="true" aria-hidden={restoreTarget ? 'true' : undefined} aria-label="Lịch sử phiên bản" className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <section ref={historyDialogRef} role="dialog" aria-modal="true" aria-hidden={restoreTarget ? 'true' : undefined} aria-label={t('versionHistory')} className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Lịch sử phiên bản</h2>
-            <p className="mt-1 text-xs text-slate-500">Xem lại thay đổi hoặc khôi phục một phiên bản đã lưu.</p>
+            <h2 className="text-base font-bold text-slate-900">{t('versionHistory')}</h2>
+            <p className="mt-1 text-xs text-slate-500">{t('versionHistoryHint')}</p>
           </div>
-          <button ref={historyCloseRef} type="button" onClick={closeHistory} className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Đóng</button>
+          <button ref={historyCloseRef} type="button" onClick={closeHistory} className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">{t('close')}</button>
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-slate-200 overflow-auto md:grid-cols-[20rem_minmax(0,1fr)] md:divide-x md:divide-y-0">
           <div className="space-y-3 p-4">
-            {dirty && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Hãy lưu hoặc bỏ thay đổi trong bản nháp trước khi khôi phục phiên bản.</p>}
-            {loading && <p className="text-sm text-slate-500">Đang tải lịch sử phiên bản…</p>}
-            {!loading && !error && revisions.length === 0 && <p className="text-sm text-slate-500">Chưa có phiên bản đã lưu.</p>}
+            {dirty && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{t('restoreBlockedByDraft')}</p>}
+            {loading && <p className="text-sm text-slate-500">{t('loadingHistory')}</p>}
+            {!loading && !error && revisions.length === 0 && <p className="text-sm text-slate-500">{t('noSavedVersions')}</p>}
             {revisions.map((revision) => (
               <article key={revision.id} className="rounded-xl border border-slate-200 bg-white p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">Phiên bản {revision.number}</h3>
-                    <p className="mt-1 text-xs font-medium text-indigo-700">{sourceLabel(revision.source)}</p>
+                    <p className="mt-1 text-xs font-medium text-indigo-700">{sourceLabel(revision.source, t)}</p>
                     <p className="mt-1 text-xs text-slate-500">{formatRevisionTime(revision.createdAt)}</p>
                     {revision.message && <p className="mt-2 text-xs text-slate-700">{revision.message}</p>}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" aria-pressed={selectedRevisionId === revision.id} onClick={() => void openPreview(revision.id)} disabled={previewingId === revision.id || restoring} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                    {previewingId === revision.id ? 'Đang tải…' : `Xem trước phiên bản ${revision.number}`}
+                    {previewingId === revision.id ? t('loadingShort') : `Xem trước phiên bản ${revision.number}`}
                   </button>
                   <button type="button" onClick={(event) => requestRestore(revision, event.currentTarget)} disabled={restoring || dirty} className="rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">
                     Khôi phục phiên bản {revision.number}
@@ -239,28 +242,28 @@ export function VersionHistoryPanel({ cvId, dirty, onClose, onRestore, returnFoc
           </div>
           <div className="min-h-72 p-4">
             {error && <p role="alert" className="mb-4 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
-            {previewingId && <p className="text-sm text-slate-500">Đang tải bản xem trước…</p>}
+            {previewingId && <p className="text-sm text-slate-500">{t('loadingPreview')}</p>}
             {!previewingId && preview ? (
               <>
                 <ChangeLegend changes={changes} />
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <SnapshotPreview title="Trước khi thay đổi" snapshot={preview.before} changes={changes} />
-                  <SnapshotPreview title="Sau thay đổi" snapshot={preview.revision} changes={changes} />
+                  <SnapshotPreview title={t('beforeChange')} snapshot={preview.before} changes={changes} />
+                  <SnapshotPreview title={t('afterChange')} snapshot={preview.revision} changes={changes} />
                 </div>
               </>
-            ) : !previewingId && !error && !loading && <p className="text-sm text-slate-500">Chọn một phiên bản để xem trước thay đổi.</p>}
+            ) : !previewingId && !error && !loading && <p className="text-sm text-slate-500">{t('versionPickHint')}</p>}
           </div>
         </div>
       </section>
       </div>
       {restoreTarget && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/35 p-4">
-          <section ref={confirmationDialogRef} role="dialog" aria-modal="true" aria-label="Xác nhận khôi phục phiên bản" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <section ref={confirmationDialogRef} role="dialog" aria-modal="true" aria-label={t('restoreConfirmLabel')} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <h2 className="text-base font-bold text-slate-900">Khôi phục phiên bản {restoreTarget.number}?</h2>
-            <p className="mt-2 text-sm text-slate-600">Thao tác này tạo một phiên bản mới và giữ lại lịch sử hiện có.</p>
+            <p className="mt-2 text-sm text-slate-600">{t('restoreConfirmBody')}</p>
             <div className="mt-5 flex justify-end gap-2">
-              <button ref={confirmationCancelRef} type="button" onClick={closeConfirmation} disabled={restoring} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Hủy</button>
-              <button type="button" onClick={() => void restore()} disabled={restoring} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{restoring ? 'Đang khôi phục…' : 'Tạo phiên bản khôi phục'}</button>
+              <button ref={confirmationCancelRef} type="button" onClick={closeConfirmation} disabled={restoring} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50">{t('cancel')}</button>
+              <button type="button" onClick={() => void restore()} disabled={restoring} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{restoring ? t('restoring') : t('createRestoreRevision')}</button>
             </div>
           </section>
         </div>

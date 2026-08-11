@@ -75,6 +75,8 @@ async function pdfText(body: ArrayBuffer): Promise<string> {
   return stdout
 }
 
+const englishCV = { ...cv, id: 'cv-pdf-en', language: 'en' as const }
+
 describe('GET /print/:cvId/pdf', () => {
   it('trả về file PDF thật kèm tên file để trình duyệt lưu xuống máy', async () => {
     const base = await startStack()
@@ -114,6 +116,36 @@ describe('GET /print/:cvId/pdf', () => {
     const { stdout } = await run('pdfinfo', [file])
 
     expect(stdout).toMatch(/Page size:\s+\d+(?:\.\d+)? x \d+(?:\.\d+)? pts \(A4\)/)
+  }, 120_000)
+
+  /* Ngôn ngữ nằm trong CV, nên file tải về phải mang tiêu đề đúng ngôn ngữ đó. */
+  it('in tiêu đề mục theo ngôn ngữ của CV', async () => {
+    const base = await startStack()
+
+    const text = await pdfText(await (await fetch(`${base}/print/${cv.id}/pdf`)).arrayBuffer())
+
+    expect(text).toContain('KINH NGHIỆM LÀM VIỆC')
+  }, 120_000)
+
+  it('CV tiếng Anh cho PDF tiêu đề tiếng Anh', async () => {
+    const backend = http.createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ cv: { ...envelope, id: englishCV.id, profileSnapshot: englishCV } }))
+    })
+    await new Promise<void>((done) => backend.listen(0, '127.0.0.1', done))
+    const app = await createApp({ backendURL: `http://127.0.0.1:${(backend.address() as AddressInfo).port}`, serveApp: false })
+    const server = http.createServer(app)
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+    closers.push(async () => {
+      await new Promise<void>((done) => server.close(() => done()))
+      await new Promise<void>((done) => backend.close(() => done()))
+    })
+
+    const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/print/${englishCV.id}/pdf`)
+    const text = await pdfText(await response.arrayBuffer())
+
+    expect(text).toContain('WORK EXPERIENCE')
+    expect(text).not.toContain('KINH NGHIỆM')
   }, 120_000)
 
   it('chuyển tiếp lỗi của backend thay vì trả PDF rỗng', async () => {

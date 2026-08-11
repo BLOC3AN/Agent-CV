@@ -49,9 +49,6 @@ describe('kỹ năng hiển thị y như cũ sau khi đổi kiểu', () => {
       <CVEditorView
         cv={cv}
         onUpdateCV={noop}
-        onOpenPreview={noop}
-        onOpenShare={noop}
-        onDownloadPDF={noop}
       />,
     )
     for (const line of expected) expect(container.textContent).toContain(line)
@@ -78,9 +75,6 @@ describe('bullet dự án xuống dòng như PreviewModal', () => {
       <CVEditorView
         cv={cv}
         onUpdateCV={noop}
-        onOpenPreview={noop}
-        onOpenShare={noop}
-        onDownloadPDF={noop}
       />,
     )
     const renderedBullets = [...container.querySelectorAll('[data-cv-node="projects"] .cv-bullets li')].map(
