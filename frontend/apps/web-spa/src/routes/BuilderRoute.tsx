@@ -50,6 +50,12 @@ export function BuilderRoute() {
     openPrint()
   }, [openPrint, store.dirty])
 
+  useEffect(() => {
+    const onHeaderDownload = () => downloadPDF()
+    window.addEventListener('hr-agent:download-pdf', onHeaderDownload)
+    return () => window.removeEventListener('hr-agent:download-pdf', onHeaderDownload)
+  }, [downloadPDF])
+
   const saveAndDownload = async () => {
     await save()
     setDownloadDialogOpen(false)
@@ -136,7 +142,6 @@ export function BuilderRoute() {
         saving={store.status === 'saving'}
         onOpenPreview={() => navigate(`/builder/${cvId}/preview`)}
         onOpenShare={() => {}}
-        onDownloadPDF={downloadPDF}
         cvId={cvId}
         onRestoreVersion={restoreVersion}
       />

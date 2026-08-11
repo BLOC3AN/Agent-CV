@@ -24,7 +24,8 @@ interface CVEditorViewProps {
   saving?: boolean;
   onOpenPreview: () => void;
   onOpenShare: () => void;
-  onDownloadPDF: () => void | Promise<void>;
+  /** @deprecated PDF download is owned by the global editor header. */
+  onDownloadPDF?: () => void | Promise<void>;
   cvId?: string;
   onRestoreVersion?: (revisionId: string) => Promise<void>;
 }
@@ -69,7 +70,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   saving = false,
   onOpenPreview,
   onOpenShare,
-  onDownloadPDF,
   cvId,
   onRestoreVersion,
 }) => {
@@ -78,8 +78,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [inlineTarget, setInlineTarget] = useState<InlineTarget | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyInvokerRef = React.useRef<HTMLButtonElement>(null);
   const layout = normalizeLayout(providedLayout ?? cv.layout);
@@ -104,18 +102,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   };
 
   const updateLayout = (next: CVLayout) => onUpdateLayout?.(next);
-
-  const downloadPDF = async () => {
-    setExporting(true);
-    setExportError(null);
-    try {
-      await onDownloadPDF();
-    } catch {
-      setExportError('Không thể chuẩn bị PDF. Bản nháp chưa được xuất.');
-    } finally {
-      setExporting(false);
-    }
-  };
 
   // Toggle active sections in CV
   const toggleSectionActive = (sectionKey: keyof typeof cv.activeSections) => {
@@ -209,17 +195,8 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 Lịch sử phiên bản
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => void downloadPDF()}
-              disabled={exporting || saving}
-              className="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {exporting ? 'Đang chuẩn bị PDF…' : 'Tải PDF'}
-            </button>
           </div>
         )}
-        {exportError && <p role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-700">{exportError}</p>}
 
         {/* Tab Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">

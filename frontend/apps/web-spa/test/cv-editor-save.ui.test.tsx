@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { BuilderRoute } from '../src/routes/BuilderRoute'
+import { Header } from '../src/components/Header'
 import * as api from '../src/lib/api'
 import type { CV, CVLayout } from '../src/types'
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
@@ -29,7 +30,7 @@ afterEach(() => vi.restoreAllMocks())
 function renderBuilder() {
   vi.spyOn(api, 'getCV').mockResolvedValue(envelope())
   const router = createMemoryRouter([
-    { path: '/builder/:cvId', element: <BuilderRoute /> },
+    { path: '/builder/:cvId', element: <><Header /><BuilderRoute /></> },
     { path: '/elsewhere', element: <div>Elsewhere</div> },
   ], { initialEntries: ['/builder/cv-1'] })
   render(<RouterProvider router={router} />)
