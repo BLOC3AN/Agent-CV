@@ -31,6 +31,8 @@ export function getCVFieldDraftValue(draft: CV, node: LayoutNode, itemId: string
     if (key === 'careerObjective') return intro.careerObjective ?? ''
     if (key === 'availability') return intro.availability ?? ''
     if (key === 'location') return intro.location
+    if (key === 'website') return intro.website ?? ''
+    if (key === 'avatarUrl') return intro.avatarUrl ?? ''
   }
   if (node.type === 'experience') {
     const item = draft.sections.experience.find((candidate) => candidate.id === itemId)
@@ -52,6 +54,7 @@ export function getCVFieldDraftValue(draft: CV, node: LayoutNode, itemId: string
     if (key === 'teamSize') return item.teamSize ?? ''
     if (key === 'techStack') return item.techStack ?? []
     if (key === 'contribution') return item.contribution ?? ''
+    if (key === 'link') return item.link ?? ''
   }
   if (node.type === 'education') {
     const item = draft.sections.education.find((candidate) => candidate.id === itemId)
@@ -61,6 +64,35 @@ export function getCVFieldDraftValue(draft: CV, node: LayoutNode, itemId: string
     if (key === 'field') return item.fieldOfStudy
     if (key === 'gpa') return item.gpa ?? ''
     if (key === 'time') return { start: item.startDate, end: item.endDate }
+    if (key === 'highlights') return item.highlights.join('\n')
+  }
+  if (node.type === 'skills') {
+    const item = draft.sections.skills.find((candidate) => candidate.id === itemId)
+    if (!item) return ''
+    if (key === 'category') return item.category
+    if (key === 'skills') return item.skills
+  }
+  if (node.type === 'activities') {
+    const item = draft.sections.activities.find((candidate) => candidate.id === itemId)
+    if (!item) return ''
+    if (key === 'organization') return item.organization
+    if (key === 'role') return item.role
+    if (key === 'time') return { start: item.startDate, end: item.endDate }
+    if (key === 'highlights') return item.highlights.join('\n')
+  }
+  if (node.type === 'certifications') {
+    const item = draft.sections.certifications.find((candidate) => candidate.id === itemId)
+    if (!item) return ''
+    if (key === 'name') return item.name
+    if (key === 'issuer') return item.issuer
+    if (key === 'date') return item.date
+    if (key === 'link') return item.link ?? ''
+  }
+  if (node.type === 'languages') {
+    const item = draft.sections.languages.find((candidate) => candidate.id === itemId)
+    if (!item) return ''
+    if (key === 'language') return item.language
+    if (key === 'proficiency') return item.proficiency
   }
   return ''
 }
@@ -70,7 +102,7 @@ export function updateCVFieldDraft(draft: CV, node: LayoutNode, itemId: string |
   validateCVFieldPlacement(key, node.type)
   const text = typeof value === 'string' ? value : ''
   if (node.type === 'header' || node.type === 'summary') {
-    const field = key === 'fullName' ? 'fullName' : key === 'title' ? 'title' : key === 'email' ? 'email' : key === 'phone' ? 'phone' : key === 'summary' ? 'summary' : key === 'careerObjective' ? 'careerObjective' : key === 'availability' ? 'availability' : key === 'location' ? 'location' : undefined
+    const field = key === 'fullName' ? 'fullName' : key === 'title' ? 'title' : key === 'email' ? 'email' : key === 'phone' ? 'phone' : key === 'summary' ? 'summary' : key === 'careerObjective' ? 'careerObjective' : key === 'availability' ? 'availability' : key === 'location' ? 'location' : key === 'website' ? 'website' : key === 'avatarUrl' ? 'avatarUrl' : undefined
     if (!field) return draft
     return { ...draft, sections: { ...draft.sections, intro: { ...draft.sections.intro, [field]: text } } }
   }
@@ -95,6 +127,7 @@ export function updateCVFieldDraft(draft: CV, node: LayoutNode, itemId: string |
       if (key === 'teamSize') return { ...item, teamSize: text || undefined }
       if (key === 'techStack') return { ...item, techStack: Array.isArray(value) && value.length ? value : undefined }
       if (key === 'contribution') return { ...item, contribution: text || undefined }
+      if (key === 'link') return { ...item, link: text || undefined }
       return item
     })
     return projects ? { ...draft, sections: { ...draft.sections, projects } } : draft
@@ -106,9 +139,46 @@ export function updateCVFieldDraft(draft: CV, node: LayoutNode, itemId: string |
       if (key === 'field') return { ...item, fieldOfStudy: text }
       if (key === 'gpa') return { ...item, gpa: text || undefined }
       if (key === 'time' && typeof value !== 'string' && !Array.isArray(value)) return { ...item, startDate: value.start, endDate: value.end }
+      if (key === 'highlights') return { ...item, highlights: text.split('\n').map((line) => line.trim()).filter(Boolean) }
       return item
     })
     return education ? { ...draft, sections: { ...draft.sections, education } } : draft
+  }
+  if (node.type === 'skills') {
+    const skills = updateItem(draft.sections.skills, itemId, (item) => {
+      if (key === 'category') return { ...item, category: text }
+      if (key === 'skills') return { ...item, skills: Array.isArray(value) ? value : [] }
+      return item
+    })
+    return skills ? { ...draft, sections: { ...draft.sections, skills } } : draft
+  }
+  if (node.type === 'activities') {
+    const activities = updateItem(draft.sections.activities, itemId, (item) => {
+      if (key === 'organization') return { ...item, organization: text }
+      if (key === 'role') return { ...item, role: text }
+      if (key === 'time' && typeof value !== 'string' && !Array.isArray(value)) return { ...item, startDate: value.start, endDate: value.end }
+      if (key === 'highlights') return { ...item, highlights: text.split('\n').map((line) => line.trim()).filter(Boolean) }
+      return item
+    })
+    return activities ? { ...draft, sections: { ...draft.sections, activities } } : draft
+  }
+  if (node.type === 'certifications') {
+    const certifications = updateItem(draft.sections.certifications, itemId, (item) => {
+      if (key === 'name') return { ...item, name: text }
+      if (key === 'issuer') return { ...item, issuer: text }
+      if (key === 'date') return { ...item, date: text }
+      if (key === 'link') return { ...item, link: text || undefined }
+      return item
+    })
+    return certifications ? { ...draft, sections: { ...draft.sections, certifications } } : draft
+  }
+  if (node.type === 'languages') {
+    const languages = updateItem(draft.sections.languages, itemId, (item) => {
+      if (key === 'language') return { ...item, language: text }
+      if (key === 'proficiency') return { ...item, proficiency: text }
+      return item
+    })
+    return languages ? { ...draft, sections: { ...draft.sections, languages } } : draft
   }
   return draft
 }

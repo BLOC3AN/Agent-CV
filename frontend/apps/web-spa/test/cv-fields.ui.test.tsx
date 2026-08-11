@@ -97,6 +97,25 @@ describe('catalog-driven inline CV editing', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('edits the complete Intro data through the ComponentTree nodes', () => {
+    render(<DraftEditor />)
+
+    fireEvent.doubleClick(screen.getByTestId('cv-block-header'))
+    fireEvent.change(screen.getByLabelText('Website'), { target: { value: 'https://example.com' } })
+    fireEvent.change(screen.getByLabelText('Career objective'), { target: { value: 'Build useful products' } })
+    fireEvent.change(screen.getByLabelText('Availability'), { target: { value: 'Immediately' } })
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter', ctrlKey: true })
+
+    fireEvent.doubleClick(screen.getByTestId('cv-block-summary'))
+    fireEvent.change(screen.getByLabelText('Intro'), { target: { value: 'AI engineer focused on reliable systems.' } })
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter', ctrlKey: true })
+
+    expect(screen.getByTestId('cv-block-header')).toHaveTextContent('https://example.com')
+    expect(screen.getByTestId('cv-block-header')).toHaveTextContent('Immediately')
+    expect(screen.getByTestId('cv-block-summary')).toHaveTextContent('Build useful products')
+    expect(screen.getByTestId('cv-block-summary')).toHaveTextContent('AI engineer focused on reliable systems.')
+  })
+
   it('opens a nested tree item from Space and applies its Enter edit to the draft', () => {
     render(<DraftEditor />)
 
@@ -149,15 +168,11 @@ describe('catalog-driven inline CV editing', () => {
     render(<DraftEditor />)
 
     fireEvent.doubleClick(screen.getByTestId('cv-block-header'))
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm Career objective' }))
     fireEvent.change(screen.getByLabelText('Career objective'), { target: { value: 'Build reliable HR tools' } })
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter', ctrlKey: true })
     expect(screen.getByText('Build reliable HR tools')).toBeInTheDocument()
 
     openExperienceItem()
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm Team size' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm Time' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm Tech stack' }))
     fireEvent.change(screen.getByLabelText('Team size'), { target: { value: '6 engineers' } })
     fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '2025-01' } })
     fireEvent.change(screen.getByLabelText('End time'), { target: { value: '2026-01' } })
@@ -166,7 +181,6 @@ describe('catalog-driven inline CV editing', () => {
     expect(screen.getByTestId('cv-block-experience').querySelector('[data-cv-field="time"]')).toHaveTextContent('2025-01 – Present')
 
     openProjectItem()
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm Contribution' }))
     fireEvent.change(screen.getByLabelText('Contribution'), { target: { value: 'Led delivery across the product team.' } })
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter', ctrlKey: true })
     expect(screen.getByTestId('cv-block-projects')).toHaveTextContent('Contribution: Led delivery across the product team.')

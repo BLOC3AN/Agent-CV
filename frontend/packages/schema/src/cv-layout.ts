@@ -20,10 +20,12 @@ const nodeBase = {
   visible: z.boolean(),
 }
 
-const simpleNode = (type: Exclude<CVNodeType, 'experience' | 'projects' | 'education'>) =>
+type ItemNodeType = 'experience' | 'projects' | 'education' | 'skills' | 'activities' | 'certifications' | 'languages'
+
+const simpleNode = (type: Exclude<CVNodeType, ItemNodeType>) =>
   z.object({ ...nodeBase, type: z.literal(type) }).strict()
 
-const itemNode = (type: 'experience' | 'projects' | 'education') =>
+const itemNode = (type: ItemNodeType) =>
   z.object({ ...nodeBase, type: z.literal(type), itemOrder: z.array(nonEmptyID).optional() }).strict()
 
 export const LayoutNodeSchema = z.discriminatedUnion('type', [
@@ -32,10 +34,10 @@ export const LayoutNodeSchema = z.discriminatedUnion('type', [
   itemNode('experience'),
   itemNode('projects'),
   itemNode('education'),
-  simpleNode('skills'),
-  simpleNode('activities'),
-  simpleNode('certifications'),
-  simpleNode('languages'),
+  itemNode('skills'),
+  itemNode('activities'),
+  itemNode('certifications'),
+  itemNode('languages'),
   simpleNode('footer'),
 ])
 
@@ -86,14 +88,17 @@ export const CV_FIELD_CATALOG: CVFieldDefinition[] = [
   { key: 'title', label: 'Title', valueType: 'text', allowedIn: ['header'], printStyle: 'inline' },
   { key: 'email', label: 'Email', valueType: 'text', allowedIn: ['header'], printStyle: 'inline' },
   { key: 'phone', label: 'Phone', valueType: 'text', allowedIn: ['header'], printStyle: 'inline' },
+  { key: 'website', label: 'Website', valueType: 'text', allowedIn: ['header', 'summary'], printStyle: 'inline' },
+  { key: 'avatarUrl', label: 'Avatar URL', valueType: 'text', allowedIn: ['header', 'summary'], printStyle: 'inline' },
   { key: 'summary', label: 'Intro', valueType: 'multiline', allowedIn: ['summary'], printStyle: 'block' },
-  { key: 'role', label: 'Role', valueType: 'text', allowedIn: ['experience', 'projects'], printStyle: 'inline' },
+  { key: 'role', label: 'Role', valueType: 'text', allowedIn: ['experience', 'projects', 'activities'], printStyle: 'inline' },
   { key: 'company', label: 'Company', valueType: 'text', allowedIn: ['experience'], printStyle: 'inline' },
-  { key: 'time', label: 'Time', valueType: 'date', allowedIn: ['experience', 'projects', 'education'], printStyle: 'date-range' },
+  { key: 'time', label: 'Time', valueType: 'date', allowedIn: ['experience', 'projects', 'education', 'activities'], printStyle: 'date-range' },
   { key: 'teamSize', label: 'Team size', valueType: 'text', allowedIn: ['experience', 'projects'], printStyle: 'inline' },
   { key: 'techStack', label: 'Tech stack', valueType: 'tag-list', allowedIn: ['experience', 'projects'], printStyle: 'tags' },
-  { key: 'highlights', label: 'Highlights', valueType: 'multiline', allowedIn: ['experience', 'projects'], printStyle: 'block' },
-  { key: 'name', label: 'Name', valueType: 'text', allowedIn: ['projects'], printStyle: 'inline' },
+  { key: 'highlights', label: 'Highlights', valueType: 'multiline', allowedIn: ['experience', 'projects', 'education', 'activities'], printStyle: 'block' },
+  { key: 'name', label: 'Name', valueType: 'text', allowedIn: ['projects', 'certifications'], printStyle: 'inline' },
+  { key: 'link', label: 'Link', valueType: 'text', allowedIn: ['projects', 'certifications'], printStyle: 'inline' },
   { key: 'contribution', label: 'Contribution', valueType: 'multiline', allowedIn: ['projects'], printStyle: 'block' },
   { key: 'careerObjective', label: 'Career objective', valueType: 'multiline', allowedIn: ['header', 'summary'], printStyle: 'block' },
   { key: 'availability', label: 'Availability', valueType: 'text', allowedIn: ['header', 'summary'], printStyle: 'inline' },
@@ -102,6 +107,13 @@ export const CV_FIELD_CATALOG: CVFieldDefinition[] = [
   { key: 'degree', label: 'Degree', valueType: 'text', allowedIn: ['education'], printStyle: 'inline' },
   { key: 'field', label: 'Field', valueType: 'text', allowedIn: ['education'], printStyle: 'inline' },
   { key: 'gpa', label: 'GPA', valueType: 'text', allowedIn: ['education'], printStyle: 'inline' },
+  { key: 'category', label: 'Category', valueType: 'text', allowedIn: ['skills'], printStyle: 'inline' },
+  { key: 'skills', label: 'Skills', valueType: 'tag-list', allowedIn: ['skills'], printStyle: 'tags' },
+  { key: 'organization', label: 'Organization', valueType: 'text', allowedIn: ['activities'], printStyle: 'inline' },
+  { key: 'date', label: 'Date', valueType: 'text', allowedIn: ['certifications'], printStyle: 'inline' },
+  { key: 'issuer', label: 'Issuer', valueType: 'text', allowedIn: ['certifications'], printStyle: 'inline' },
+  { key: 'language', label: 'Language', valueType: 'text', allowedIn: ['languages'], printStyle: 'inline' },
+  { key: 'proficiency', label: 'Proficiency', valueType: 'text', allowedIn: ['languages'], printStyle: 'inline' },
 ]
 
 const CV_FIELD_KEYS = CV_FIELD_CATALOG.map(({ key }) => key) as [string, ...string[]]

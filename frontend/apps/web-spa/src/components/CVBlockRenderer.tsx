@@ -180,7 +180,7 @@ function renderProjects(context: RenderContext) {
   const { cv, node, variant } = context
   const items = orderedItems(cv.sections.projects, 'itemOrder' in node ? node.itemOrder : undefined)
   if (!items.length) return null
-  const entries = items.map((item) => <div className="cv-entry space-y-1" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="name" value={item.name} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="role" value={item.role} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div>{item.link && <a href={item.link}>{item.link}</a>}<div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" /></div>{item.contribution && <p><RegisteredValue fieldKey="contribution" value={item.contribution} label="Contribution" /></p>}<RegisteredHighlights itemId={item.id} values={item.highlights} /></div>)
+  const entries = items.map((item) => <div className="cv-entry space-y-1" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="name" value={item.name} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="role" value={item.role} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div>{item.link && <RegisteredValue fieldKey="link" value={item.link} />}<div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" /></div>{item.contribution && <p><RegisteredValue fieldKey="contribution" value={item.contribution} label="Contribution" /></p>}<RegisteredHighlights itemId={item.id} values={item.highlights} /></div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'DỰ ÁN')}<div>{entries}</div></section>)
   return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.projects!)}<div className="space-y-3">{entries}</div></div>)
 }
@@ -189,39 +189,41 @@ function renderEducation(context: RenderContext) {
   const { cv, node, variant } = context
   const items = orderedItems(cv.sections.education, 'itemOrder' in node ? node.itemOrder : undefined)
   if (!items.length) return null
-  const entries = items.map((item) => <div className="cv-entry text-xs" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="school" value={item.school} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="degree" value={item.degree} />{item.fieldOfStudy && <> — <RegisteredValue fieldKey="field" value={item.fieldOfStudy} /></>}</span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div>{item.gpa && <p><RegisteredValue fieldKey="gpa" value={item.gpa} label="GPA" /></p>}<ul className="cv-bullets">{(item.highlights ?? []).map((text, index) => <li key={`${item.id}-${index}`}>{text}</li>)}</ul></div>)
+  const entries = items.map((item) => <div className="cv-entry text-xs" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="school" value={item.school} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="degree" value={item.degree} />{item.fieldOfStudy && <> — <RegisteredValue fieldKey="field" value={item.fieldOfStudy} /></>}</span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div>{item.gpa && <p><RegisteredValue fieldKey="gpa" value={item.gpa} label="GPA" /></p>}<RegisteredHighlights itemId={item.id} values={item.highlights ?? []} /></div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'HỌC VẤN')}<div>{entries}</div></section>)
   return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.education!)}<div className="space-y-2">{entries}</div></div>)
 }
 
 function renderSkills(context: RenderContext) {
-  const { cv, variant } = context
+  const { cv, node, variant } = context
   if (!cv.sections.skills.length) return null
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'KỸ NĂNG')}<div>{cv.sections.skills.map((group) => <p key={group.id}><strong>{group.category}: </strong><span className="cv-skills">{group.skills.map((skill) => <span className="cv-skill" key={`${group.id}-${skill}`}>{skill}</span>)}</span></p>)}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.skills!)}<div className="space-y-1.5 text-xs text-slate-800">{cv.sections.skills.map((group) => <div key={group.id} className="flex"><span className="font-bold w-40 shrink-0 text-slate-900">{group.category}:</span><span className="text-slate-700">{group.skills.join(', ')}</span></div>)}</div></div>)
+  const groups = orderedItems(cv.sections.skills, 'itemOrder' in node ? node.itemOrder : undefined)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'KỸ NĂNG')}<div>{groups.map((group) => <p key={group.id} {...interactiveProps(context, group.id)}><strong><RegisteredValue fieldKey="category" value={group.category} />: </strong><span className="cv-skills"><span data-cv-field="skills" data-print-style="tags">{group.skills.join(', ')}</span></span></p>)}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.skills!)}<div className="space-y-1.5 text-xs text-slate-800">{groups.map((group) => <div key={group.id} className="flex" {...interactiveProps(context, group.id)}><span className="font-bold w-40 shrink-0 text-slate-900"><RegisteredValue fieldKey="category" value={group.category} />:</span><span className="text-slate-700"><span data-cv-field="skills" data-print-style="tags">{group.skills.join(', ')}</span></span></div>)}</div></div>)
 }
 
 function renderActivities(context: RenderContext) {
-  const { cv, variant } = context
+  const { cv, node, variant } = context
   if (!cv.sections.activities.length) return null
-  const entries = cv.sections.activities.map((item) => <div className="cv-entry" key={item.id}><div className="cv-entry-head"><strong className="cv-entry-title">{item.organization}</strong><span className="cv-entry-org">{item.role}</span><span className="cv-entry-date">{[item.startDate, item.endDate].filter(Boolean).join(' – ')}</span></div><ul className="cv-bullets">{item.highlights.map((text, index) => <li key={`${item.id}-${index}`}>{text}</li>)}</ul></div>)
+  const entries = orderedItems(cv.sections.activities, 'itemOrder' in node ? node.itemOrder : undefined).map((item) => <div className="cv-entry" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="organization" value={item.organization} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="role" value={item.role} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div><RegisteredHighlights itemId={item.id} values={item.highlights} /></div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'HOẠT ĐỘNG')}<div>{entries}</div></section>)
   return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.activities!)}<div className="space-y-2">{entries}</div></div>)
 }
 
 function renderCertifications(context: RenderContext) {
-  const { cv, variant } = context
+  const { cv, node, variant } = context
   if (!cv.sections.certifications.length) return null
-  const entries = cv.sections.certifications.map((item) => <div className="cv-entry" key={item.id} {...interactiveProps(context, item.id)}><strong className="cv-entry-title">{item.name}</strong><span className="cv-entry-org">{item.issuer}</span><span className="cv-entry-date">{item.date}</span>{item.link && <a href={item.link}>{item.link}</a>}</div>)
+  const entries = orderedItems(cv.sections.certifications, 'itemOrder' in node ? node.itemOrder : undefined).map((item) => <div className="cv-entry" key={item.id} {...interactiveProps(context, item.id)}><strong className="cv-entry-title"><RegisteredValue fieldKey="name" value={item.name} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="issuer" value={item.issuer} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="date" value={item.date} /></span>{item.link && <RegisteredValue fieldKey="link" value={item.link} />}</div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'CHỨNG CHỈ')}<div>{entries}</div></section>)
   return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.certifications!)}<div className="space-y-1 text-xs text-slate-700">{entries}</div></div>)
 }
 
 function renderLanguages(context: RenderContext) {
-  const { cv, variant } = context
+  const { cv, node, variant } = context
   if (!cv.sections.languages.length) return null
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'NGOẠI NGỮ')}<div className="cv-skills">{cv.sections.languages.map((item) => <span className="cv-skill" key={item.id} {...interactiveProps(context, item.id)}>{item.language} — {item.proficiency}</span>)}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.languages!)}<ul className="text-xs text-slate-700 space-y-1">{cv.sections.languages.map((item) => <li key={item.id} className="flex justify-between" {...interactiveProps(context, item.id)}><span className="font-bold text-slate-900">{item.language}:</span><span className="text-slate-600">{item.proficiency}</span></li>)}</ul></div>)
+  const languages = orderedItems(cv.sections.languages, 'itemOrder' in node ? node.itemOrder : undefined)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'NGOẠI NGỮ')}<div className="cv-skills">{languages.map((item) => <span className="cv-skill" key={item.id} {...interactiveProps(context, item.id)}><RegisteredValue fieldKey="language" value={item.language} /> — <RegisteredValue fieldKey="proficiency" value={item.proficiency} /></span>)}</div></section>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.languages!)}<ul className="text-xs text-slate-700 space-y-1">{languages.map((item) => <li key={item.id} className="flex justify-between" {...interactiveProps(context, item.id)}><span className="font-bold text-slate-900"><RegisteredValue fieldKey="language" value={item.language} />:</span><span className="text-slate-600"><RegisteredValue fieldKey="proficiency" value={item.proficiency} /></span></li>)}</ul></div>)
 }
 
 function renderFooter(context: RenderContext) {

@@ -1,10 +1,10 @@
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 import type { CV, CVLayout, CVNodeType, LayoutNode } from '../types'
 
-type ItemOrderNode = LayoutNode & { type: 'experience' | 'projects' | 'education' }
+type ItemOrderNode = LayoutNode & { type: 'experience' | 'projects' | 'education' | 'skills' | 'activities' | 'certifications' | 'languages' }
 
 function isItemOrderNode(node: LayoutNode | undefined): node is ItemOrderNode {
-  return node?.type === 'experience' || node?.type === 'projects' || node?.type === 'education'
+  return node?.type === 'experience' || node?.type === 'projects' || node?.type === 'education' || node?.type === 'skills' || node?.type === 'activities' || node?.type === 'certifications' || node?.type === 'languages'
 }
 
 function cloneDefaultLayout(): CVLayout {

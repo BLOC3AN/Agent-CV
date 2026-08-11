@@ -123,7 +123,7 @@ func parseCVLayout(raw []byte, allowLegacyEmpty bool) (json.RawMessage, error) {
 		}
 		seen[node.Type] = true
 		if len(node.ItemOrder) > 0 {
-			if node.Type != "experience" && node.Type != "projects" && node.Type != "education" || string(node.ItemOrder) == "null" {
+			if !validCVItemOrderType(node.Type) || string(node.ItemOrder) == "null" {
 				return nil, errCVLayoutInvalid
 			}
 			var itemOrder []string
@@ -166,6 +166,15 @@ func parseCVLayout(raw []byte, allowLegacyEmpty bool) (json.RawMessage, error) {
 		return nil, errCVLayoutInvalid
 	}
 	return normalized, nil
+}
+
+func validCVItemOrderType(kind string) bool {
+	switch kind {
+	case "experience", "projects", "education", "skills", "activities", "certifications", "languages":
+		return true
+	default:
+		return false
+	}
 }
 
 func canonicalCVNodeIndex(kind string) int {
@@ -252,7 +261,7 @@ func normalizeCVItemOrders(raw json.RawMessage, sections map[string]any) (json.R
 	}
 	for index := range layout.Nodes {
 		node := &layout.Nodes[index]
-		if node.Type != "experience" && node.Type != "projects" && node.Type != "education" {
+		if !validCVItemOrderType(node.Type) {
 			continue
 		}
 		values, _ := sections[node.Type].([]any)

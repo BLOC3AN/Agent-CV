@@ -64,6 +64,10 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
     if (nodeId === 'experience') return cv.sections.experience.map((item) => item.id);
     if (nodeId === 'projects') return cv.sections.projects.map((item) => item.id);
     if (nodeId === 'education') return cv.sections.education.map((item) => item.id);
+    if (nodeId === 'skills') return cv.sections.skills.map((item) => item.id);
+    if (nodeId === 'activities') return cv.sections.activities.map((item) => item.id);
+    if (nodeId === 'certifications') return cv.sections.certifications.map((item) => item.id);
+    if (nodeId === 'languages') return cv.sections.languages.map((item) => item.id);
     return [];
   };
 

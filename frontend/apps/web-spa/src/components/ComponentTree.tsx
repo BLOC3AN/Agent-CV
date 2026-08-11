@@ -24,6 +24,10 @@ function nestedItems(cv: CV, node: LayoutNode): Array<{ id: string; label: strin
   if (node.type === 'experience') return cv.sections.experience.map((item) => ({ id: item.id, label: `${item.title} — ${item.company}` }))
   if (node.type === 'projects') return cv.sections.projects.map((item) => ({ id: item.id, label: item.name }))
   if (node.type === 'education') return cv.sections.education.map((item) => ({ id: item.id, label: item.school }))
+  if (node.type === 'skills') return cv.sections.skills.map((item) => ({ id: item.id, label: item.category }))
+  if (node.type === 'activities') return cv.sections.activities.map((item) => ({ id: item.id, label: `${item.organization} — ${item.role}` }))
+  if (node.type === 'certifications') return cv.sections.certifications.map((item) => ({ id: item.id, label: item.name }))
+  if (node.type === 'languages') return cv.sections.languages.map((item) => ({ id: item.id, label: `${item.language} — ${item.proficiency}` }))
   return []
 }
 

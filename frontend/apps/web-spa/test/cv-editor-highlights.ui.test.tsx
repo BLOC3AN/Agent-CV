@@ -18,7 +18,6 @@ function renderEditorWithExperienceOpen(onUpdateCV: (cv: CV) => void = noop) {
   )
   fireEvent.click(screen.getByRole('button', { name: 'Mở rộng Kinh nghiệm làm việc' }))
   fireEvent.doubleClick(screen.getByRole('treeitem', { name: 'AI Engineer — IMESPRO' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Thêm Highlights' }))
 }
 
 describe('CVEditorView — chỉnh sửa highlights qua Component Tree', () => {

@@ -14,11 +14,15 @@ interface InlineCVEditorProps {
 }
 
 function initialKeys(node: LayoutNode): string[] {
-  if (node.type === 'header') return ['fullName', 'title', 'email', 'phone', 'location']
-  if (node.type === 'summary') return ['summary', 'careerObjective', 'availability', 'location']
-  if (node.type === 'experience') return ['role']
-  if (node.type === 'projects') return ['name']
-  if (node.type === 'education') return ['school']
+  if (node.type === 'header') return ['fullName', 'title', 'email', 'phone', 'location', 'website', 'avatarUrl', 'careerObjective', 'availability']
+  if (node.type === 'summary') return ['summary', 'careerObjective', 'availability', 'location', 'website', 'avatarUrl']
+  if (node.type === 'experience') return ['role', 'company', 'time', 'teamSize', 'techStack', 'highlights']
+  if (node.type === 'projects') return ['name', 'role', 'time', 'link', 'teamSize', 'techStack', 'contribution', 'highlights']
+  if (node.type === 'education') return ['school', 'degree', 'field', 'time', 'gpa', 'highlights']
+  if (node.type === 'skills') return ['category', 'skills']
+  if (node.type === 'activities') return ['organization', 'role', 'time', 'highlights']
+  if (node.type === 'certifications') return ['name', 'issuer', 'date', 'link']
+  if (node.type === 'languages') return ['language', 'proficiency']
   return []
 }
 

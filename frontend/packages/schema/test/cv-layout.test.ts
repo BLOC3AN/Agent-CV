@@ -82,7 +82,7 @@ describe('CV layout contract', () => {
   })
 
   it('rejects item order on nodes without nested items', () => {
-    for (const type of ['header', 'summary', 'skills', 'certifications', 'languages', 'footer'] as const) {
+    for (const type of ['header', 'summary', 'footer'] as const) {
       expect(() => CVLayoutSchema.parse({
         version: 1,
         nodes: [{ id: type, type, visible: true, itemOrder: ['item-1'] }],

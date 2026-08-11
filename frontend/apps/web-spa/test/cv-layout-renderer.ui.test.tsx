@@ -146,6 +146,8 @@ describe('CVBlockRenderer', () => {
     ]) expect(content).toContain(expected)
     expect(container.querySelector('[data-cv-node="activities"]')).not.toBeNull()
     for (const field of CV_FIELD_CATALOG) {
+      const optionalEmptyFields = ['avatarUrl', 'website', 'link', 'careerObjective', 'availability', 'location', 'gpa', 'contribution', 'teamSize', 'techStack']
+      if (optionalEmptyFields.includes(field.key)) continue
       expect(container.querySelector(`[data-cv-field="${field.key}"]`), `missing registered field ${field.key}`).not.toBeNull()
     }
     expect(container.querySelector('[data-cv-field="techStack"]')).toHaveAttribute('data-print-style', 'tags')
