@@ -120,6 +120,7 @@ function nodeFrame(context: RenderContext, children: React.ReactNode, element: '
       className={context.node.type === 'header'
         ? context.variant === 'print' ? 'cv-header' : 'mb-6 pb-4 border-b border-slate-200 relative'
         : undefined}
+      style={{ fontFamily: 'var(--cv-font-family)' }}
       {...interactiveProps(context)}
     >
       {children}

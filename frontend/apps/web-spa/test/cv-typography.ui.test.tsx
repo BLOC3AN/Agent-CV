@@ -54,6 +54,18 @@ describe('CV typography controls', () => {
     expect(summary.style.fontSize).toBe('var(--cv-body-size)')
   })
 
+  it('uses one selected font family for Intro and Experience blocks', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: /thiết kế/i }))
+    fireEvent.change(screen.getByLabelText('Font chữ'), { target: { value: 'Times New Roman' } })
+
+    const summary = screen.getByTestId('cv-block-summary') as HTMLElement
+    const experience = screen.getByTestId('cv-block-experience') as HTMLElement
+    expect(summary.style.fontFamily).toBe('var(--cv-font-family)')
+    expect(experience.style.fontFamily).toBe('var(--cv-font-family)')
+    expect(document.querySelector('#a4-cv-paper') as HTMLElement).toHaveStyle('--cv-font-family: "Times New Roman", Times, serif')
+  })
+
   it('resolves Auto to Calibri and preserves legacy body-size fallback', () => {
     expect(resolveCVTypography({ font: 'Auto', fontSize: 12 })).toEqual({
       fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 11, headerFontSize: 20,
