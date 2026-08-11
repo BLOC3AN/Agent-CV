@@ -36,6 +36,27 @@ describe('CV typography controls', () => {
     expect(screen.getByLabelText('Cỡ header')).toHaveAttribute('max', '28')
   })
 
+  it('exposes editable page spacing and text alignment controls in Design', () => {
+    renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: /thiết kế/i }))
+    expect(screen.getByLabelText('Padding trên')).toHaveValue('20')
+    expect(screen.getByLabelText('Padding dưới')).toHaveValue('20')
+    expect(screen.getByLabelText('Padding trái')).toHaveValue('20')
+    expect(screen.getByLabelText('Padding phải')).toHaveValue('20')
+    expect(screen.getByLabelText('Margin trang')).toHaveValue('0')
+    expect(screen.getByLabelText('Line-height')).toHaveValue('1.15')
+    expect(screen.getByLabelText('Căn lề nội dung')).toHaveValue('left')
+
+    fireEvent.change(screen.getByLabelText('Padding trái'), { target: { value: '24' } })
+    fireEvent.change(screen.getByLabelText('Line-height'), { target: { value: '1.5' } })
+    fireEvent.change(screen.getByLabelText('Căn lề nội dung'), { target: { value: 'justify' } })
+
+    const paper = document.querySelector('#a4-cv-paper') as HTMLElement
+    expect(paper.style.getPropertyValue('--cv-padding-left')).toBe('24mm')
+    expect(paper.style.getPropertyValue('--cv-line-height')).toBe('1.5')
+    expect(paper.style.getPropertyValue('--cv-text-align')).toBe('justify')
+  })
+
   it('applies each typography size to the live A4 surface independently', () => {
     renderEditor()
     fireEvent.click(screen.getByRole('button', { name: /thiết kế/i }))
@@ -72,7 +93,7 @@ describe('CV typography controls', () => {
 
   it('resolves Auto to Calibri and preserves legacy body-size fallback', () => {
     expect(resolveCVTypography({ font: 'Auto', fontSize: 12 })).toEqual({
-      fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 13, headerFontSize: 20, lineHeight: '1.3',
+      fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 13, headerFontSize: 20, lineHeight: '1.3', paddingTop: 20, paddingBottom: 20, paddingLeft: 20, paddingRight: 20, pageMargin: 0, textAlign: 'left',
     })
     expect(resolveCVTypography({ font: 'Auto', fontSize: 14 }).bodyFontSize).toBe(10.5)
     expect(resolveCVTypography({ font: 'Auto', fontSize: 14, bodyFontSize: 14 }).bodyFontSize).toBe(14)

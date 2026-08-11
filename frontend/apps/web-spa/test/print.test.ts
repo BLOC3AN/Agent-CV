@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net'
 import { CVSchema, DEFAULT_CV_LAYOUT } from '@hr/schema'
 import { createApp } from '../src/server/app.js'
 import type { CVEnvelope } from '../src/lib/api.js'
+import { printCSSForDesign } from '../src/lib/print-css.js'
 
 const cv = CVSchema.parse({
   schemaVersion: 2,
@@ -49,6 +50,14 @@ const envelope: CVEnvelope = {
 const servers: Array<() => Promise<void>> = []
 afterEach(async () => { while (servers.length) await servers.pop()!() })
 
+it('builds print page margins from editable padding and page margin settings', () => {
+  const css = printCSSForDesign({
+    font: 'Auto', fontSize: 10.5, bodyFontSize: 10.5, sectionTitleFontSize: 13, headerFontSize: 20,
+    spacing: 'normal', paddingTop: 12, paddingBottom: 14, paddingLeft: 16, paddingRight: 18, pageMargin: 2, lineHeight: 1.4, textAlign: 'justify',
+  })
+  expect(css).toContain('@page{size:A4;margin:14mm 20mm 16mm 18mm}')
+})
+
 it('SSR /print render cùng template và đổi được presentation/ats/thumbnail', async () => {
   const backend = http.createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' })
@@ -74,10 +83,10 @@ it('SSR /print render cùng template và đổi được presentation/ats/thumbn
     expect(html).toContain('https://cert.example')
     expect(html).toContain('data-cv-field="techStack"')
     expect(html).toContain('data-print-style="tags"')
-    expect(html).toContain('@page{size:A4;margin:20mm}')
+    expect(html).toContain('@page{size:A4;margin:20mm 20mm 20mm 20mm}')
     expect(html).toContain('line-height:var(--cv-line-height,1.3)')
     expect(html).toContain('--cv-line-height:1.3')
-    expect(html).toContain('.cv-page{width:210mm;min-height:297mm;padding:20mm')
+    expect(html).toContain('.cv-page{width:210mm;min-height:297mm;padding:var(--cv-padding-top,20mm)')
     expect(html.indexOf('data-cv-node="footer"')).toBeGreaterThan(html.indexOf('data-cv-node="experience"'))
     expect(html.indexOf('data-cv-node="header"')).toBeGreaterThan(html.indexOf('data-cv-node="footer"'))
   }

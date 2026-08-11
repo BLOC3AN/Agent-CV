@@ -4,7 +4,7 @@ import { X, Printer, Download } from 'lucide-react';
 import { CVPageComposer } from './CVPageComposer';
 import { CVBlockRenderer } from './CVBlockRenderer';
 import { normalizeLayout } from '../lib/layout-draft';
-import { PRINT_CSS } from '../lib/print-css';
+import { printCSSForDesign } from '../lib/print-css';
 import { cvTypographyStyle } from '../lib/cv-typography';
 
 interface PreviewModalProps {
@@ -83,7 +83,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
         data-variant="print"
         style={{ '--cv-accent': cv.design.accentColor, ...cvTypographyStyle(cv.design) } as React.CSSProperties}
       >
-        <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
+        <style dangerouslySetInnerHTML={{ __html: printCSSForDesign(cv.design) }} />
         <article className="cv-page">
           <CVBlockRenderer cv={cv} layout={layout} variant="print" />
         </article>

@@ -162,7 +162,7 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 			"education": []any{}, "skills": []any{}, "activities": []any{},
 			"certifications": []any{}, "languages": []any{},
 		},
-		"design":         map[string]any{"template": "modern", "accentColor": "#4F46E5", "font": "Auto", "fontSize": 10.5, "spacing": "normal"},
+		"design":         map[string]any{"template": "modern", "accentColor": "#4F46E5", "font": "Auto", "fontSize": 10.5, "sectionTitleFontSize": 13, "headerFontSize": 20, "paddingTop": 20, "paddingBottom": 20, "paddingLeft": 20, "paddingRight": 20, "pageMargin": 0, "lineHeight": 1.3, "textAlign": "left", "spacing": "normal"},
 		"activeSections": map[string]any{"intro": true, "experience": true, "projects": true, "education": true, "skills": true, "activities": true, "certifications": true, "languages": true},
 		"_meta":          map[string]any{"source": "manual", "verified": map[string]any{}},
 	}
@@ -2050,7 +2050,7 @@ func allowedChatPatchPath(op, path string) bool {
 		}
 	}
 	if len(parts) == 2 && parts[0] == "design" {
-		return stringIn(parts[1], "template", "accentColor", "font", "fontSize", "bodyFontSize", "sectionTitleFontSize", "headerFontSize", "spacing")
+		return stringIn(parts[1], "template", "accentColor", "font", "fontSize", "bodyFontSize", "sectionTitleFontSize", "headerFontSize", "spacing", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight", "pageMargin", "lineHeight", "textAlign")
 	}
 	if len(parts) >= 2 && parts[0] == "layout" && parts[1] == "nodes" {
 		if len(parts) == 2 {

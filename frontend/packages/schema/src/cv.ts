@@ -163,6 +163,13 @@ export const CVDesignSchema = z.object({
   sectionTitleFontSize: z.number().min(10).max(16).default(13),
   headerFontSize: z.number().min(16).max(28).optional(),
   spacing: z.enum(['condensed', 'normal', 'wide']).default('normal'),
+  paddingTop: z.number().min(0).max(40).default(20),
+  paddingBottom: z.number().min(0).max(40).default(20),
+  paddingLeft: z.number().min(0).max(40).default(20),
+  paddingRight: z.number().min(0).max(40).default(20),
+  pageMargin: z.number().min(0).max(20).default(0),
+  lineHeight: z.number().min(1).max(2).default(1.3),
+  textAlign: z.enum(['left', 'right', 'justify']).default('left'),
 }).strict()
 
 export const ActiveSectionsSchema = z.object({

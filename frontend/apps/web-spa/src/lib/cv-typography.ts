@@ -18,9 +18,15 @@ export interface CVTypography {
   sectionTitleFontSize: number
   headerFontSize: number
   lineHeight: string
+  paddingTop: number
+  paddingBottom: number
+  paddingLeft: number
+  paddingRight: number
+  pageMargin: number
+  textAlign: 'left' | 'right' | 'justify'
 }
 
-type CVTypographyDesign = Pick<CVDesign, 'font' | 'fontSize' | 'bodyFontSize' | 'sectionTitleFontSize' | 'headerFontSize'> & {
+type CVTypographyDesign = Pick<CVDesign, 'font' | 'fontSize' | 'bodyFontSize' | 'sectionTitleFontSize' | 'headerFontSize' | 'paddingTop' | 'paddingBottom' | 'paddingLeft' | 'paddingRight' | 'pageMargin' | 'lineHeight' | 'textAlign'> & {
   spacing?: CVDesign['spacing']
 }
 
@@ -34,7 +40,13 @@ export function resolveCVTypography(design: CVTypographyDesign): CVTypography {
     bodyFontSize,
     sectionTitleFontSize: design.sectionTitleFontSize ?? 13,
     headerFontSize: design.headerFontSize ?? 20,
-    lineHeight: lineHeightForSpacing(design.spacing),
+    lineHeight: String(design.lineHeight ?? lineHeightForSpacing(design.spacing)),
+    paddingTop: design.paddingTop ?? 20,
+    paddingBottom: design.paddingBottom ?? 20,
+    paddingLeft: design.paddingLeft ?? 20,
+    paddingRight: design.paddingRight ?? 20,
+    pageMargin: design.pageMargin ?? 0,
+    textAlign: design.textAlign ?? 'left',
   }
 }
 
@@ -46,7 +58,15 @@ export function cvTypographyStyle(design: Parameters<typeof resolveCVTypography>
     '--cv-section-title-size': `${typography.sectionTitleFontSize}pt`,
     '--cv-header-size': `${typography.headerFontSize}pt`,
     '--cv-line-height': typography.lineHeight,
+    '--cv-padding-top': `${typography.paddingTop}mm`,
+    '--cv-padding-bottom': `${typography.paddingBottom}mm`,
+    '--cv-padding-left': `${typography.paddingLeft}mm`,
+    '--cv-padding-right': `${typography.paddingRight}mm`,
+    '--cv-page-margin': `${typography.pageMargin}mm`,
+    '--cv-text-align': typography.textAlign,
     fontFamily: typography.fontFamily,
     fontSize: `${typography.bodyFontSize}pt`,
+    lineHeight: typography.lineHeight,
+    textAlign: typography.textAlign,
   } as CSSProperties
 }

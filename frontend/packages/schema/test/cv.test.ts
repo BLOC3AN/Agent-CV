@@ -32,6 +32,17 @@ describe('CV v2', () => {
     expect(design.headerFontSize).toBe(20)
   })
 
+  it('defaults page spacing and text alignment for legacy CV designs', () => {
+    const design = CVDesignSchema.parse({ font: 'Auto' })
+    expect(design.paddingTop).toBe(20)
+    expect(design.paddingBottom).toBe(20)
+    expect(design.paddingLeft).toBe(20)
+    expect(design.paddingRight).toBe(20)
+    expect(design.pageMargin).toBe(0)
+    expect(design.lineHeight).toBe(1.3)
+    expect(design.textAlign).toBe('left')
+  })
+
   it('rejects typography sizes outside the supported ranges', () => {
     expect(() => CVDesignSchema.parse({ font: 'Arial', bodyFontSize: 8 })).toThrow()
     expect(() => CVDesignSchema.parse({ font: 'Arial', sectionTitleFontSize: 17 })).toThrow()

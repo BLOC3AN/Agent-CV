@@ -38,7 +38,7 @@ describe('applyChatOpsToDraft', () => {
   it.each([
     ['/sections/intro/customField', 'hidden state'],
     ['/design/padding', 24],
-    ['/design/lineHeight', 1.4],
+    ['/design/unknown', 1.4],
     ['/activeSections/experience', false],
   ])('rejects AI writes outside the registered path allowlist: %s', (path, value) => {
     expect(() => applyChatOpsToDraft({ cv, layout }, [operation('add', path, value)])).toThrow(/không được phép/i)

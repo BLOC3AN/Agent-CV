@@ -69,19 +69,24 @@ export function PaginatedA4Document({
         id={id}
         data-testid="a4-document"
         aria-label={`CV ${pageGroups.length} trang`}
-        className={`flex w-[210mm] flex-col gap-6 ${className}`}
+        className={`flex w-[210mm] flex-col ${className}`}
         style={style}
       >
         {pageGroups.map((keys, index) => (
           <section
             key={`a4-page-${index}`}
             data-testid="a4-page"
+            data-a4-page-settings="shared"
             className="a4-page relative shrink-0 border border-slate-200 bg-white shadow-lg"
             style={{
               boxSizing: 'border-box',
               width: A4_PAGE_SETTINGS.width,
               height: A4_PAGE_SETTINGS.height,
-              padding: A4_PAGE_SETTINGS.padding,
+              paddingTop: 'var(--cv-padding-top, 20mm)',
+              paddingBottom: 'var(--cv-padding-bottom, 20mm)',
+              paddingLeft: 'var(--cv-padding-left, 20mm)',
+              paddingRight: 'var(--cv-padding-right, 20mm)',
+              marginBottom: 'var(--cv-page-margin, 0mm)',
             }}
           >
             <div className="a4-page-content h-full w-full">
@@ -107,13 +112,17 @@ export function PaginatedA4Document({
             key={index}
             ref={index === 0 ? shellRef : undefined}
             data-testid="a4-page"
+            data-a4-page-settings="shared"
             className="a4-page absolute left-0 top-0 bg-white border border-slate-200 shadow-lg"
             style={{
               top: `calc(${index} * 297mm)`,
               boxSizing: 'border-box',
               width: A4_PAGE_SETTINGS.width,
               height: A4_PAGE_SETTINGS.height,
-              padding: A4_PAGE_SETTINGS.padding,
+              paddingTop: 'var(--cv-padding-top, 20mm)',
+              paddingBottom: 'var(--cv-padding-bottom, 20mm)',
+              paddingLeft: 'var(--cv-padding-left, 20mm)',
+              paddingRight: 'var(--cv-padding-right, 20mm)',
             }}
           />
         ))}

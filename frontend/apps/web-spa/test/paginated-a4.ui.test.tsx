@@ -42,7 +42,7 @@ describe('PaginatedA4Document', () => {
     expect(pages).toHaveLength(2)
     for (const page of pages) {
       expect(page).toHaveClass('a4-page')
-      expect(page.style.padding).toBe('20mm')
+      expect(page).toHaveAttribute('data-a4-page-settings', 'shared')
       expect(page.getAttribute('style')).toContain('width: 210mm')
       expect(page.getAttribute('style')).toContain('height: 297mm')
     }

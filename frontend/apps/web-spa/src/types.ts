@@ -131,6 +131,13 @@ export interface CVDesign {
   sectionTitleFontSize?: number;
   headerFontSize?: number;
   spacing: 'condensed' | 'normal' | 'wide';
+  paddingTop?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  paddingRight?: number;
+  pageMargin?: number;
+  lineHeight?: number;
+  textAlign?: 'left' | 'right' | 'justify';
 }
 
 export type CVNodeType =

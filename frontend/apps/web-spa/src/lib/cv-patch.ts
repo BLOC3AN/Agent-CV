@@ -19,7 +19,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const introFields = new Set(['fullName', 'title', 'email', 'phone', 'location', 'website', 'summary', 'careerObjective', 'availability', 'avatarUrl'])
-const designFields = new Set(['template', 'accentColor', 'font', 'fontSize', 'bodyFontSize', 'sectionTitleFontSize', 'headerFontSize', 'spacing'])
+const designFields = new Set(['template', 'accentColor', 'font', 'fontSize', 'bodyFontSize', 'sectionTitleFontSize', 'headerFontSize', 'spacing', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'pageMargin', 'lineHeight', 'textAlign'])
 const sectionFields: Record<string, Set<string>> = {
   experience: new Set(['id', 'title', 'company', 'startDate', 'endDate', 'current', 'teamSize', 'techStack', 'highlights']),
   projects: new Set(['id', 'name', 'role', 'startDate', 'endDate', 'link', 'teamSize', 'techStack', 'contribution', 'highlights']),

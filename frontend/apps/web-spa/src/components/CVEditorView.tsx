@@ -9,6 +9,7 @@ import { hasDefaultNodeOrder, materializeItemOrder, moveItem, moveNode, normaliz
 import { CV_FIELDS } from '../lib/cv-fields';
 import { InlineCVEditor } from './InlineCVEditor';
 import { cvTypographyStyle, resolveCVTypography } from '../lib/cv-typography';
+import { lineHeightForSpacing } from '../lib/a4-settings';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 
 interface CVEditorViewProps {
@@ -51,6 +52,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyInvokerRef = React.useRef<HTMLButtonElement>(null);
   const layout = normalizeLayout(providedLayout ?? cv.layout);
+  const typography = resolveCVTypography(cv.design);
 
   const openInlineEditor = (nodeId: string, itemId?: string) => {
     const node = layout.nodes.find((candidate) => candidate.id === nodeId);
@@ -81,6 +83,9 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
         [field]: value,
       },
     });
+  };
+  const updateDesignFields = (changes: Partial<CVDesign>) => {
+    onUpdateCV({ ...cv, design: { ...cv.design, ...changes } });
   };
 
   // Color options
@@ -277,7 +282,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 ['sectionTitleFontSize', 'Cỡ tiêu đề section', 10, 16],
                 ['headerFontSize', 'Cỡ header', 16, 28],
               ] as const).map(([field, label, min, max]) => {
-                const typography = resolveCVTypography(cv.design)
                 const value = field === 'bodyFontSize' ? typography.bodyFontSize : field === 'sectionTitleFontSize' ? typography.sectionTitleFontSize : typography.headerFontSize
                 return <div className="space-y-2" key={field}>
                   <div className="flex justify-between text-xs font-semibold text-slate-700">
@@ -300,7 +304,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                   {['condensed', 'normal', 'wide'].map((sp) => (
                     <button
                       key={sp}
-                      onClick={() => updateDesign('spacing', sp)}
+                      onClick={() => updateDesignFields({ spacing: sp as CVDesign['spacing'], lineHeight: parseFloat(lineHeightForSpacing(sp)) })}
                       className={`p-2 rounded-xl border text-xs font-semibold uppercase text-center transition ${
                         cv.design.spacing === sp
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
@@ -310,6 +314,42 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                       {sp}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div className="space-y-3 border-t border-slate-200 pt-3">
+                <div className="font-semibold uppercase tracking-wider text-[11px] text-slate-700">Khoảng cách trang</div>
+                {([
+                  ['paddingTop', 'Padding trên'],
+                  ['paddingBottom', 'Padding dưới'],
+                  ['paddingLeft', 'Padding trái'],
+                  ['paddingRight', 'Padding phải'],
+                  ['pageMargin', 'Margin trang'],
+                ] as const).map(([field, label]) => {
+                  const value = typography[field]
+                  const max = field === 'pageMargin' ? 20 : 40
+                  return <div className="space-y-1" key={field}>
+                    <div className="flex justify-between text-xs font-semibold text-slate-700">
+                      <label htmlFor={`cv-${field}`}>{label}</label>
+                      <span className="text-indigo-600 font-bold">{value}mm</span>
+                    </div>
+                    <input id={`cv-${field}`} aria-label={label} type="range" min="0" max={max} step="1" value={value} onChange={(e) => updateDesign(field, parseFloat(e.target.value))} className="w-full accent-indigo-600 cursor-pointer" />
+                  </div>
+                })}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-semibold text-slate-700">
+                    <label htmlFor="cv-lineHeight">Line-height</label>
+                    <span className="text-indigo-600 font-bold">{typography.lineHeight}</span>
+                  </div>
+                  <input id="cv-lineHeight" aria-label="Line-height" type="range" min="1" max="2" step="0.05" value={typography.lineHeight} onChange={(e) => updateDesign('lineHeight', parseFloat(e.target.value))} className="w-full accent-indigo-600 cursor-pointer" />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="cv-textAlign" className="block text-xs font-semibold text-slate-700">Căn lề nội dung</label>
+                  <select id="cv-textAlign" aria-label="Căn lề nội dung" value={typography.textAlign} onChange={(e) => updateDesign('textAlign', e.target.value as CVDesign['textAlign'])} className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-medium text-slate-800 focus:border-indigo-500 focus:outline-none">
+                    <option value="left">Căn trái</option>
+                    <option value="right">Căn phải</option>
+                    <option value="justify">Căn đều hai bên</option>
+                  </select>
                 </div>
               </div>
             </div>

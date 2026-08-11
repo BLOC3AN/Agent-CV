@@ -4,7 +4,6 @@ import { A4_PAGE_SETTINGS } from '../lib/a4-settings'
 import { CVBlockRenderer, type CVRenderVariant } from './CVBlockRenderer'
 import { PaginatedA4Document } from './PaginatedA4Document'
 
-const DEFAULT_CONTENT_HEIGHT_PX = 971
 const SEGMENT_SEPARATOR = '::'
 const SPLITTABLE_NODES = new Set(['experience', 'projects', 'education'])
 
@@ -67,6 +66,7 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
   const measurementRef = useRef<HTMLDivElement>(null)
   const [pageGroups, setPageGroups] = useState<string[][]>(() => [visibleNodeIds])
   const [measuredKey, setMeasuredKey] = useState<string | null>(null)
+  const contentHeightPx = (297 - (cv.design.paddingTop ?? 20) - (cv.design.paddingBottom ?? 20)) * 96 / 25.4
 
   useLayoutEffect(() => {
     const measurement = measurementRef.current
@@ -88,17 +88,17 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
       const heightTarget = item ?? element
       heights.set(segment, heightTarget?.getBoundingClientRect().height || heightTarget?.offsetHeight || 0)
     }
-    setPageGroups(pageGroupsForNodes(segments, heights, DEFAULT_CONTENT_HEIGHT_PX))
+    setPageGroups(pageGroupsForNodes(segments, heights, contentHeightPx))
     setMeasuredKey(measurementKey)
-  }, [cv, layout, variant, visibleNodeIds.join('|'), segments.join('|'), measurementKey])
+  }, [cv, layout, variant, visibleNodeIds.join('|'), segments.join('|'), measurementKey, contentHeightPx])
 
   return (
     <>
       {measuredKey !== measurementKey && <div
         ref={measurementRef}
         aria-hidden="true"
-        className="pointer-events-none absolute -left-[100000px] top-0 w-[170mm] opacity-0"
-        style={{ ...style, padding: A4_PAGE_SETTINGS.padding, lineHeight: 'var(--cv-line-height)' }}
+        className="pointer-events-none absolute -left-[100000px] top-0 w-[210mm] box-border opacity-0"
+        style={{ ...style, paddingTop: 'var(--cv-padding-top)', paddingBottom: 'var(--cv-padding-bottom)', paddingLeft: 'var(--cv-padding-left)', paddingRight: 'var(--cv-padding-right)', lineHeight: 'var(--cv-line-height)' }}
       >
         <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={visibleNodeIds} />
       </div>}

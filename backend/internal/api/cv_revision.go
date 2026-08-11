@@ -483,7 +483,7 @@ func normalizeCVDesign(cv map[string]any) bool {
 		cv["design"] = value
 	}
 	design, ok := value.(map[string]any)
-	if !ok || !onlyCVKeys(design, "template", "accentColor", "font", "fontSize", "bodyFontSize", "sectionTitleFontSize", "headerFontSize", "spacing") || !defaultCVString(design, "accentColor", "#4F46E5") {
+	if !ok || !onlyCVKeys(design, "template", "accentColor", "font", "fontSize", "bodyFontSize", "sectionTitleFontSize", "headerFontSize", "spacing", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight", "pageMargin", "lineHeight", "textAlign") || !defaultCVString(design, "accentColor", "#4F46E5") {
 		return false
 	}
 	for key, fallback := range map[string]string{"template": "modern", "font": "Auto", "spacing": "normal"} {
@@ -498,7 +498,18 @@ func normalizeCVDesign(cv map[string]any) bool {
 	} else {
 		design["fontSize"] = float64(10.5)
 	}
-	if !validCVFont(design["font"]) || !validCVOptionalFontSize(design, "bodyFontSize", 9, 14) || !validCVOptionalFontSize(design, "sectionTitleFontSize", 10, 16) || !validCVOptionalFontSize(design, "headerFontSize", 16, 28) {
+	for key, fallback := range map[string]float64{"paddingTop": 20, "paddingBottom": 20, "paddingLeft": 20, "paddingRight": 20, "pageMargin": 0, "lineHeight": 1.3} {
+		if value, exists := design[key]; !exists {
+			design[key] = fallback
+		} else if _, ok := value.(float64); !ok {
+			return false
+		}
+	}
+	if !defaultCVString(design, "textAlign", "left") {
+		return false
+	}
+	textAlign, textAlignOK := design["textAlign"].(string)
+	if !textAlignOK || !stringIn(textAlign, "left", "right", "justify") || !validCVFont(design["font"]) || !validCVOptionalFontSize(design, "bodyFontSize", 9, 14) || !validCVOptionalFontSize(design, "sectionTitleFontSize", 10, 16) || !validCVOptionalFontSize(design, "headerFontSize", 16, 28) || !validCVOptionalFontSize(design, "paddingTop", 0, 40) || !validCVOptionalFontSize(design, "paddingBottom", 0, 40) || !validCVOptionalFontSize(design, "paddingLeft", 0, 40) || !validCVOptionalFontSize(design, "paddingRight", 0, 40) || !validCVOptionalFontSize(design, "pageMargin", 0, 20) || !validCVOptionalFontSize(design, "lineHeight", 1, 2) {
 		return false
 	}
 	return (design["template"] == "modern" || design["template"] == "classic" || design["template"] == "professional") && (design["spacing"] == "condensed" || design["spacing"] == "normal" || design["spacing"] == "wide")
