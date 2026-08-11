@@ -59,14 +59,13 @@ describe('CV typography controls', () => {
     fireEvent.click(screen.getByRole('button', { name: /thiết kế/i }))
     fireEvent.change(screen.getByLabelText('Font chữ'), { target: { value: 'Times New Roman' } })
 
-    const summary = screen.getByTestId('cv-block-summary') as HTMLElement
-    const experience = screen.getByTestId('cv-block-experience') as HTMLElement
-    expect(summary.style.fontFamily).toBe('var(--cv-font-family)')
-    expect(experience.style.fontFamily).toBe('var(--cv-font-family)')
-    expect(summary.style.fontSize).toBe('var(--cv-body-size)')
-    expect(experience.style.fontSize).toBe('var(--cv-body-size)')
-    expect(summary.style.lineHeight).toBe('inherit')
-    expect(experience.style.lineHeight).toBe('inherit')
+    const nodes = [...document.querySelectorAll<HTMLElement>('#a4-cv-paper [data-cv-node]')]
+    expect(nodes.length).toBeGreaterThan(1)
+    for (const node of nodes) {
+      expect(node.style.fontFamily, `${node.dataset.cvNode} font`).toBe('var(--cv-font-family)')
+      expect(node.style.fontSize, `${node.dataset.cvNode} size`).toBe('var(--cv-body-size)')
+      expect(node.style.lineHeight, `${node.dataset.cvNode} line-height`).toBe('inherit')
+    }
     expect(document.querySelector('#a4-cv-paper') as HTMLElement).toHaveStyle('--cv-font-family: "Times New Roman", Times, serif')
   })
 

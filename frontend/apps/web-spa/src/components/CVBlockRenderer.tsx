@@ -122,9 +122,8 @@ function nodeFrame(context: RenderContext, children: React.ReactNode, element: '
         : undefined}
       style={{
         fontFamily: 'var(--cv-font-family)',
-        ...(context.node.type !== 'header' && context.node.type !== 'footer'
-          ? { fontSize: 'var(--cv-body-size)', lineHeight: 'inherit' }
-          : {}),
+        fontSize: 'var(--cv-body-size)',
+        lineHeight: 'inherit',
       }}
       {...interactiveProps(context)}
     >
@@ -170,7 +169,7 @@ function renderSummary(context: RenderContext) {
   if (!intro.summary && !intro.careerObjective && !(fallbackAvailability && intro.availability) && !(fallbackLocation && intro.location)) return null
   const fallbackContact = fallbackLocation && <>{intro.website && <p><span data-cv-field="website">{intro.website}</span></p>}{intro.avatarUrl && <img className="cv-avatar" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}</>
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</section>)
-  return nodeFrame(context, <div className="mb-6 text-slate-700" style={{ fontSize: 'inherit', lineHeight: 'inherit' }}>{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</div>)
+  return nodeFrame(context, <div className="mb-6 text-slate-700">{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</div>)
 }
 
 function renderExperience(context: RenderContext) {
@@ -195,7 +194,7 @@ function renderEducation(context: RenderContext) {
   const { cv, node, variant } = context
   const items = orderedItems(cv.sections.education, 'itemOrder' in node ? node.itemOrder : undefined)
   if (!items.length) return null
-  const entries = items.map((item) => <div className="cv-entry text-xs" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="school" value={item.school} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="degree" value={item.degree} />{item.fieldOfStudy && <> — <RegisteredValue fieldKey="field" value={item.fieldOfStudy} /></>}</span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div>{item.gpa && <p><RegisteredValue fieldKey="gpa" value={item.gpa} label="GPA" /></p>}<RegisteredHighlights itemId={item.id} values={item.highlights ?? []} /></div>)
+  const entries = items.map((item) => <div className="cv-entry" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="school" value={item.school} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="degree" value={item.degree} />{item.fieldOfStudy && <> — <RegisteredValue fieldKey="field" value={item.fieldOfStudy} /></>}</span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div>{item.gpa && <p><RegisteredValue fieldKey="gpa" value={item.gpa} label="GPA" /></p>}<RegisteredHighlights itemId={item.id} values={item.highlights ?? []} /></div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'HỌC VẤN')}<div>{entries}</div></section>)
   return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.education!)}<div className="space-y-2">{entries}</div></div>)
 }
@@ -205,7 +204,7 @@ function renderSkills(context: RenderContext) {
   if (!cv.sections.skills.length) return null
   const groups = orderedItems(cv.sections.skills, 'itemOrder' in node ? node.itemOrder : undefined)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'KỸ NĂNG')}<div>{groups.map((group) => <p key={group.id} {...interactiveProps(context, group.id)}><strong><RegisteredValue fieldKey="category" value={group.category} />: </strong><span className="cv-skills"><span data-cv-field="skills" data-print-style="tags">{group.skills.join(', ')}</span></span></p>)}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.skills!)}<div className="space-y-1.5 text-xs text-slate-800">{groups.map((group) => <div key={group.id} className="flex" {...interactiveProps(context, group.id)}><span className="font-bold w-40 shrink-0 text-slate-900"><RegisteredValue fieldKey="category" value={group.category} />:</span><span className="text-slate-700"><span data-cv-field="skills" data-print-style="tags">{group.skills.join(', ')}</span></span></div>)}</div></div>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.skills!)}<div className="space-y-1.5 text-slate-800">{groups.map((group) => <div key={group.id} className="flex" {...interactiveProps(context, group.id)}><span className="font-bold w-40 shrink-0 text-slate-900"><RegisteredValue fieldKey="category" value={group.category} />:</span><span className="text-slate-700"><span data-cv-field="skills" data-print-style="tags">{group.skills.join(', ')}</span></span></div>)}</div></div>)
 }
 
 function renderActivities(context: RenderContext) {
@@ -221,7 +220,7 @@ function renderCertifications(context: RenderContext) {
   if (!cv.sections.certifications.length) return null
   const entries = orderedItems(cv.sections.certifications, 'itemOrder' in node ? node.itemOrder : undefined).map((item) => <div className="cv-entry" key={item.id} {...interactiveProps(context, item.id)}><strong className="cv-entry-title"><RegisteredValue fieldKey="name" value={item.name} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="issuer" value={item.issuer} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="date" value={item.date} /></span>{item.link && <RegisteredValue fieldKey="link" value={item.link} />}</div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'CHỨNG CHỈ')}<div>{entries}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.certifications!)}<div className="space-y-1 text-xs text-slate-700">{entries}</div></div>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.certifications!)}<div className="space-y-1 text-slate-700">{entries}</div></div>)
 }
 
 function renderLanguages(context: RenderContext) {
@@ -229,7 +228,7 @@ function renderLanguages(context: RenderContext) {
   if (!cv.sections.languages.length) return null
   const languages = orderedItems(cv.sections.languages, 'itemOrder' in node ? node.itemOrder : undefined)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'NGOẠI NGỮ')}<div className="cv-skills">{languages.map((item) => <span className="cv-skill" key={item.id} {...interactiveProps(context, item.id)}><RegisteredValue fieldKey="language" value={item.language} /> — <RegisteredValue fieldKey="proficiency" value={item.proficiency} /></span>)}</div></section>)
-  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.languages!)}<ul className="text-xs text-slate-700 space-y-1">{languages.map((item) => <li key={item.id} className="flex justify-between" {...interactiveProps(context, item.id)}><span className="font-bold text-slate-900"><RegisteredValue fieldKey="language" value={item.language} />:</span><span className="text-slate-600"><RegisteredValue fieldKey="proficiency" value={item.proficiency} /></span></li>)}</ul></div>)
+  return nodeFrame(context, <div className="mb-6">{sectionHeading(context, sectionTitles.languages!)}<ul className="text-slate-700 space-y-1">{languages.map((item) => <li key={item.id} className="flex justify-between" {...interactiveProps(context, item.id)}><span className="font-bold text-slate-900"><RegisteredValue fieldKey="language" value={item.language} />:</span><span className="text-slate-600"><RegisteredValue fieldKey="proficiency" value={item.proficiency} /></span></li>)}</ul></div>)
 }
 
 function renderFooter(context: RenderContext) {
