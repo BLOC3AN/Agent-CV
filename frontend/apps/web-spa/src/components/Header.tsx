@@ -91,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({
           /* Editor Actions */
           <>
             <button
-              onClick={onOpenPreview}
+              onClick={onOpenPreview ?? (() => window.dispatchEvent(new Event('hr-agent:open-preview')))}
               id="btn-header-preview"
               className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-2xs"
             >

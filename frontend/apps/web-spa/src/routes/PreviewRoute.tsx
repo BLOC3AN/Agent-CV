@@ -7,9 +7,11 @@ export function PreviewRoute() {
   const { cvId } = useParams<{ cvId: string }>()
   const navigate = useNavigate()
   const store = useCVStore(cvId ?? '')
-  const downloadPDF = useCallback(async () => {
-    window.location.assign(`/print/${encodeURIComponent(cvId ?? '')}?variant=presentation`)
-  }, [cvId])
+  // `PreviewModal` luôn dựng sẵn `#cv-print-surface`, nên in ngay tại chỗ —
+  // giống hệt đường xuất PDF trong trình sửa.
+  const downloadPDF = useCallback(() => {
+    window.print()
+  }, [])
 
   if (!cvId) return <div className="p-10 text-center text-sm text-rose-600">Mã CV không hợp lệ</div>
   if (store.status === 'loading') return <div className="p-10 text-center text-sm text-slate-500">Đang tải CV…</div>

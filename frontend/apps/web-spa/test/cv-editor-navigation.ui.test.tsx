@@ -15,7 +15,7 @@ function trackScrolls() {
 }
 
 function renderEditor() {
-  render(<CVEditorView cv={cv} onUpdateCV={noop} onOpenPreview={noop} onOpenShare={noop} />)
+  render(<CVEditorView cv={cv} onUpdateCV={noop} />)
 }
 
 afterEach(() => {

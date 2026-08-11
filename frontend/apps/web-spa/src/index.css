@@ -161,7 +161,8 @@
   #cv-print-surface * {
     visibility: visible;
   }
-  #a4-cv-paper {
+  #a4-cv-paper,
+  #a4-cv-preview-paper {
     display: none !important;
   }
   #cv-print-surface {
@@ -175,7 +176,8 @@
     border: 0 !important;
     overflow: visible !important;
   }
-  #a4-cv-paper > .pointer-events-none {
+  #a4-cv-paper > .pointer-events-none,
+  #a4-cv-preview-paper > .pointer-events-none {
     display: none !important;
   }
   @page {

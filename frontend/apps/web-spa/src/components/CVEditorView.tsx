@@ -21,10 +21,8 @@ interface CVEditorViewProps {
   onDiscard?: () => void;
   dirty?: boolean;
   saving?: boolean;
-  onOpenPreview: () => void;
-  onOpenShare: () => void;
-  /** @deprecated PDF download is owned by the global editor header. */
-  onDownloadPDF?: () => void | Promise<void>;
+  // Xem trước · Chia sẻ · Tải PDF đều là nút của `Header` toàn cục, không phải
+  // của khung soạn thảo — component này không nhận callback cho chúng nữa.
   cvId?: string;
   onRestoreVersion?: (revisionId: string) => Promise<void>;
 }
@@ -40,8 +38,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   onDiscard,
   dirty = false,
   saving = false,
-  onOpenPreview,
-  onOpenShare,
   cvId,
   onRestoreVersion,
 }) => {

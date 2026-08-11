@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { CV, CVLayout } from '../types';
 import { X, Printer, Download } from 'lucide-react';
 import { CVPageComposer } from './CVPageComposer';
-import { CVBlockRenderer } from './CVBlockRenderer';
+import { CVPrintSurface } from './CVPrintSurface';
 import { normalizeLayout } from '../lib/layout-draft';
-import { printCSSForDesign } from '../lib/print-css';
 import { cvTypographyStyle } from '../lib/cv-typography';
 
 interface PreviewModalProps {
@@ -40,7 +39,12 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-between p-4 md:p-6 overflow-hidden">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Xem trước CV"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-between p-4 md:p-6 overflow-hidden"
+    >
       {/* Top Modal Header */}
       <div className="w-full max-w-5xl bg-white rounded-2xl p-4 flex items-center justify-between shadow-lg shrink-0">
         <h3 className="font-bold text-gray-900 text-base">
@@ -67,6 +71,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
 
           <button
             onClick={onClose}
+            aria-label="Đóng xem trước"
             className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
           >
             <X className="w-5 h-5" />
@@ -76,23 +81,18 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
 
       {exportError && <p role="alert" className="w-full max-w-5xl rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{exportError}</p>}
 
-      <div
-        id="cv-print-surface"
-        data-testid="cv-print-surface"
-        className="hidden cv-root"
-        data-variant="print"
-        style={{ '--cv-accent': cv.design.accentColor, ...cvTypographyStyle(cv.design) } as React.CSSProperties}
-      >
-        <style dangerouslySetInnerHTML={{ __html: printCSSForDesign(cv.design) }} />
-        <article className="cv-page">
-          <CVBlockRenderer cv={cv} layout={layout} variant="print" />
-        </article>
-      </div>
+      <CVPrintSurface cv={cv} layout={layout} />
 
       {/* Middle A4 Display Area */}
       <div className="flex-1 overflow-y-auto my-4 w-full flex justify-center custom-scrollbar">
+        {/*
+          * Trang giấy của popup mang id riêng vì trình sửa vẫn còn trên DOM ở
+          * phía sau: hai `#a4-cv-paper` trùng id sẽ làm `revealInPaper` và các
+          * quy tắc in bắt nhầm phần tử. Nội dung thì dùng chung
+          * `CVPageComposer` với trình sửa nên vẫn render y hệt.
+          */}
         <CVPageComposer
-          id="a4-cv-paper"
+          id="a4-cv-preview-paper"
           className="cv-font-surface my-auto"
           cv={cv}
           layout={layout}

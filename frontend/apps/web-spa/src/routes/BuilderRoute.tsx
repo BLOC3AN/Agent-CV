@@ -1,17 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router-dom'
+import { useBeforeUnload, useBlocker, useParams } from 'react-router-dom'
 import { useCVStore } from '../lib/cv-store'
 import { applyChatOpsToDraft } from '../lib/cv-patch'
 import { CVEditorView } from '../components/CVEditorView'
 import { ChatPanel } from '../components/ChatPanel'
+import { PreviewModal } from '../components/PreviewModal'
+import { CVPrintSurface } from '../components/CVPrintSurface'
 
 export function BuilderRoute() {
   const { cvId } = useParams<{ cvId: string }>()
-  const navigate = useNavigate()
   const store = useCVStore(cvId ?? '')
   const [assistantOpen, setAssistantOpen] = useState(true)
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [printing, setPrinting] = useState(false)
   const blocker = useBlocker(store.dirty)
   const dirtyRef = useRef(store.dirty)
   const savingRef = useRef(store.saving)
@@ -41,9 +44,21 @@ export function BuilderRoute() {
     await store.restoreRevision(revisionId)
   }, [store.restoreRevision])
 
-  const openPrint = useCallback(() => {
-    window.location.assign(`/print/${encodeURIComponent(cvId)}?variant=presentation`)
-  }, [cvId])
+  // Xuất PDF đi qua hộp thoại in của trình duyệt: nó in `#cv-print-surface`
+  // dựng từ CHÍNH bản nháp đang mở, nên bản lưu ra khớp với những gì đang thấy.
+  // Trước đây chỗ này điều hướng sang `/print/:cvId`, nhưng route đó trả HTML
+  // chứ không phải PDF — người dùng bị rời trình sửa mà không nhận được file nào.
+  //
+  // Bề mặt in chỉ tồn tại trong lúc in, không gắn thường trực: nó là bản sao
+  // đầy đủ của CV, để nguyên trên trang sẽ nhân đôi mọi `data-cv-node-id` lẫn
+  // chi phí render sau mỗi phím gõ.
+  const openPrint = useCallback(() => setPrinting(true), [])
+
+  useEffect(() => {
+    if (!printing) return
+    window.print()
+    setPrinting(false)
+  }, [printing])
 
   const downloadPDF = useCallback(() => {
     if (store.dirty) { setDownloadDialogOpen(true); return }
@@ -55,6 +70,18 @@ export function BuilderRoute() {
     window.addEventListener('hr-agent:download-pdf', onHeaderDownload)
     return () => window.removeEventListener('hr-agent:download-pdf', onHeaderDownload)
   }, [downloadPDF])
+
+  // `AppLayout` dựng `Header` mà không biết gì về CV, nên hai nút của trình sửa
+  // đi qua cùng một cầu nối sự kiện. Xem trước mở NGAY TẠI CHỖ chứ không điều
+  // hướng: rời route sẽ vướng `useBlocker` khi có thay đổi chưa lưu, và màn
+  // hình preview lại nạp lại CV từ máy chủ — popup sẽ hiện bản đã lưu thay vì
+  // bản nháp đang nhìn thấy. Dùng chung `store.draft` là điều kiện để bản render
+  // trong trình sửa và trong popup luôn giống hệt nhau.
+  useEffect(() => {
+    const onHeaderPreview = () => setPreviewOpen(true)
+    window.addEventListener('hr-agent:open-preview', onHeaderPreview)
+    return () => window.removeEventListener('hr-agent:open-preview', onHeaderPreview)
+  }, [])
 
   const saveAndDownload = async () => {
     await save()
@@ -140,13 +167,22 @@ export function BuilderRoute() {
         onDiscard={discardDraft}
         dirty={store.dirty}
         saving={store.status === 'saving'}
-        onOpenPreview={() => navigate(`/builder/${cvId}/preview`)}
-        onOpenShare={() => {}}
         cvId={cvId}
         onRestoreVersion={restoreVersion}
       />
       {store.profileId && assistantOpen && <div className="fixed bottom-4 right-4 z-50 h-[min(720px,calc(100vh-2rem))] w-[min(380px,calc(100vw-2rem))]"><ChatPanel profileId={store.profileId} cvId={cvId} cv={store.draft.cv} layout={store.draft.layout} draftVersion={store.draftVersion} onApplyAIProposal={(ops, summary) => { const current = store.getDraft(); if (!current) throw new Error('Không còn bản nháp hiện tại'); store.applyAIDraft(applyChatOpsToDraft(current, ops), summary) }} onClose={() => setAssistantOpen(false)} /></div>}
       {store.profileId && !assistantOpen && <button type="button" onClick={() => setAssistantOpen(true)} className="fixed bottom-4 right-4 z-50 rounded-2xl bg-violet-600 px-4 py-3 text-xs font-semibold text-white shadow-xl hover:bg-violet-700">Mở Trợ lý AI</button>}
+      {/* Popup mang bề mặt in của riêng nó — dựng thêm ở đây sẽ thành hai id trùng. */}
+      {printing && !previewOpen && <CVPrintSurface cv={store.draft.cv} layout={store.draft.layout} />}
+      {previewOpen && (
+        <PreviewModal
+          isOpen
+          cv={store.draft.cv}
+          layout={store.draft.layout}
+          onClose={() => setPreviewOpen(false)}
+          onDownloadPDF={downloadPDF}
+        />
+      )}
       {leaveDialogOpen && blocker.state === 'blocked' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 p-4">
           <div role="dialog" aria-modal="true" aria-label="Thay đổi chưa lưu" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">

@@ -9,7 +9,7 @@ import { resolveCVTypography } from '../src/lib/cv-typography'
 function renderEditor() {
   function Harness() {
     const [current, setCurrent] = useState(() => structuredClone(initialCVs[0]!) as CV)
-    return <CVEditorView cv={current} onUpdateCV={setCurrent} onOpenPreview={() => undefined} onOpenShare={() => undefined} onDownloadPDF={() => undefined} />
+    return <CVEditorView cv={current} onUpdateCV={setCurrent} />
   }
   render(<Harness />)
 }

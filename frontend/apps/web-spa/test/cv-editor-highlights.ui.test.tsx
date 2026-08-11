@@ -11,9 +11,6 @@ function renderEditorWithExperienceOpen(onUpdateCV: (cv: CV) => void = noop) {
     <CVEditorView
       cv={initialCVs[0]!}
       onUpdateCV={onUpdateCV}
-      onOpenPreview={noop}
-      onOpenShare={noop}
-      onDownloadPDF={noop}
     />,
   )
   fireEvent.click(screen.getByRole('button', { name: 'Mở rộng Kinh nghiệm làm việc' }))
@@ -48,7 +45,7 @@ describe('CVEditorView — chỉnh sửa highlights qua Component Tree', () => {
   it('chỉnh đúng job con được double-click, không trộn với job khác', () => {
     let updated: CV | null = null
     render(
-      <CVEditorView cv={initialCVs[0]!} onUpdateCV={(cv) => { updated = cv }} onOpenPreview={noop} onOpenShare={noop} onDownloadPDF={noop} />,
+      <CVEditorView cv={initialCVs[0]!} onUpdateCV={(cv) => { updated = cv }} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Mở rộng Kinh nghiệm làm việc' }))
     fireEvent.doubleClick(screen.getByRole('treeitem', { name: 'AI Engineer — bTaskee' }))

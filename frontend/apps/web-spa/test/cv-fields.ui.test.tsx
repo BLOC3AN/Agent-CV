@@ -28,9 +28,6 @@ function DraftEditor() {
     dirty={dirty}
     onUpdateCV={(next) => { setCV(next); setDirty(true) }}
     onUpdateLayout={(next) => { setDraftLayout(next); setDirty(true) }}
-    onOpenPreview={() => undefined}
-    onOpenShare={() => undefined}
-    onDownloadPDF={() => undefined}
   />
 }
 
