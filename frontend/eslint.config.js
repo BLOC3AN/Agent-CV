@@ -132,7 +132,6 @@ export default tseslint.config(
     files: ['packages/schema/**/*.ts'],
     rules: { 'no-restricted-imports': ['error', restricted({ layer: 'schema' })] },
   },
-  {
   // Test được phép thoải mái hơn: mock cần gán kiểu lỏng, fixture cần biến thừa.
   {
     files: ['**/test/**/*.{ts,tsx}'],
