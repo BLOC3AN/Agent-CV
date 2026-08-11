@@ -169,13 +169,21 @@ describe('giao diện tiếng Anh — rà soát import và trợ lý AI', () => 
       profileId: 'profile-1',
       profile: {
         schemaVersion: 2, id: 'cv-1', title: 'Resume', lastModified: '2026-08-10T00:00:00Z', language: 'en',
+        // Mỗi loại mục PHẢI có ít nhất một phần tử: lưới chỉ bắt được chuỗi nào
+        // thực sự render ra, nên fixture rỗng từng giấu nguyên bộ nhãn field.
         sections: {
-          intro: { fullName: 'Alex Tran', title: 'Engineer', email: 'alex@example.com', phone: '', location: '', summary: 'Builds systems' },
-          education: [], experience: [], projects: [], skills: [], activities: [], certifications: [], languages: [],
+          intro: { fullName: 'Alex Tran', title: 'Engineer', email: 'alex@example.com', phone: '0900', location: 'Hanoi', summary: 'Builds systems' },
+          education: [{ id: 'education-0', school: 'University', degree: 'BSc', fieldOfStudy: 'CS', startDate: '2020', endDate: '2024', gpa: '3.9', highlights: [] }],
+          experience: [{ id: 'experience-0', title: 'Lead', company: 'Acme', startDate: '2024', endDate: '2025', current: false, highlights: ['Shipped'] }],
+          projects: [{ id: 'projects-0', name: 'Platform', role: 'Lead', startDate: '2024', endDate: '2025', highlights: ['Built it'] }],
+          skills: [{ id: 'skills-0', category: 'Backend', skills: ['Go'] }],
+          activities: [{ id: 'activities-0', organization: 'Guild', role: 'Mentor', startDate: '2024', endDate: '2025', highlights: ['Coached'] }],
+          certifications: [{ id: 'certifications-0', name: 'Cloud Pro', issuer: 'Cloud Org', date: '2025' }],
+          languages: [{ id: 'languages-0', language: 'English', proficiency: 'C1' }],
         },
         _meta: { source: 'pdf_import', verified: {} },
       },
-      progress: { done: 0, total: 1, complete: false, pending: ['/sections/intro'] },
+      progress: { done: 0, total: 8, complete: false, pending: ['/sections/intro'] },
     } as never
     const router = createMemoryRouter([
       { path: '/import/:jobId/review', element: (

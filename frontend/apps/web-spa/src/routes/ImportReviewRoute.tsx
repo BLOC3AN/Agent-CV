@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useLocale, type MessageKey } from '../lib/i18n'
+import { useLocale, type MessageKey, type MessageParams } from '../lib/i18n'
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Check } from 'lucide-react';
 import { CVSchema, type CV, type ReviewField, type ReviewItem, type ReviewKind } from '@hr/schema';
@@ -70,7 +70,7 @@ function reviewField(path: string, label: string, value: unknown): ReviewField {
  * gọi hook được, và nhúng chữ tiếng Việt vào đây thì màn rà soát sẽ luôn nói
  * tiếng Việt kể cả khi người dùng đã chuyển sang tiếng Anh.
  */
-function buildV2ReviewItems(raw: unknown, t: (key: MessageKey) => string): { cv: CV; items: ReviewItem[] } {
+function buildV2ReviewItems(raw: unknown, t: (key: MessageKey, params?: MessageParams) => string): { cv: CV; items: ReviewItem[] } {
   const cv = CVSchema.parse(raw)
   const items: ReviewItem[] = [{
     kind: 'intro', path: '/sections/intro', title: cv.sections.intro.fullName || t('sectionIntro'),
@@ -82,34 +82,34 @@ function buildV2ReviewItems(raw: unknown, t: (key: MessageKey) => string): { cv:
       reviewField('/sections/intro/location', t('fieldLocation'), cv.sections.intro.location),
     ],
   }]
-  cv.sections.experience.forEach((item, i) => items.push({ kind: 'experience', path: `/sections/experience/${i}`, title: `${item.title || 'Vị trí'} — ${item.company || ''}`.trim(), fields: [
-    reviewField(`/sections/experience/${i}/company`, 'Công ty', item.company),
-    reviewField(`/sections/experience/${i}/title`, 'Vị trí', item.title),
-    reviewField(`/sections/experience/${i}/highlights`, 'Mô tả', item.highlights),
+  cv.sections.experience.forEach((item, i) => items.push({ kind: 'experience', path: `/sections/experience/${i}`, title: `${item.title || t('fieldPosition')} — ${item.company || ''}`.trim(), fields: [
+    reviewField(`/sections/experience/${i}/company`, t('fieldCompany'), item.company),
+    reviewField(`/sections/experience/${i}/title`, t('fieldPosition'), item.title),
+    reviewField(`/sections/experience/${i}/highlights`, t('fieldDescription'), item.highlights),
   ] }))
-  cv.sections.education.forEach((item, i) => items.push({ kind: 'education', path: `/sections/education/${i}`, title: item.school || `Học vấn ${i + 1}`, fields: [
-    reviewField(`/sections/education/${i}/school`, 'Trường', item.school),
-    reviewField(`/sections/education/${i}/degree`, 'Bằng cấp', item.degree),
-    reviewField(`/sections/education/${i}/fieldOfStudy`, 'Ngành', item.fieldOfStudy),
+  cv.sections.education.forEach((item, i) => items.push({ kind: 'education', path: `/sections/education/${i}`, title: item.school || t('educationNumbered', { n: i + 1 }), fields: [
+    reviewField(`/sections/education/${i}/school`, t('fieldSchool'), item.school),
+    reviewField(`/sections/education/${i}/degree`, t('fieldDegree'), item.degree),
+    reviewField(`/sections/education/${i}/fieldOfStudy`, t('fieldMajor'), item.fieldOfStudy),
     reviewField(`/sections/education/${i}/gpa`, 'GPA', item.gpa),
   ] }))
-  cv.sections.projects.forEach((item, i) => items.push({ kind: 'projects', path: `/sections/projects/${i}`, title: item.name || `Dự án ${i + 1}`, fields: [
-    reviewField(`/sections/projects/${i}/name`, 'Tên dự án', item.name),
-    reviewField(`/sections/projects/${i}/role`, 'Vai trò', item.role),
-    reviewField(`/sections/projects/${i}/highlights`, 'Mô tả', item.highlights),
+  cv.sections.projects.forEach((item, i) => items.push({ kind: 'projects', path: `/sections/projects/${i}`, title: item.name || t('projectNumbered', { n: i + 1 }), fields: [
+    reviewField(`/sections/projects/${i}/name`, t('fieldProjectName'), item.name),
+    reviewField(`/sections/projects/${i}/role`, t('fieldRole'), item.role),
+    reviewField(`/sections/projects/${i}/highlights`, t('fieldDescription'), item.highlights),
   ] }))
-  if (cv.sections.skills.length) items.push({ kind: 'skills', path: '/sections/skills', title: `Kỹ năng (${cv.sections.skills.length})`, fields: [] })
-  cv.sections.activities.forEach((item, i) => items.push({ kind: 'activities', path: `/sections/activities/${i}`, title: item.organization || `Hoạt động ${i + 1}`, fields: [
-    reviewField(`/sections/activities/${i}/organization`, 'Tổ chức', item.organization),
-    reviewField(`/sections/activities/${i}/role`, 'Vai trò', item.role),
-    reviewField(`/sections/activities/${i}/highlights`, 'Mô tả', item.highlights),
+  if (cv.sections.skills.length) items.push({ kind: 'skills', path: '/sections/skills', title: t('skillsCount', { n: cv.sections.skills.length }), fields: [] })
+  cv.sections.activities.forEach((item, i) => items.push({ kind: 'activities', path: `/sections/activities/${i}`, title: item.organization || t('activityNumbered', { n: i + 1 }), fields: [
+    reviewField(`/sections/activities/${i}/organization`, t('fieldOrganization'), item.organization),
+    reviewField(`/sections/activities/${i}/role`, t('fieldRole'), item.role),
+    reviewField(`/sections/activities/${i}/highlights`, t('fieldDescription'), item.highlights),
   ] }))
-  cv.sections.certifications.forEach((item, i) => items.push({ kind: 'certifications', path: `/sections/certifications/${i}`, title: item.name || `Chứng chỉ ${i + 1}`, fields: [
-    reviewField(`/sections/certifications/${i}/name`, 'Tên', item.name),
-    reviewField(`/sections/certifications/${i}/issuer`, 'Nơi cấp', item.issuer),
-    reviewField(`/sections/certifications/${i}/date`, 'Ngày', item.date),
+  cv.sections.certifications.forEach((item, i) => items.push({ kind: 'certifications', path: `/sections/certifications/${i}`, title: item.name || t('certificationNumbered', { n: i + 1 }), fields: [
+    reviewField(`/sections/certifications/${i}/name`, t('fieldName'), item.name),
+    reviewField(`/sections/certifications/${i}/issuer`, t('fieldIssuer'), item.issuer),
+    reviewField(`/sections/certifications/${i}/date`, t('fieldDate'), item.date),
   ] }))
-  if (cv.sections.languages.length) items.push({ kind: 'languages', path: '/sections/languages', title: `Ngoại ngữ (${cv.sections.languages.length})`, fields: [] })
+  if (cv.sections.languages.length) items.push({ kind: 'languages', path: '/sections/languages', title: t('languagesCount', { n: cv.sections.languages.length }), fields: [] })
   return { cv, items }
 }
 
@@ -185,33 +185,36 @@ export interface ResidualLeaf {
 }
 
 /** Nhãn tiếng Việt cho field KHÔNG nằm trong danh sách curated của `review.ts`. */
-const RAW_FIELD_LABELS: Record<string, string> = {
-  dob: 'Ngày sinh',
-  photo: 'Ảnh',
-  avatarUrl: 'Ảnh đại diện',
-  introduce: 'Giới thiệu',
-  startDate: 'Bắt đầu',
-  endDate: 'Kết thúc',
-  type: 'Hình thức',
-  url: 'Đường dẫn',
-  role: 'Vai trò',
-  period: 'Thời gian',
-  level: 'Trình độ',
-  canonical: 'Tên chuẩn hoá',
-  group: 'Nhóm',
-  label: 'Nhãn liên kết',
-  links: 'Liên kết',
+/** Khoá message chứ không phải chữ: bảng này ở tầng module, xem `REVIEW_KIND_KEYS`. */
+const RAW_FIELD_LABEL_KEYS: Record<string, MessageKey> = {
+  dob: 'fieldDob',
+  photo: 'fieldPhoto',
+  avatarUrl: 'fieldAvatar',
+  introduce: 'fieldIntroduce',
+  startDate: 'fieldStart',
+  endDate: 'fieldEnd',
+  type: 'fieldType',
+  url: 'fieldUrl',
+  role: 'fieldRole',
+  period: 'fieldPeriod',
+  level: 'fieldLevel',
+  canonical: 'fieldCanonical',
+  group: 'fieldGroup',
+  label: 'fieldLinkLabel',
+  links: 'fieldLinks',
 };
 
-function labelForRawPath(path: string): string {
+function labelForRawPath(path: string, t: (key: MessageKey) => string): string {
   const segments = path.split('/');
   const last = segments[segments.length - 1] ?? path;
   if (/^\d+$/.test(last)) {
     // Phần tử mảng (vd. ".../links/0") — dùng nhãn của khoá cha, không phải "0".
     const parent = segments[segments.length - 2];
-    return parent ? (RAW_FIELD_LABELS[parent] ?? parent) : path;
+    const key = parent ? RAW_FIELD_LABEL_KEYS[parent] : undefined;
+    return key ? t(key) : (parent ?? path);
   }
-  return RAW_FIELD_LABELS[last] ?? last;
+  const key = RAW_FIELD_LABEL_KEYS[last];
+  return key ? t(key) : last;
 }
 
 /**
@@ -238,22 +241,23 @@ function collectResidualLeaves(
   base: string,
   covered: Set<string>,
   out: ResidualLeaf[],
+  t: (key: MessageKey) => string,
 ): void {
   if (value === null || value === undefined) return;
   if (Array.isArray(value)) {
     const allPrimitive = value.every((v) => v === null || typeof v !== 'object');
     if (allPrimitive) {
       if (!covered.has(base) && value.length > 0) {
-        out.push({ path: base, label: labelForRawPath(base), value: value.map(String).join(', ') });
+        out.push({ path: base, label: labelForRawPath(base, t), value: value.map(String).join(', ') });
       }
       return;
     }
-    value.forEach((el, i) => collectResidualLeaves(el, `${base}/${i}`, covered, out));
+    value.forEach((el, i) => collectResidualLeaves(el, `${base}/${i}`, covered, out, t));
     return;
   }
   if (typeof value === 'object') {
     for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-      collectResidualLeaves(v, `${base}/${key}`, covered, out);
+      collectResidualLeaves(v, `${base}/${key}`, covered, out, t);
     }
     return;
   }
@@ -263,7 +267,7 @@ function collectResidualLeaves(
   // Ảnh có thể là chuỗi base64 dài hàng chục KB — in nguyên văn phá bố cục,
   // và độ dài chuỗi không phải thứ user cần đọc để biết "có ảnh hay không".
   const shown = (base.endsWith('/photo') || base.endsWith('/avatarUrl')) && text.length > 80 ? 'Có ảnh đính kèm' : text;
-  out.push({ path: base, label: labelForRawPath(base), value: shown });
+  out.push({ path: base, label: labelForRawPath(base, t), value: shown });
 }
 
 /**
@@ -556,7 +560,7 @@ export function ImportReviewRoute({
           const busy = busyItem === item.path;
           const covered = new Set(item.fields.map((f) => f.path));
           const residualLeaves: ResidualLeaf[] = [];
-          collectResidualLeaves(rawValueAt(profileData, item.path), item.path, covered, residualLeaves);
+          collectResidualLeaves(rawValueAt(profileData, item.path), item.path, covered, residualLeaves, t);
 
           return (
             <div
@@ -582,7 +586,7 @@ export function ImportReviewRoute({
                   className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition"
                 >
                   {!pending && <Check className="w-3.5 h-3.5" />}
-                  {busy ? 'Đang lưu…' : pending ? t('confirmItem') : 'Đã xác nhận'}
+                  {busy ? 'Đang lưu…' : pending ? t('confirmItem') : t('confirmed')}
                 </button>
               </div>
 
