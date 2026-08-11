@@ -87,6 +87,11 @@ providers:
         n_embd: 2560
         vocab_size: 248320
         ctx_size_runtime: 16384
+        # Trần output cho một lượt chat. Prompt cho phép tới 20 ops và đo thật
+        # một op ≈ 140 token, nên 1800 (giá trị ghim cứng cũ trong code) làm
+        # JSON bị cắt giữa chừng. 8192 = nửa ctx_size_runtime, nửa còn lại
+        # dành cho prompt.
+        max_output: 8192
         ctx_size_train: 262144   # còn rất nhiều dư địa để nâng
         n_gpu_layers: 99
         multimodal: true         # có mmproj-Qwen3.5-4B-F16.gguf → nhận ảnh
@@ -232,6 +237,7 @@ providers:
     models:
       v4:
         model_id: "deepseek-v4-flash"
+        max_output: 8192
         structured_output: json_object
         thinking: disabled       # Neura Plus ưu tiên tốc độ cho chat CV
 

@@ -2312,22 +2312,24 @@ type chatModelConfig struct {
 	MaxOutput        int    `yaml:"max_output"`
 }
 
-// defaultChatMaxOutput dùng khi model không khai `max_output`.
+// chatMaxOutputTokens đọc trần output từ config, KHÔNG có giá trị mặc định.
 //
-// Bản trước ghim cứng 1800 ở hai chỗ, và đó là gốc của hai lỗi thật: prompt cho
-// phép tới 20 ops, đo thật một op ≈ 140 token, nên một yêu cầu rộng cần ~2800
-// token và bị cắt giữa chừng thành JSON hỏng. Model reasoning còn tệ hơn — nó
-// tiêu ngân sách đó cho phần suy luận rồi trả về rỗng.
-const defaultChatMaxOutput = 8000
-
-// chatMaxOutputTokens: `max_output` của config, hoặc mặc định khi không khai.
-// Đây là TRẦN, không phải lượng bị tính tiền — nhà cung cấp chỉ tính token thật
-// sinh ra, nên để rộng an toàn hơn là để chật rồi nhận output cụt.
-func chatMaxOutputTokens(mc chatModelConfig) int {
-	if mc.MaxOutput > 0 {
-		return mc.MaxOutput
+// Bản trước ghim cứng 1800 ở hai chỗ trong code, và đó là gốc của hai lỗi thật:
+// prompt cho phép tới 20 ops, đo thật một op ≈ 140 token, nên một yêu cầu rộng
+// cần ~2800 token và bị cắt giữa chừng thành JSON hỏng; model reasoning thì
+// tiêu hết ngân sách đó cho phần suy luận rồi trả về rỗng.
+//
+// Thiếu `max_output` là lỗi cấu hình và phải nói ra. Một con số mặc định im
+// lặng chính là thứ vừa gây ra sự cố — nó nằm trong code nên không ai nhìn thấy
+// và không ai sửa được từ config.
+//
+// Đây là TRẦN, không phải lượng bị tính tiền: nhà cung cấp chỉ tính token thật
+// sinh ra.
+func chatMaxOutputTokens(mc chatModelConfig) (int, error) {
+	if mc.MaxOutput <= 0 {
+		return 0, fmt.Errorf("model %q thiếu max_output trong config.yml", mc.ModelID)
 	}
-	return defaultChatMaxOutput
+	return mc.MaxOutput, nil
 }
 type chatRuntimeConfig struct {
 	Providers struct {
@@ -2406,8 +2408,12 @@ func postLocalChat(ctx context.Context, messages []map[string]string, pc chatPro
 	if base == "" || mc.Port == 0 {
 		return "", fmt.Errorf("local model thiếu base_url hoặc port")
 	}
+	maxOutput, err := chatMaxOutputTokens(mc)
+	if err != nil {
+		return "", err
+	}
 	endpoint := strings.TrimRight(base, "/") + ":" + fmt.Sprint(mc.Port) + "/v1/chat/completions"
-	request := map[string]any{"model": mc.ModelID, "messages": messages, "temperature": 0.2, "max_tokens": chatMaxOutputTokens(mc), "response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "cv_chat_result", "schema": chatResponseSchema()}}}
+	request := map[string]any{"model": mc.ModelID, "messages": messages, "temperature": 0.2, "max_tokens": maxOutput, "response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "cv_chat_result", "schema": chatResponseSchema()}}}
 	return postChatCompletion(ctx, endpoint, request, "")
 }
 
@@ -2419,13 +2425,17 @@ func postCloudChat(ctx context.Context, messages []map[string]string, provider s
 	if key == "" {
 		return "", fmt.Errorf("thiếu secret %s cho %s", pc.APIKeyEnv, provider)
 	}
+	maxOutput, err := chatMaxOutputTokens(mc)
+	if err != nil {
+		return "", err
+	}
 	endpoint := strings.TrimRight(pc.BaseURL, "/") + "/chat/completions"
 	request := map[string]any{"model": mc.ModelID, "messages": messages}
 	if provider == "openai" && strings.HasPrefix(mc.ModelID, "gpt-5") {
-		request["max_completion_tokens"] = chatMaxOutputTokens(mc)
+		request["max_completion_tokens"] = maxOutput
 	} else {
 		request["temperature"] = 0.2
-		request["max_tokens"] = chatMaxOutputTokens(mc)
+		request["max_tokens"] = maxOutput
 	}
 	if provider == "openai" && strings.HasPrefix(mc.ModelID, "gpt-5") {
 		// OpenAI's strict subset rejects the polymorphic patch schema; the

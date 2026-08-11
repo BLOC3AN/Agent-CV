@@ -565,14 +565,42 @@ func TestParseChatModelOutputKeepsPlainTextReply(t *testing.T) {
 // suy luận và trả về rỗng. `config.yml` khai `max_output` nhưng code không hề
 // đọc — con số trong config chỉ là trang trí.
 func TestChatMaxOutputComesFromConfig(t *testing.T) {
-	if got := chatMaxOutputTokens(chatModelConfig{MaxOutput: 32000}); got != 32000 {
-		t.Fatalf("phải dùng max_output của config, nhận %d", got)
+	got, err := chatMaxOutputTokens(chatModelConfig{MaxOutput: 32000})
+	if err != nil || got != 32000 {
+		t.Fatalf("phải dùng max_output của config: got=%d err=%v", got, err)
 	}
-	if got := chatMaxOutputTokens(chatModelConfig{}); got != defaultChatMaxOutput {
-		t.Fatalf("thiếu cấu hình phải lùi về mặc định %d, nhận %d", defaultChatMaxOutput, got)
+}
+
+// Không có giá trị mặc định ghim trong code: thiếu `max_output` là lỗi cấu
+// hình và phải nói ra. Một con số mặc định im lặng chính là thứ đã gây ra
+// output cụt — 1800 ghim cứng, không ai thấy, không ai sửa được từ config.
+func TestChatMaxOutputRequiresConfig(t *testing.T) {
+	if _, err := chatMaxOutputTokens(chatModelConfig{ModelID: "x"}); err == nil {
+		t.Fatal("thiếu max_output phải báo lỗi thay vì lùi về một số ghim cứng")
 	}
-	// Mặc định phải đủ cho 20 ops mà prompt cho phép — 1800 thì không.
-	if defaultChatMaxOutput < 20*140 {
-		t.Fatalf("mặc định %d không đủ cho 20 ops", defaultChatMaxOutput)
+}
+
+// Mọi model dùng cho chat phải khai `max_output` trong config.yml, và phải đủ
+// cho 20 ops mà prompt cho phép (đo thật: ~140 token/op).
+func TestConfigDeclaresMaxOutputForChatModels(t *testing.T) {
+	// Trỏ thẳng vào config.yml của repo. Bản trước dùng `loadChatRuntimeConfig()`
+	// trần và t.Skip khi lỗi — test SKIP im lặng, tức là nó xanh kể cả khi
+	// config sai, đúng loại lưới không bắt được gì.
+	t.Setenv("HR_CONFIG_PATH", filepath.Join("..", "..", "..", "config.yml"))
+	cfg, err := loadChatRuntimeConfig()
+	if err != nil {
+		t.Fatalf("không đọc được config.yml của repo: %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		mc   chatModelConfig
+	}{
+		{"local.reasoner", cfg.Providers.Local.Models["reasoner"]},
+		{"deepseek.v4", cfg.Providers.DeepSeek.Models["v4"]},
+		{"openai.luna", cfg.Providers.OpenAI.Models["luna"]},
+	} {
+		if tc.mc.MaxOutput < 20*140 {
+			t.Errorf("%s: max_output=%d không đủ cho 20 ops", tc.name, tc.mc.MaxOutput)
+		}
 	}
 }
