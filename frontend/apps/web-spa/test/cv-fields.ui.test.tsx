@@ -76,6 +76,14 @@ describe('catalog-driven inline CV editing', () => {
     expect(screen.queryByText('Bản nháp chưa lưu')).not.toBeInTheDocument()
   })
 
+  it('uses ComponentTree as the only section control surface', () => {
+    render(<DraftEditor />)
+
+    expect(screen.queryByTitle('Chỉnh sửa phần này')).not.toBeInTheDocument()
+    expect(screen.queryByText('Chỉnh sửa: intro')).not.toBeInTheDocument()
+    expect(screen.getByRole('tree', { name: 'Cấu trúc CV' })).toBeInTheDocument()
+  })
+
   it('opens a canvas node from Space and preserves Escape cancellation', () => {
     render(<DraftEditor />)
 

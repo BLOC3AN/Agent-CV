@@ -23,6 +23,11 @@ export function getCVFieldDraftValue(draft: CV, node: LayoutNode, itemId: string
   validateCVFieldPlacement(key, node.type)
   const intro = draft.sections.intro
   if (node.type === 'header' || node.type === 'summary') {
+    if (key === 'fullName') return intro.fullName
+    if (key === 'title') return intro.title
+    if (key === 'email') return intro.email
+    if (key === 'phone') return intro.phone
+    if (key === 'summary') return intro.summary
     if (key === 'careerObjective') return intro.careerObjective ?? ''
     if (key === 'availability') return intro.availability ?? ''
     if (key === 'location') return intro.location
@@ -65,7 +70,7 @@ export function updateCVFieldDraft(draft: CV, node: LayoutNode, itemId: string |
   validateCVFieldPlacement(key, node.type)
   const text = typeof value === 'string' ? value : ''
   if (node.type === 'header' || node.type === 'summary') {
-    const field = key === 'careerObjective' ? 'careerObjective' : key === 'availability' ? 'availability' : key === 'location' ? 'location' : undefined
+    const field = key === 'fullName' ? 'fullName' : key === 'title' ? 'title' : key === 'email' ? 'email' : key === 'phone' ? 'phone' : key === 'summary' ? 'summary' : key === 'careerObjective' ? 'careerObjective' : key === 'availability' ? 'availability' : key === 'location' ? 'location' : undefined
     if (!field) return draft
     return { ...draft, sections: { ...draft.sections, intro: { ...draft.sections.intro, [field]: text } } }
   }

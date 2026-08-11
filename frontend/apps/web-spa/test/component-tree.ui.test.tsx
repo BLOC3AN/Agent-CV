@@ -53,6 +53,21 @@ describe('ComponentTree', () => {
     expect(onMoveItem).toHaveBeenCalledWith('experience', 'exp-1', 'exp-2')
   })
 
+  it('shows a drop placeholder while a node is dragged over a new position and clears it on cancel', () => {
+    renderTree()
+    const skillsHandle = screen.getByLabelText('Kéo Kỹ năng & Công nghệ')
+    const experienceRow = screen.getByRole('treeitem', { name: /Kinh nghiệm làm việc/i })
+
+    fireEvent.dragStart(skillsHandle)
+    fireEvent.dragOver(experienceRow)
+
+    expect(screen.getByTestId('component-tree-drop-placeholder')).toBeInTheDocument()
+    expect(skillsHandle).toHaveAttribute('data-dragging', 'true')
+
+    fireEvent.dragEnd(skillsHandle)
+    expect(screen.queryByTestId('component-tree-drop-placeholder')).not.toBeInTheDocument()
+  })
+
   it('selects, edits on double click, and hides a node through callbacks', () => {
     const { onEdit, onSelect, onSetNodeVisible } = renderTree()
     const experienceRow = screen.getByRole('treeitem', { name: /Kinh nghiệm làm việc/i })

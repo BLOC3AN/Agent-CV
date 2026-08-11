@@ -40,8 +40,9 @@ async function openHistory() {
 
 async function editName() {
   await screen.findByTestId('cv-editor')
-  fireEvent.click(screen.getAllByTitle('Chỉnh sửa phần này')[0]!)
-  fireEvent.change(screen.getByDisplayValue('Current name'), { target: { value: 'Unsaved name' } })
+  fireEvent.doubleClick(screen.getByTestId('cv-block-header'))
+  fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Unsaved name' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Cập nhật bản nháp' }))
 }
 
 describe('CV version history', () => {
@@ -189,7 +190,7 @@ describe('CV version history', () => {
 
     await openHistory()
 
-    expect(screen.getByDisplayValue('Unsaved name')).toBeInTheDocument()
+    expect(within(screen.getByTestId('cv-block-header')).getByText('Unsaved name', { exact: true })).toBeInTheDocument()
     expect(screen.getByText('Bản nháp chưa lưu')).toBeInTheDocument()
     expect(screen.getByText(/lưu hoặc bỏ thay đổi.*trước khi khôi phục/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Khôi phục phiên bản 4' })).toBeDisabled()

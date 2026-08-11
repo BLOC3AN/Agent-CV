@@ -39,8 +39,9 @@ function renderBuilder() {
 
 async function editName() {
   await screen.findByTestId('cv-editor')
-  fireEvent.click(screen.getAllByTitle('Chỉnh sửa phần này')[0]!)
-  fireEvent.change(screen.getByDisplayValue('A'), { target: { value: 'B' } })
+  fireEvent.doubleClick(screen.getByTestId('cv-block-header'))
+  fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'B' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Cập nhật bản nháp' }))
 }
 
 describe('CV editor explicit save workflow', () => {
@@ -165,7 +166,7 @@ describe('CV editor explicit save workflow', () => {
 
     await act(async () => settlement.resolve({ applied: 1, status: 'accepted', accepted: [0], rejected: [], selectedOps: [{ op: 'replace', path: '/sections/intro/title', value: 'AI title', rationale: 'Rõ hơn', grounding: { type: 'profile', ref: 'cv-1' } }] }))
 
-    expect(screen.getByDisplayValue('B')).toBeInTheDocument()
+    expect(within(screen.getByTestId('cv-block-header')).getByText('B', { exact: true })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Áp dụng vào CV' })).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent(/bản nháp đã thay đổi/i)
   })
@@ -236,14 +237,14 @@ describe('CV editor explicit save workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /tải pdf/i }))
     fireEvent.click(within(screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })).getByRole('button', { name: 'Hủy' }))
-    expect(screen.getByDisplayValue('B')).toBeInTheDocument()
+    expect(within(screen.getByTestId('cv-block-header')).getByText('B', { exact: true })).toBeInTheDocument()
     expect(assign).not.toHaveBeenCalled()
 
     fireEvent.click(await screen.findByRole('button', { name: /tải pdf/i }))
     fireEvent.click(within(screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })).getByRole('button', { name: /bỏ thay đổi và tải/i }))
     expect(commit).not.toHaveBeenCalled()
     expect(assign).toHaveBeenCalledWith('/print/cv-1?variant=presentation')
-    await waitFor(() => expect(screen.getByDisplayValue('A')).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByTestId('cv-block-header')).getByText('A', { exact: true })).toBeInTheDocument())
   })
 
   it('keeps AI provenance when a manual edit is mixed into the same draft', async () => {

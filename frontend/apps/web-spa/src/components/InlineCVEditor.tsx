@@ -14,6 +14,8 @@ interface InlineCVEditorProps {
 }
 
 function initialKeys(node: LayoutNode): string[] {
+  if (node.type === 'header') return ['fullName', 'title', 'email', 'phone', 'location']
+  if (node.type === 'summary') return ['summary', 'careerObjective', 'availability', 'location']
   if (node.type === 'experience') return ['role']
   if (node.type === 'projects') return ['name']
   if (node.type === 'education') return ['school']

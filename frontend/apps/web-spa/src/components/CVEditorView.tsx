@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { CV, CVDesign, CVLayout, LayoutNode } from '../types';
 import {
-  Edit2,
-  X,
   Check,
 } from 'lucide-react';
 import { PaginatedA4Document } from './PaginatedA4Document';
@@ -30,34 +28,7 @@ interface CVEditorViewProps {
   onRestoreVersion?: (revisionId: string) => Promise<void>;
 }
 
-/**
- * Ba mục có `highlights: string[]` — chỉ khay sửa "Kinh nghiệm làm việc"
- * đang có giao diện chỉnh sửa từng dòng (Task 8); dự án/hoạt động dùng chung
- * kiểu này để SP-3/SP-4 nối chat vào không phải đổi type lần nữa.
- */
-type BulletSection = 'experience' | 'projects' | 'activities';
 type InlineTarget = { node: LayoutNode; itemId?: string };
-
-function mapHighlights(
-  cv: CV,
-  section: BulletSection,
-  index: number,
-  fn: (lines: string[]) => string[],
-): CV {
-  const items = cv.sections[section].map((item, i) =>
-    i === index ? { ...item, highlights: fn(item.highlights) } : item,
-  );
-  return { ...cv, sections: { ...cv.sections, [section]: items } };
-}
-
-const setHighlight = (cv: CV, s: BulletSection, idx: number, line: number, value: string) =>
-  mapHighlights(cv, s, idx, (lines) => lines.map((l, i) => (i === line ? value : l)));
-
-const removeHighlight = (cv: CV, s: BulletSection, idx: number, line: number) =>
-  mapHighlights(cv, s, idx, (lines) => lines.filter((_, i) => i !== line));
-
-const addHighlight = (cv: CV, s: BulletSection, idx: number) =>
-  mapHighlights(cv, s, idx, (lines) => [...lines, '']);
 
 export const CVEditorView: React.FC<CVEditorViewProps> = ({
   cv,
@@ -75,17 +46,11 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 }) => {
   // Navigation & Edit state
   const [activeTab, setActiveTab] = useState<'SECTIONS' | 'DESIGN'>('SECTIONS');
-  const [editingSection, setEditingSection] = useState<string | null>(null);
   const [inlineTarget, setInlineTarget] = useState<InlineTarget | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyInvokerRef = React.useRef<HTMLButtonElement>(null);
   const layout = normalizeLayout(providedLayout ?? cv.layout);
-
-  const editNode = (nodeId: string) => {
-    const section = nodeId === 'header' || nodeId === 'summary' ? 'intro' : nodeId;
-    if (section !== 'footer') setEditingSection(section);
-  };
 
   const openInlineEditor = (nodeId: string, itemId?: string) => {
     const node = layout.nodes.find((candidate) => candidate.id === nodeId);
@@ -102,13 +67,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
   };
 
   const updateLayout = (next: CVLayout) => onUpdateLayout?.(next);
-
-  // Toggle active sections in CV
-  const toggleSectionActive = (sectionKey: keyof typeof cv.activeSections) => {
-    const nextVisible = !cv.activeSections[sectionKey];
-    const nodeTypes = sectionKey === 'intro' ? ['header', 'summary'] : [sectionKey];
-    updateLayout({ ...layout, nodes: layout.nodes.map((node) => nodeTypes.includes(node.type) ? { ...node, visible: nextVisible } : node) });
-  };
 
   // Update Design props
   const updateDesign = (field: keyof CVDesign, value: any) => {
@@ -202,64 +160,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {activeTab === 'SECTIONS' ? (
             <div className="space-y-4">
-              {/* Sections list with checks and edit icons */}
-              <div className="space-y-2">
-                {[
-                  { key: 'intro', label: 'Thông tin cá nhân' },
-                  { key: 'experience', label: 'Kinh nghiệm làm việc' },
-                  { key: 'projects', label: 'Dự án nổi bật' },
-                  { key: 'education', label: 'Học vấn & Bằng cấp' },
-                  { key: 'skills', label: 'Kỹ năng & Công nghệ' },
-                  { key: 'activities', label: 'Hoạt động & Ngoại khóa' },
-                  { key: 'certifications', label: 'Chứng chỉ chuyên môn' },
-                  { key: 'languages', label: 'Ngoại ngữ' },
-                ].map((item) => {
-                  const key = item.key as keyof typeof cv.activeSections;
-                  const isActive = cv.activeSections[key];
-
-                  return (
-                    <div
-                      key={key}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border transition ${
-                        editingSection === key
-                          ? 'bg-indigo-50/70 border-indigo-200'
-                          : 'bg-white border-slate-200/80 hover:border-slate-300'
-                      }`}
-                    >
-                      <div
-                        onClick={() => toggleSectionActive(key)}
-                        className="flex items-center space-x-2.5 cursor-pointer flex-1 select-none"
-                      >
-                        <div
-                          className={`w-4 h-4 rounded border flex items-center justify-center transition ${
-                            isActive
-                              ? 'bg-emerald-500 border-emerald-500 text-white'
-                              : 'bg-slate-100 border-slate-300 text-transparent'
-                          }`}
-                        >
-                          <Check className="w-3 h-3 stroke-[3]" />
-                        </div>
-                        <span
-                          className={`text-xs font-medium ${
-                            isActive ? 'text-slate-800' : 'text-slate-400 line-through'
-                          }`}
-                        >
-                          {item.label}
-                        </span>
-                      </div>
-
-                      <button
-                        onClick={() => setEditingSection(editingSection === key ? null : key)}
-                        className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
-                        title="Chỉnh sửa phần này"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
               <section aria-label="Bố cục CV" className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Bố cục CV</h3>
@@ -294,180 +194,6 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                 onDraftChange={onUpdateCV}
                 onClose={() => setInlineTarget(null)}
               />}
-
-              {/* Inline Form Editor Drawer for Selected Section */}
-              {editingSection && (
-                <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-2xs space-y-3 animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Chỉnh sửa: {editingSection}
-                    </h4>
-                    <button
-                      onClick={() => setEditingSection(null)}
-                      className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-200/60"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {editingSection === 'intro' && (
-                    <div className="space-y-2.5 text-xs">
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 uppercase mb-1">Họ và tên</label>
-                        <input
-                          type="text"
-                          value={cv.sections.intro.fullName}
-                          onChange={(e) =>
-                            onUpdateCV({
-                              ...cv,
-                              sections: {
-                                ...cv.sections,
-                                intro: { ...cv.sections.intro, fullName: e.target.value },
-                              },
-                            })
-                          }
-                          className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 uppercase mb-1">Chức danh / Title</label>
-                        <input
-                          type="text"
-                          value={cv.sections.intro.title}
-                          onChange={(e) =>
-                            onUpdateCV({
-                              ...cv,
-                              sections: {
-                                ...cv.sections,
-                                intro: { ...cv.sections.intro, title: e.target.value },
-                              },
-                            })
-                          }
-                          className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 uppercase mb-1">Email</label>
-                        <input
-                          type="text"
-                          value={cv.sections.intro.email}
-                          onChange={(e) =>
-                            onUpdateCV({
-                              ...cv,
-                              sections: {
-                                ...cv.sections,
-                                intro: { ...cv.sections.intro, email: e.target.value },
-                              },
-                            })
-                          }
-                          className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 uppercase mb-1">Giới thiệu bản thân</label>
-                        <textarea
-                          rows={3}
-                          value={cv.sections.intro.summary}
-                          onChange={(e) =>
-                            onUpdateCV({
-                              ...cv,
-                              sections: {
-                                ...cv.sections,
-                                intro: { ...cv.sections.intro, summary: e.target.value },
-                              },
-                            })
-                          }
-                          className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {editingSection === 'experience' && (
-                    <div className="space-y-3 text-xs">
-                      {cv.sections.experience.map((exp, idx) => {
-                        /*
-                         * Tên hỗ trợ tiếp cận (aria-label) của các nút gạch đầu dòng bên dưới
-                         * PHẢI phân biệt được từng mục, không chỉ từng dòng — khay này hiện
-                         * TẤT CẢ các mục kinh nghiệm cùng lúc, nên chỉ số dòng một mình sẽ
-                         * trùng giữa các mục (mục 1 và mục 2 đều có "dòng 1"). `idx` (chỉ số
-                         * mục, luôn khác nhau) đứng đầu để đảm bảo phân biệt tuyệt đối; tiêu
-                         * đề công việc (`exp.title`) chỉ là gợi ý đọc thêm — không dùng để
-                         * đảm bảo tính duy nhất, vì hai mục có thể trùng tiêu đề (dữ liệu mẫu
-                         * có hai vị trí đều tên "AI Engineer").
-                         */
-                        const itemLabel = `mục ${idx + 1}${exp.title ? ` (${exp.title})` : ''}`;
-                        return (
-                          <div key={exp.id} className="p-3 bg-white rounded-xl border border-slate-200 space-y-2 shadow-2xs">
-                            <input
-                              type="text"
-                              placeholder="Vị trí"
-                              value={exp.title}
-                              onChange={(e) => {
-                                const updated = [...cv.sections.experience];
-                                updated[idx].title = e.target.value;
-                                onUpdateCV({ ...cv, sections: { ...cv.sections, experience: updated } });
-                              }}
-                              className="w-full p-1.5 border border-slate-200 rounded font-bold text-xs focus:outline-none focus:border-indigo-500"
-                            />
-                            <input
-                              type="text"
-                              placeholder="Công ty"
-                              value={exp.company}
-                              onChange={(e) => {
-                                const updated = [...cv.sections.experience];
-                                updated[idx].company = e.target.value;
-                                onUpdateCV({ ...cv, sections: { ...cv.sections, experience: updated } });
-                              }}
-                              className="w-full p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
-                            />
-                            <div className="flex flex-col gap-2">
-                              {exp.highlights.map((line, i) => (
-                                <div key={i} className="flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    aria-label={`Gạch đầu dòng ${i + 1} — ${itemLabel}`}
-                                    value={line}
-                                    onChange={(e) =>
-                                      onUpdateCV(setHighlight(cv, 'experience', idx, i, e.target.value))
-                                    }
-                                    className="flex-1 p-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:border-indigo-500"
-                                  />
-                                  <button
-                                    type="button"
-                                    aria-label={`Xoá gạch đầu dòng ${i + 1} — ${itemLabel}`}
-                                    onClick={() => onUpdateCV(removeHighlight(cv, 'experience', idx, i))}
-                                    className="text-slate-400 hover:text-red-600"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
-                              <button
-                                type="button"
-                                aria-label={`Thêm gạch đầu dòng — ${itemLabel}`}
-                                onClick={() => onUpdateCV(addHighlight(cv, 'experience', idx))}
-                                className="self-start text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
-                              >
-                                + Thêm gạch đầu dòng
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {editingSection !== 'intro' && editingSection !== 'experience' && (
-                    <p className="text-xs text-slate-500 italic">
-                      Đang chỉnh sửa dữ liệu của {editingSection}. Các thay đổi hiển thị thời gian thực trên bản A4.
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
           ) : (
             /* DESIGN TAB */

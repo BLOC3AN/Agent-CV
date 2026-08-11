@@ -170,8 +170,9 @@ describe('bản đồ URL', () => {
 
     // Resetting back to the loaded layout is intentionally clean; make a real
     // content edit so this save assertion exercises an explicit draft commit.
-    fireEvent.click(screen.getAllByTitle('Chỉnh sửa phần này')[0]!)
-    fireEvent.change(screen.getByDisplayValue('Legacy candidate'), { target: { value: 'Saved candidate' } })
+    fireEvent.doubleClick(screen.getByTestId('cv-block-header'))
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Saved candidate' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật bản nháp' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
     await waitFor(() => expect(commit).toHaveBeenCalledTimes(1))
@@ -193,7 +194,9 @@ describe('bản đồ URL', () => {
     await waitFor(() => expect(restore).toHaveBeenCalledWith('cv-structured', 'revision-1', 2))
     expect(await screen.findByText('Restored candidate')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByDisplayValue('Restored candidate'), { target: { value: 'Discarded candidate' } })
+    fireEvent.doubleClick(screen.getByTestId('cv-block-header'))
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Discarded candidate' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật bản nháp' }))
     await act(async () => { await router.navigate('/cv') })
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Thay đổi chưa lưu' })).getByRole('button', { name: 'Bỏ thay đổi' }))
     expect(await screen.findByTestId('view-my-cvs')).toBeInTheDocument()
