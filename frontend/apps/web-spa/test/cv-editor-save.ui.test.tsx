@@ -43,6 +43,13 @@ async function editName() {
 }
 
 describe('CV editor explicit save workflow', () => {
+  it('renders exactly one PDF download action in the editor', async () => {
+    renderBuilder()
+    await screen.findByTestId('cv-editor')
+
+    expect(screen.getAllByRole('button', { name: /tải pdf/i })).toHaveLength(1)
+  })
+
   it('saves the draft with Ctrl+S without opening the browser save dialog', async () => {
     const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({ cv: envelope({ ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'B' } } }) } as never)
     renderBuilder()

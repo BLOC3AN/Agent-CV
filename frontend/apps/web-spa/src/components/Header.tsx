@@ -3,7 +3,6 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   Eye,
   Share2,
-  Download,
   User,
   HelpCircle,
   ChevronDown,
@@ -14,14 +13,12 @@ import { useLocale } from '../lib/i18n';
 interface HeaderProps {
   onOpenPreview?: () => void;
   onOpenShare?: () => void;
-  onDownloadPDF?: () => void;
   onOpenUpload?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenPreview,
   onOpenShare,
-  onDownloadPDF,
   onOpenUpload,
 }) => {
   const location = useLocation();
@@ -106,15 +103,6 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Share2 className="w-4 h-4 text-slate-500" />
               <span>{t('share')}</span>
-            </button>
-
-            <button
-              onClick={onDownloadPDF}
-              id="btn-header-download"
-              className="inline-flex items-center space-x-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-xs"
-            >
-              <Download className="w-4 h-4 text-white" />
-              <span>{t('download')}</span>
             </button>
 
             <div className="h-5 w-px bg-slate-200 mx-1 hidden sm:block"></div>
