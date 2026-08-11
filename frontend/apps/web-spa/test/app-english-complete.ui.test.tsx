@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { DashboardRoute } from '../src/routes/DashboardRoute'
 import { MyCVsRoute } from '../src/routes/MyCVsRoute'
 import { Sidebar } from '../src/components/Sidebar'
@@ -16,6 +16,10 @@ import { LoginPage } from '../src/routes/LoginPage'
 import { NewCVRoute } from '../src/routes/NewCVRoute'
 import { UploadModal } from '../src/components/UploadModal'
 import { ShareModal } from '../src/components/ShareModal'
+import { ImportRoute } from '../src/routes/ImportRoute'
+import { GuidedRoute } from '../src/routes/GuidedRoute'
+import { ImportReviewRoute } from '../src/routes/ImportReviewRoute'
+import { ChatPanel } from '../src/components/ChatPanel'
 
 /** Fixture toàn tiếng Anh, nên mọi dấu tiếng Việt còn lại đều là chữ giao diện. */
 const summary = { id: 'cv-1', title: 'Resume', updatedAt: '2026-08-10T09:00:00Z' }
@@ -132,5 +136,73 @@ describe('giao diện tiếng Anh — các màn hình còn lại', () => {
     const { container } = renderInEnglish(<ShareModal isOpen onClose={() => undefined} cvTitle="Resume" />)
 
     expect(vietnameseIn(container)).toEqual([])
+  })
+})
+
+describe('giao diện tiếng Anh — luồng import và trợ lý', () => {
+  it('màn tải CV lên không còn tiếng Việt', async () => {
+    const { container } = renderInEnglish(
+      <ImportRoute uploadCV={async () => ({ jobId: 'job-1' } as never)} getJob={async () => ({ id: 'job-1', status: 'queued' } as never)} />,
+    )
+    await screen.findByTestId('import-file-input')
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+
+  it('khởi tạo có hướng dẫn không còn tiếng Việt', async () => {
+    const { container } = renderInEnglish(<GuidedRoute />)
+    await screen.findByRole('heading', { level: 1 })
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+})
+
+describe('giao diện tiếng Anh — rà soát import và trợ lý AI', () => {
+  it('màn rà soát import không còn tiếng Việt', async () => {
+    // Route đọc `jobId` từ URL và phân biệt `ready`, nên phải dựng đúng đường
+    // dẫn chứ không bọc trần trong MemoryRouter.
+    const review = {
+      ready: true,
+      jobId: 'job-1',
+      profileId: 'profile-1',
+      profile: {
+        schemaVersion: 2, id: 'cv-1', title: 'Resume', lastModified: '2026-08-10T00:00:00Z', language: 'en',
+        sections: {
+          intro: { fullName: 'Alex Tran', title: 'Engineer', email: 'alex@example.com', phone: '', location: '', summary: 'Builds systems' },
+          education: [], experience: [], projects: [], skills: [], activities: [], certifications: [], languages: [],
+        },
+        _meta: { source: 'pdf_import', verified: {} },
+      },
+      progress: { done: 0, total: 1, complete: false, pending: ['/sections/intro'] },
+    } as never
+    const router = createMemoryRouter([
+      { path: '/import/:jobId/review', element: (
+        <ImportReviewRoute
+          getImportReview={async () => review}
+          patchProfile={async () => ({}) as never}
+          verifyProfile={async () => ({}) as never}
+          completeImport={async () => ({}) as never}
+        />
+      ) },
+    ], { initialEntries: ['/import/job-1/review'] })
+    const { container } = render(
+      <LocaleProvider><BuilderLocaleProvider><RouterProvider router={router} /></BuilderLocaleProvider></LocaleProvider>,
+    )
+    await screen.findByRole('heading', { level: 1 })
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+
+  it('trợ lý AI không còn tiếng Việt', async () => {
+    const { container } = renderInEnglish(
+      <ChatPanel profileId="profile-1" cvId="cv-1" cv={profileSnapshot} layout={undefined as never} draftVersion={0} onApplyAIProposal={() => undefined} onClose={() => undefined} />,
+    )
+    await screen.findByRole('button', { name: /gửi|send/i })
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
   })
 })

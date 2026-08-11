@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useLocale, type MessageKey } from '../lib/i18n'
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, Check } from 'lucide-react';
-import { CVSchema, REVIEW_LABELS, type CV, type ReviewField, type ReviewItem } from '@hr/schema';
+import { CVSchema, type CV, type ReviewField, type ReviewItem, type ReviewKind } from '@hr/schema';
 import {
   ApiError,
   type CompleteImportResult,
@@ -10,6 +11,22 @@ import {
   type PatchProfileResult,
   type VerifyProfileResult,
 } from '../lib/api';
+
+/*
+ * `REVIEW_LABELS` của `@hr/schema` chỉ có tiếng Việt, và nó là gói dùng chung
+ * với hợp đồng backend nên không phải chỗ để nhét bảng dịch giao diện. Ánh xạ
+ * sang khoá message ở đây, tại tầng UI.
+ */
+const REVIEW_KIND_KEYS: Record<ReviewKind, MessageKey> = {
+  intro: 'reviewKindIntro',
+  education: 'reviewKindEducation',
+  experience: 'reviewKindExperience',
+  projects: 'reviewKindProjects',
+  skills: 'reviewKindSkills',
+  activities: 'reviewKindActivities',
+  certifications: 'reviewKindCertifications',
+  languages: 'reviewKindLanguages',
+}
 
 type GetImportReviewFn = (jobId: string) => Promise<ImportReview>;
 type PatchProfileFn = (profileId: string, ops: JSONPatchOp[]) => Promise<PatchProfileResult>;
@@ -46,17 +63,23 @@ function reviewField(path: string, label: string, value: unknown): ReviewField {
   return { path, label, value: text, empty: text.trim() === '' }
 }
 
-/** Review contract for the v2 document stored in profiles.data. */
-function buildV2ReviewItems(raw: unknown): { cv: CV; items: ReviewItem[] } {
+/**
+ * Review contract for the v2 document stored in profiles.data.
+ *
+ * Nhận `t` qua tham số vì hàm nằm ở tầng module, ngoài mọi component — không
+ * gọi hook được, và nhúng chữ tiếng Việt vào đây thì màn rà soát sẽ luôn nói
+ * tiếng Việt kể cả khi người dùng đã chuyển sang tiếng Anh.
+ */
+function buildV2ReviewItems(raw: unknown, t: (key: MessageKey) => string): { cv: CV; items: ReviewItem[] } {
   const cv = CVSchema.parse(raw)
   const items: ReviewItem[] = [{
-    kind: 'intro', path: '/sections/intro', title: cv.sections.intro.fullName || 'Thông tin cá nhân',
+    kind: 'intro', path: '/sections/intro', title: cv.sections.intro.fullName || t('sectionIntro'),
     fields: [
-      reviewField('/sections/intro/fullName', 'Họ tên', cv.sections.intro.fullName),
-      reviewField('/sections/intro/title', 'Chức danh', cv.sections.intro.title),
+      reviewField('/sections/intro/fullName', t('fieldFullName'), cv.sections.intro.fullName),
+      reviewField('/sections/intro/title', t('fieldTitle'), cv.sections.intro.title),
       reviewField('/sections/intro/email', 'Email', cv.sections.intro.email),
-      reviewField('/sections/intro/phone', 'Điện thoại', cv.sections.intro.phone),
-      reviewField('/sections/intro/location', 'Địa điểm', cv.sections.intro.location),
+      reviewField('/sections/intro/phone', t('fieldPhone'), cv.sections.intro.phone),
+      reviewField('/sections/intro/location', t('fieldLocation'), cv.sections.intro.location),
     ],
   }]
   cv.sections.experience.forEach((item, i) => items.push({ kind: 'experience', path: `/sections/experience/${i}`, title: `${item.title || 'Vị trí'} — ${item.company || ''}`.trim(), fields: [
@@ -193,13 +216,13 @@ function labelForRawPath(path: string): string {
 
 /**
  * Duyệt phần dữ liệu THÔ nằm dưới `item.path` mà `buildReviewItems` KHÔNG đưa
- * vào `item.fields`, để hiển thị (CHỈ XEM) trước khi user bấm "Đúng rồi".
+ * vào `item.fields`, để hiển thị (CHỈ XEM) trước khi user bấm {t('confirmItem')}.
  *
  * Vì sao đây không phải là tính năng phụ (Finding 2, review vòng 1): khi user
  * xác nhận một mục, `verifyProfile` ghi `_meta.verified[item.path] = true` —
  * và theo đúng ngữ nghĩa mà `reviewContract` (server.go) đọc lại, đó là xác
  * nhận cho CẢ SUBTREE tại pointer đó, không chỉ những field đang hiển thị
- * trong `item.fields`. Trước bản vá này, một cú "Đúng rồi" cho
+ * trong `item.fields`. Trước bản vá này, một cú {t('confirmItem')} cho
  * `/sections/experience/0` âm thầm xác nhận luôn `startDate`/`endDate` — và
  * với `/sections/intro`, âm thầm
  * xác nhận cả `dob`/`photo`, hai field PII (`PII_PATHS`, `packages/schema/
@@ -247,7 +270,7 @@ function collectResidualLeaves(
  * Màn hình cho `/import/:jobId/review` (UC-22) — chặng BẮT BUỘC giữa
  * `/import` (Task 6) và builder. `_meta.verified` chỉ có nghĩa nếu không có
  * đường vòng nào quanh màn này: mọi mục bắt đầu CHƯA xác nhận (BR-22.1), nút
- * "Hoàn tất" khoá tới khi hết.
+ * {t('finishReview')} khoá tới khi hết.
  *
  * Điều kiện mở khoá đọc CẢ HAI: cờ `progress.complete` do CHÍNH SERVER trả về
  * (`getImportReview`/`reviewContract`, server.go) VÀ số mục còn "pending" mà
@@ -265,7 +288,7 @@ function collectResidualLeaves(
  * != true`, xem server.go dòng ~1410) — component này chỉ phản ánh đúng luật
  * đó ra giao diện, không phải là chốt chặn duy nhất. Kể cả người dùng gõ
  * thẳng URL vào một job chưa xử lý xong (`ready: false`) hay một link cũ, màn
- * hình vẫn không hiện nút "Hoàn tất" cho tới khi có `progress` hợp lệ.
+ * hình vẫn không hiện nút {t('finishReview')} cho tới khi có `progress` hợp lệ.
  */
 export function ImportReviewRoute({
   getImportReview,
@@ -273,6 +296,7 @@ export function ImportReviewRoute({
   verifyProfile,
   completeImport,
 }: ImportReviewRouteProps) {
+  const { t } = useLocale();
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
 
@@ -291,14 +315,14 @@ export function ImportReviewRoute({
   // (textarea một dòng/phần tử) — có thể khác bản gốc nếu user đang gõ.
   const [edited, setEdited] = useState<Record<string, string>>({});
   // Giá trị đã THỰC SỰ được gửi lên server lần gần nhất (bản gốc lúc tải, hoặc
-  // sau lần "Đúng rồi" gần nhất) — so với `edited` để biết field nào còn sửa
+  // sau lần {t('confirmItem')} gần nhất) — so với `edited` để biết field nào còn sửa
   // dở dang chưa gửi, kể cả khi mục chứa nó đã từng được xác nhận trước đó.
   const [savedValues, setSavedValues] = useState<Record<string, string>>({});
 
   // Mục đã lưu (patch+verify) THÀNH CÔNG trong phiên này nhưng lần tải lại
   // `progress` sau đó có thể chưa phản ánh kịp (xem Minor 3, review vòng 1) —
   // chỉ dùng để KHÔNG hiện nhầm "chưa xác nhận" cho một mục vừa lưu thật; nút
-  // "Hoàn tất" vẫn khoá theo `progress.complete` của server, không đọc cờ này.
+  // {t('finishReview')} vẫn khoá theo `progress.complete` của server, không đọc cờ này.
   const [optimisticVerified, setOptimisticVerified] = useState<Set<string>>(new Set());
 
   const [busyItem, setBusyItem] = useState<string | undefined>();
@@ -318,7 +342,7 @@ export function ImportReviewRoute({
         setPhase('pending');
         return;
       }
-      const { cv, items: builtItems } = buildV2ReviewItems(review.profile);
+      const { cv, items: builtItems } = buildV2ReviewItems(review.profile, t);
       const initialValues: Record<string, string> = {};
       for (const item of builtItems) {
         for (const field of item.fields) {
@@ -352,7 +376,7 @@ export function ImportReviewRoute({
     return editKindFor(rawValueAt(profileData, path));
   }
 
-  /** Field của một mục đã sửa nhưng chưa gửi qua lần "Đúng rồi" nào gần nhất. */
+  /** Field của một mục đã sửa nhưng chưa gửi qua lần {t('confirmItem')} nào gần nhất. */
   function touchedFieldPaths(item: ReviewItem): string[] {
     return item.fields
       .filter((field) => editKindForField(field.path) !== 'readonly')
@@ -371,7 +395,7 @@ export function ImportReviewRoute({
   const serverPendingPaths = new Set(progress?.pending ?? items.map((i) => i.path));
   function isItemPending(item: ReviewItem): boolean {
     // Sửa dở dang chưa gửi luôn tính là pending, bất kể server nói gì —
-    // "Hoàn tất" không được mở khoá trong lúc một sửa còn nằm trên form.
+    // {t('finishReview')} không được mở khoá trong lúc một sửa còn nằm trên form.
     if (touchedFieldPaths(item).length > 0) return true;
     if (optimisticVerified.has(item.path)) return false;
     return serverPendingPaths.has(item.path);
@@ -441,7 +465,7 @@ export function ImportReviewRoute({
     // Điều kiện mở khoá đọc lại từ CHÍNH dữ liệu server báo về — gọi lại
     // getImportReview thay vì tự cộng dồn một biến đếm cục bộ. Nếu lời gọi
     // này hỏng, mục vẫn hiện đã lưu (nhờ `optimisticVerified` ở trên) nhưng
-    // "Hoàn tất" vẫn khoá vì `progress` chưa cập nhật — `refreshError` giải
+    // {t('finishReview')} vẫn khoá vì `progress` chưa cập nhật — `refreshError` giải
     // thích đúng lý do và cho thử tải lại, không lẫn với lỗi lưu.
     await refreshProgress();
   }
@@ -497,11 +521,8 @@ export function ImportReviewRoute({
   return (
     <div className="p-6 md:p-10 space-y-6">
       <div className="space-y-1">
-        <h1 className="text-xl font-bold text-slate-900">Rà soát dữ liệu trước khi tạo CV</h1>
-        <p className="text-sm text-slate-600">
-          Hệ thống đọc được các mục dưới đây từ file bạn tải lên — đây vẫn chỉ là PHỎNG ĐOÁN của máy cho tới
-          khi bạn xác nhận từng mục.
-        </p>
+        <h1 className="text-xl font-bold text-slate-900">{t('reviewTitle')}</h1>
+        <p className="text-sm text-slate-600">{t('reviewIntro')}</p>
       </div>
 
       <div
@@ -512,8 +533,8 @@ export function ImportReviewRoute({
         }
       >
         {pendingCount > 0
-          ? `Còn ${pendingCount} mục chưa xác nhận — xác nhận từng mục bên dưới để mở khoá nút "Hoàn tất".`
-          : 'Đã xác nhận xong tất cả — có thể bấm "Hoàn tất" để tạo CV.'}
+          ? t('reviewPending', { n: pendingCount })
+          : t('reviewAllConfirmed')}
       </div>
 
       {refreshError && (
@@ -550,7 +571,7 @@ export function ImportReviewRoute({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-violet-600">
-                    {REVIEW_LABELS[item.kind]}
+                    {t(REVIEW_KIND_KEYS[item.kind])}
                   </div>
                   <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
                 </div>
@@ -561,7 +582,7 @@ export function ImportReviewRoute({
                   className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition"
                 >
                   {!pending && <Check className="w-3.5 h-3.5" />}
-                  {busy ? 'Đang lưu…' : pending ? 'Đúng rồi' : 'Đã xác nhận'}
+                  {busy ? 'Đang lưu…' : pending ? t('confirmItem') : 'Đã xác nhận'}
                 </button>
               </div>
 
@@ -579,7 +600,7 @@ export function ImportReviewRoute({
                           id={inputId}
                           value={edited[field.path] ?? ''}
                           onChange={(e) => handleFieldChange(field.path, e.target.value)}
-                          placeholder={field.empty ? 'Chưa có — điền vào đây' : undefined}
+                          placeholder={field.empty ? t('emptyFieldPlaceholder') : undefined}
                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-violet-400 focus:outline-none"
                         />
                       )}
@@ -605,9 +626,7 @@ export function ImportReviewRoute({
 
               {residualLeaves.length > 0 && (
                 <div className="rounded-lg bg-slate-50 border border-slate-100 p-3 space-y-1.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Các trường khác trong mục này — xác nhận sẽ tính luôn (chỉ xem)
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('reviewOtherFields')}</p>
                   <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
                     {residualLeaves.map((leaf) => (
                       <div key={leaf.path} className="flex items-baseline justify-between gap-2 text-xs">
@@ -635,7 +654,7 @@ export function ImportReviewRoute({
           disabled={!canFinish || completing}
           className="ml-auto px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition"
         >
-          {completing ? 'Đang hoàn tất…' : 'Hoàn tất'}
+          {completing ? 'Đang hoàn tất…' : t('finishReview')}
         </button>
       </div>
     </div>

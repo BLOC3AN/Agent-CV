@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocale } from '../lib/i18n'
 import { useNavigate } from 'react-router-dom';
 import { Upload, AlertCircle } from 'lucide-react';
 import { ApiError, type Job, type UploadCVResult } from '../lib/api';
@@ -69,6 +70,7 @@ function nextPollDelay(attempt: number, baseMs: number): number {
  * `lucide-react`) được giữ lại tinh thần, nhưng đánh máy lại trực tiếp ở đây.
  */
 export function ImportRoute({ uploadCV, getJob, pollIntervalMs = 2000 }: ImportRouteProps) {
+  const { t } = useLocale()
   const navigate = useNavigate();
   const [jobId, setJobId] = useState<string | undefined>();
   const [status, setStatus] = useState<string | undefined>();
@@ -185,17 +187,15 @@ export function ImportRoute({ uploadCV, getJob, pollIntervalMs = 2000 }: ImportR
 
   return (
     <div className="p-10 text-center space-y-4">
-      <h1 className="text-xl font-bold text-slate-900">Tải CV lên</h1>
-      <p className="text-sm text-slate-600">
-        Chọn một file PDF — hệ thống sẽ đọc và điền sẵn dữ liệu để bạn duyệt lại.
-      </p>
+      <h1 className="text-xl font-bold text-slate-900">{t('uploadCVStepTitle')}</h1>
+      <p className="text-sm text-slate-600">{t('uploadCVStepHint')}</p>
       <label
         htmlFor="import-file-input"
         className="mx-auto block max-w-sm cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center transition hover:border-violet-400"
       >
         <Upload className="w-8 h-8 text-violet-600 mx-auto mb-2" />
         <span className="text-sm font-medium text-slate-700">
-          {uploading ? 'Đang tải lên…' : 'Kéo thả hoặc chọn file CV (PDF)'}
+          {uploading ? 'Đang tải lên…' : t('dropOrPickPDF')}
         </span>
         <input
           id="import-file-input"

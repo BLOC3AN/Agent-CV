@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { useLocale } from '../lib/i18n'
 import { Bot, Check, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
 import type { CV, CVLayout } from '../types'
 import { applyChatOpsToDraft } from '../lib/cv-patch'
@@ -22,13 +23,18 @@ const models: { ref: ModelRef; label: string }[] = [
   { ref: 'openai.luna', label: 'Neura Pro' },
 ]
 
-const quickActions = [
-  'Tối ưu kinh nghiệm',
-  'Rút gọn giới thiệu',
-  'Sửa lỗi chính tả',
-  'Viết lại kỹ năng',
-  'Tạo tóm tắt',
-  'Gợi ý cải thiện',
+/*
+ * Giữ dạng KHOÁ chứ không phải chữ đã dịch: danh sách này ở tầng module, chạy
+ * một lần lúc nạp file, nên nhúng chữ vào đây sẽ đóng băng ngôn ngữ của lần
+ * nạp đầu tiên và không đổi khi người dùng chuyển ngôn ngữ.
+ */
+const QUICK_ACTION_KEYS = [
+  'optimiseExperience',
+  'shortenSummary',
+  'fixSpelling',
+  'rewriteSkills',
+  'createSummary',
+  'suggestImprove',
 ] as const
 
 function readAt(root: unknown, pointer: string): unknown {
@@ -48,6 +54,7 @@ function display(value: unknown): string {
 }
 
 export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAIProposal, onClose }: Props) {
+  const { t } = useLocale()
   const effectiveLayout = layout ?? cv.layout ?? { version: 1 as const, nodes: [] }
   const effectiveDraftVersion = draftVersion ?? 0
   const currentDraftRef = useRef({ cv, layout: effectiveLayout, draftVersion: effectiveDraftVersion })
@@ -131,38 +138,38 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
   }
 
   return (
-    <section aria-label="Trợ lý AI HR-Agent" className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-xl">
+    <section aria-label={t('assistantTitle')} className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-xl">
       <header className="flex shrink-0 items-center justify-between bg-[#10132d] px-4 py-4 text-white">
         <div className="flex items-center gap-2">
           <Bot aria-hidden="true" className="h-5 w-5 text-violet-400" />
-          <h2 className="text-sm font-bold">Trợ lý AI HR-Agent</h2>
+          <h2 className="text-sm font-bold">{t('assistantTitle')}</h2>
         </div>
-        <button type="button" aria-label="Đóng trợ lý AI" onClick={onClose} className="rounded-lg p-1 text-slate-400 transition hover:bg-white/10 hover:text-white">
+        <button type="button" aria-label={t('closeAssistant')} onClick={onClose} className="rounded-lg p-1 text-slate-400 transition hover:bg-white/10 hover:text-white">
           <X className="h-4 w-4" />
         </button>
       </header>
 
       <div className="shrink-0 space-y-3 border-b border-slate-200 bg-slate-50 px-3.5 py-3.5">
         <div>
-          <label htmlFor="ai-model" className="mb-1 block text-[10px] font-semibold tracking-wider text-slate-500">MÔ HÌNH AI</label>
+          <label htmlFor="ai-model" className="mb-1 block text-[10px] font-semibold tracking-wider text-slate-500">{t('aiModel')}</label>
           <div className="relative">
-            <select id="ai-model" aria-label="MÔ HÌNH AI" value={modelRef} onChange={(e) => setModelRef(e.target.value as ModelRef)} className="w-full appearance-none rounded-xl border border-violet-600 bg-white px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-violet-200">
+            <select id="ai-model" aria-label={t('aiModel')} value={modelRef} onChange={(e) => setModelRef(e.target.value as ModelRef)} className="w-full appearance-none rounded-xl border border-violet-600 bg-white px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-violet-200">
               {models.map((model) => <option key={model.ref} value={model.ref}>{model.label}</option>)}
             </select>
             <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-2 h-4 w-4 text-slate-400" />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          {quickActions.map((action) => (
-            <button key={action} type="button" disabled={busy} onClick={() => void send(action)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50">
-              {action}
+          {QUICK_ACTION_KEYS.map((key) => (
+            <button key={key} type="button" disabled={busy} onClick={() => void send(t(key))} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50">
+              {t(key)}
             </button>
           ))}
         </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4 text-xs">
-        {!messages.length && <p className="text-slate-500">Chọn một gợi ý hoặc nhập yêu cầu để bắt đầu.</p>}
+        {!messages.length && <p className="text-slate-500">{t('pickSuggestion')}</p>}
         {messages.map((message, i) => (
           <div key={`${message.role}-${i}`} className={`flex flex-col gap-1 ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
             <div className={message.role === 'user' ? 'max-w-[90%] rounded-2xl rounded-br-md bg-violet-600 px-3 py-3 leading-relaxed text-white shadow-sm' : 'max-w-[95%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-3 leading-relaxed text-slate-700 shadow-sm'}>
@@ -180,8 +187,8 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
 
       <form onSubmit={(e) => { e.preventDefault(); const value = input; setInput(''); void send(value) }} className="shrink-0 border-t border-slate-200 bg-white p-3">
         <div className="relative flex items-center">
-          <input aria-label="Tin nhắn cho trợ lý" value={input} onChange={(e) => setInput(e.target.value)} disabled={busy} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-3 pr-20 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500" placeholder="Yêu cầu AI chỉnh sửa CV..." />
-          <div className="absolute right-1.5 flex items-center gap-1"><button type="button" aria-label="Nhập bằng giọng nói" className="rounded-lg p-1 text-slate-400 hover:text-slate-600"><Mic className="h-3.5 w-3.5" /></button><button aria-label="Gửi yêu cầu" disabled={busy || !input.trim()} className="rounded-lg bg-violet-600 p-1.5 text-white transition hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400"><Send className="h-3.5 w-3.5" /></button></div>
+          <input aria-label={t('messageToAssistant')} value={input} onChange={(e) => setInput(e.target.value)} disabled={busy} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-3 pr-20 text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500" placeholder={t('askAIPlaceholder')} />
+          <div className="absolute right-1.5 flex items-center gap-1"><button type="button" aria-label={t('voiceInput')} className="rounded-lg p-1 text-slate-400 hover:text-slate-600"><Mic className="h-3.5 w-3.5" /></button><button aria-label={t('sendRequest')} disabled={busy || !input.trim()} className="rounded-lg bg-violet-600 p-1.5 text-white transition hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400"><Send className="h-3.5 w-3.5" /></button></div>
         </div>
       </form>
     </section>
