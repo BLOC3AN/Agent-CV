@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { BuilderRoute } from '../src/routes/BuilderRoute'
 import { Header } from '../src/components/Header'
 import * as api from '../src/lib/api'
+import * as downloadPdf from '../src/lib/download-pdf'
 import type { CV, CVLayout } from '../src/types'
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 
@@ -27,10 +28,9 @@ function deferred<T>() {
 
 afterEach(() => vi.restoreAllMocks())
 
-/** happy-dom không cài sẵn `window.print`, nên phải dựng chỗ bám cho spy. */
-function spyOnPrint() {
-  if (typeof window.print !== 'function') Object.defineProperty(window, 'print', { value: () => undefined, writable: true, configurable: true })
-  return vi.spyOn(window, 'print').mockImplementation(() => undefined)
+/** Tải PDF thật đi qua máy chủ; test chỉ cần biết nó có được gọi hay không. */
+function spyOnDownload() {
+  return vi.spyOn(downloadPdf, 'downloadCVPDF').mockResolvedValue()
 }
 
 function renderBuilder() {
@@ -221,7 +221,7 @@ describe('CV editor explicit save workflow', () => {
     const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({
       cv: envelope({ ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'B' } } }),
     } as never)
-    const print = spyOnPrint()
+    const download = spyOnDownload()
     renderBuilder()
     await editName()
 
@@ -229,27 +229,27 @@ describe('CV editor explicit save workflow', () => {
 
     const dialog = screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })
     expect(commit).not.toHaveBeenCalled()
-    expect(print).not.toHaveBeenCalled()
+    expect(download).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button', { name: /lưu và tải/i }))
     await waitFor(() => expect(commit).toHaveBeenCalledTimes(1))
-    expect(print).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1))
   })
 
   it('can cancel download without changing the draft or discard it without committing', async () => {
     const commit = vi.spyOn(api, 'commitCV')
-    const print = spyOnPrint()
+    const download = spyOnDownload()
     renderBuilder()
     await editName()
 
     fireEvent.click(screen.getByRole('button', { name: /tải pdf/i }))
     fireEvent.click(within(screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })).getByRole('button', { name: 'Hủy' }))
     expect(within(screen.getByTestId('cv-block-header')).getByText('B', { exact: true })).toBeInTheDocument()
-    expect(print).not.toHaveBeenCalled()
+    expect(download).not.toHaveBeenCalled()
 
     fireEvent.click(await screen.findByRole('button', { name: /tải pdf/i }))
     fireEvent.click(within(screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })).getByRole('button', { name: /bỏ thay đổi và tải/i }))
     expect(commit).not.toHaveBeenCalled()
-    expect(print).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(within(screen.getByTestId('cv-block-header')).getByText('A', { exact: true })).toBeInTheDocument())
   })
 

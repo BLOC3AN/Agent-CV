@@ -1,7 +1,7 @@
 import express from 'express'
 import path from 'node:path'
 import { createApiProxy } from './proxy.js'
-import { createPrintHandler } from './print.js'
+import { createPrintHandler, createPrintPDFHandler } from './print.js'
 
 export interface AppOptions {
   backendURL: string
@@ -27,6 +27,8 @@ export async function createApp(options: AppOptions): Promise<express.Express> {
   const production = options.production ?? process.env.NODE_ENV === 'production'
 
   app.all('/api/*', createApiProxy(options.backendURL))
+  // `/pdf` khai trước cho dễ đọc; hai route khác số đoạn nên không giẫm nhau.
+  app.get('/print/:cvId/pdf', createPrintPDFHandler(options.backendURL))
   app.get('/print/:cvId', createPrintHandler(options.backendURL))
 
   if (options.serveApp === false) return app

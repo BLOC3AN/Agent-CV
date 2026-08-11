@@ -40,6 +40,19 @@ COPY --from=builder /app/node_modules       ./node_modules
 COPY --from=builder /app/apps/web-spa/dist  ./dist
 COPY --from=builder /app/packages/schema    ./packages/schema
 
+# Chromium cho `GET /print/:cvId/pdf`.
+#
+# Xuất PDF chạy chính trang in SSR qua chromium headless rồi `page.pdf()`, nên
+# bản tải về giữ nguyên text layer — ATS đọc được. Không có cách nào rẻ hơn cho
+# ra kết quả đó: thư viện PDF phía trình duyệt chỉ chụp ảnh trang, chữ thành
+# raster và máy quét ra rỗng.
+#
+# `--with-deps` kéo theo thư viện hệ thống chromium cần; `--ignore-scripts` ở
+# stage build đã bỏ qua bước tải trình duyệt nên phải gọi tường minh ở đây.
+# Image vì thế nặng thêm vài trăm MB — đó là cái giá của PDF có text layer.
+RUN ./node_modules/.bin/playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/*
+
 EXPOSE 3000
 ENV PORT=3000
 

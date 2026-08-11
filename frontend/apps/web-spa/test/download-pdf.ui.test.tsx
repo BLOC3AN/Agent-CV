@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { BuilderRoute } from '../src/routes/BuilderRoute'
 import { Header } from '../src/components/Header'
 import * as api from '../src/lib/api'
+import * as downloadPdf from '../src/lib/download-pdf'
 import type { CV, CVLayout } from '../src/types'
 import { DEFAULT_CV_LAYOUT } from '@hr/schema'
 
@@ -21,20 +22,10 @@ const envelope = (profileSnapshot = cv) => ({ id: 'cv-1', profileId: 'profile-1'
 
 afterEach(() => vi.restoreAllMocks())
 
-/**
- * happy-dom không cài sẵn `window.print`, nên phải dựng chỗ bám cho spy.
- *
- * Bề mặt in chỉ sống trong lúc in, nên mọi khẳng định về nó phải chụp lại NGAY
- * trong lệnh gọi — soi sau khi in xong thì nó đã bị gỡ.
- */
+/** happy-dom không cài sẵn `window.print`, nên phải dựng chỗ bám cho spy. */
 function spyOnPrint() {
-  const surfaces: { count: number; text: string }[] = []
   if (typeof window.print !== 'function') Object.defineProperty(window, 'print', { value: () => undefined, writable: true, configurable: true })
-  const spy = vi.spyOn(window, 'print').mockImplementation(() => {
-    const found = [...document.querySelectorAll<HTMLElement>('#cv-print-surface')]
-    surfaces.push({ count: found.length, text: found.map((element) => element.textContent ?? '').join('') })
-  })
-  return { spy, surfaces }
+  return vi.spyOn(window, 'print').mockImplementation(() => undefined)
 }
 
 function renderBuilder() {
@@ -56,61 +47,36 @@ async function editName() {
 }
 
 describe('nút "Tải PDF" trong trình sửa', () => {
-  it('mở hộp thoại in thay vì điều hướng đi nơi khác', async () => {
-    const { spy } = spyOnPrint()
-    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined)
+  it('lấy file PDF từ máy chủ về máy người dùng', async () => {
+    const download = vi.spyOn(downloadPdf, 'downloadCVPDF').mockResolvedValue()
     renderBuilder()
     await screen.findByTestId('cv-editor')
 
     clickDownload()
 
-    expect(spy).toHaveBeenCalledTimes(1)
-    expect(assign).not.toHaveBeenCalled()
+    await waitFor(() => expect(download).toHaveBeenCalledWith('cv-1'))
   })
 
   /*
-   * Quy tắc in ẩn `body *` rồi chỉ cho `#cv-print-surface` hiện lại. Không có
-   * bề mặt đó lúc in thì lệnh in ra giấy trắng — nên đây là một phần của tính
-   * năng, không phải chi tiết trang trí.
+   * `window.print()` chỉ mở hộp thoại in để người dùng tự lưu, và bị nuốt lặng
+   * lẽ trong tài liệu bị sandbox. Điều hướng sang trang in thì đá người dùng ra
+   * khỏi trình sửa mà vẫn không có file nào. Cả hai đều không phải "tải về".
    */
-  it('dựng đúng một bề mặt in, mang nội dung CV đang mở', async () => {
-    const { surfaces } = spyOnPrint()
+  it('không in và không điều hướng đi đâu cả', async () => {
+    const print = spyOnPrint()
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined)
+    vi.spyOn(downloadPdf, 'downloadCVPDF').mockResolvedValue()
     renderBuilder()
     await screen.findByTestId('cv-editor')
 
     clickDownload()
 
-    expect(surfaces).toHaveLength(1)
-    expect(surfaces[0]!.count).toBe(1)
-    expect(surfaces[0]!.text).toContain('A')
+    expect(print).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
   })
 
-  it('gỡ bề mặt in khỏi trang sau khi in xong', async () => {
-    spyOnPrint()
-    renderBuilder()
-    await screen.findByTestId('cv-editor')
-
-    clickDownload()
-
-    expect(document.querySelectorAll('#cv-print-surface')).toHaveLength(0)
-    // Bản sao còn sót lại sẽ nhân đôi mọi khối CV trên trang trình sửa.
-    expect(screen.getAllByTestId('cv-block-header')).toHaveLength(1)
-  })
-
-  it('không dựng bề mặt thứ hai khi popup xem trước đang mở', async () => {
-    const { surfaces } = spyOnPrint()
-    renderBuilder()
-    await screen.findByTestId('cv-editor')
-    fireEvent.click(screen.getByRole('button', { name: /xem trước/i }))
-
-    const dialog = screen.getByRole('dialog', { name: /xem trước cv/i })
-    fireEvent.click(within(dialog).getByRole('button', { name: /tải pdf/i }))
-
-    expect(surfaces[0]!.count).toBe(1)
-  })
-
-  it('vẫn hỏi rõ phiên bản khi bản nháp chưa lưu, và in sau khi lưu', async () => {
-    const { spy, surfaces } = spyOnPrint()
+  it('vẫn hỏi rõ phiên bản khi bản nháp chưa lưu, và tải sau khi lưu', async () => {
+    const download = vi.spyOn(downloadPdf, 'downloadCVPDF').mockResolvedValue()
     const commit = vi.spyOn(api, 'commitCV').mockResolvedValue({ cv: envelope({ ...cv, sections: { ...cv.sections, intro: { ...cv.sections.intro, fullName: 'Bản Nháp Chưa Lưu' } } }) } as never)
     renderBuilder()
     await editName()
@@ -118,12 +84,34 @@ describe('nút "Tải PDF" trong trình sửa', () => {
     clickDownload()
 
     const dialog = screen.getByRole('dialog', { name: /xuất pdf với thay đổi chưa lưu/i })
-    expect(spy).not.toHaveBeenCalled()
+    expect(download).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button', { name: /lưu và tải/i }))
 
     await waitFor(() => expect(commit).toHaveBeenCalledTimes(1))
-    expect(spy).toHaveBeenCalledTimes(1)
-    // Bản in phải mang đúng nội dung vừa lưu, không phải bản trước khi sửa.
-    expect(surfaces[0]!.text).toContain('Bản Nháp Chưa Lưu')
+    await waitFor(() => expect(download).toHaveBeenCalledWith('cv-1'))
+  })
+
+  it('báo lỗi ngay trong trình sửa khi máy chủ không dựng được PDF', async () => {
+    vi.spyOn(downloadPdf, 'downloadCVPDF').mockRejectedValue(new api.ApiError(500, 'Không dựng được PDF'))
+    renderBuilder()
+    await screen.findByTestId('cv-editor')
+
+    clickDownload()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/không dựng được pdf/i)
+    expect(screen.getByTestId('cv-editor')).toBeTruthy()
+  })
+
+  /*
+   * Bề mặt in là bản sao đầy đủ của CV. Gắn nó thường trực vào trình sửa sẽ
+   * nhân đôi mọi `data-cv-node-id` và chi phí render sau mỗi phím gõ — một lần
+   * thử cách đó đã làm đỏ 19 test.
+   */
+  it('không gắn bản sao CV nào vào trang trình sửa', async () => {
+    renderBuilder()
+    await screen.findByTestId('cv-editor')
+
+    expect(document.querySelectorAll('#cv-print-surface')).toHaveLength(0)
+    expect(screen.getAllByTestId('cv-block-header')).toHaveLength(1)
   })
 })
