@@ -120,7 +120,12 @@ function nodeFrame(context: RenderContext, children: React.ReactNode, element: '
       className={context.node.type === 'header'
         ? context.variant === 'print' ? 'cv-header' : 'mb-6 pb-4 border-b border-slate-200 relative'
         : undefined}
-      style={{ fontFamily: 'var(--cv-font-family)' }}
+      style={{
+        fontFamily: 'var(--cv-font-family)',
+        ...(context.node.type !== 'header' && context.node.type !== 'footer'
+          ? { fontSize: 'var(--cv-body-size)', lineHeight: 'inherit' }
+          : {}),
+      }}
       {...interactiveProps(context)}
     >
       {children}
@@ -165,7 +170,7 @@ function renderSummary(context: RenderContext) {
   if (!intro.summary && !intro.careerObjective && !(fallbackAvailability && intro.availability) && !(fallbackLocation && intro.location)) return null
   const fallbackContact = fallbackLocation && <>{intro.website && <p><span data-cv-field="website">{intro.website}</span></p>}{intro.avatarUrl && <img className="cv-avatar" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}</>
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</section>)
-  return nodeFrame(context, <div className="mb-6 text-slate-700 leading-relaxed" style={{ fontSize: 'var(--cv-body-size)' }}>{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</div>)
+  return nodeFrame(context, <div className="mb-6 text-slate-700" style={{ fontSize: 'inherit', lineHeight: 'inherit' }}>{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</div>)
 }
 
 function renderExperience(context: RenderContext) {

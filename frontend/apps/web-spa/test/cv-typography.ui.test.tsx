@@ -50,7 +50,7 @@ describe('CV typography controls', () => {
 
   it('keeps Intro body content on the shared body-size variable', () => {
     renderEditor()
-    const summary = screen.getByTestId('cv-block-summary').querySelector(':scope > div') as HTMLElement
+    const summary = screen.getByTestId('cv-block-summary') as HTMLElement
     expect(summary.style.fontSize).toBe('var(--cv-body-size)')
   })
 
@@ -63,6 +63,10 @@ describe('CV typography controls', () => {
     const experience = screen.getByTestId('cv-block-experience') as HTMLElement
     expect(summary.style.fontFamily).toBe('var(--cv-font-family)')
     expect(experience.style.fontFamily).toBe('var(--cv-font-family)')
+    expect(summary.style.fontSize).toBe('var(--cv-body-size)')
+    expect(experience.style.fontSize).toBe('var(--cv-body-size)')
+    expect(summary.style.lineHeight).toBe('inherit')
+    expect(experience.style.lineHeight).toBe('inherit')
     expect(document.querySelector('#a4-cv-paper') as HTMLElement).toHaveStyle('--cv-font-family: "Times New Roman", Times, serif')
   })
 
