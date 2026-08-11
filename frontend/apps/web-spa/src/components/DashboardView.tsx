@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLocale } from '../lib/i18n';
 import { CV } from '../types';
 import {
   ArrowRight,
@@ -26,6 +27,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenUploadModal,
   userEmail = 'tester',
 }) => {
+  const { t } = useLocale();
   const navigate = useNavigate();
   const [showCompletionDetails, setShowCompletionDetails] = useState(false);
   const userName = userEmail.split('@')[0];
@@ -37,22 +39,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Welcome Title */}
       <div className="bg-gradient-to-r from-[#11142d] via-[#25004f] to-[#11142d] p-6 md:p-8 rounded-2xl border border-slate-800 text-white shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6 min-h-[183px]">
         <div>
-          <span className="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-400/30 rounded-full text-[11px] font-semibold text-indigo-300 uppercase mb-2 tracking-wider">
-            XIN CHÀO MỪNG
-          </span>
+          <span className="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-400/30 rounded-full text-[11px] font-semibold text-indigo-300 uppercase mb-2 tracking-wider">{t('welcomeBadge')}</span>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-            Chào buổi sáng, {userName}! 👋
+            {t('greetingMorning')} {userName}! 👋
           </h1>
-          <p className="text-slate-300 font-normal text-xs md:text-sm mt-1 max-w-xl">
-            Tiếp tục tối ưu hóa hồ sơ năng lực của bạn theo chuẩn ATS doanh nghiệp với sự trợ giúp từ AI.
-          </p>
+          <p className="text-slate-300 font-normal text-xs md:text-sm mt-1 max-w-xl">{t('dashboardIntro')}</p>
         </div>
         <button
           onClick={onOpenUploadModal}
           className="px-5 py-2.5 bg-violet-700 hover:bg-violet-600 text-white font-semibold text-xs rounded-xl shadow-xs transition flex items-center space-x-2 shrink-0"
         >
           <Upload className="w-4 h-4" />
-          <span>Tải CV lên ngay</span>
+          <span>{t('uploadCVNow')}</span>
         </button>
       </div>
 
@@ -77,26 +75,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               A4 FORMAT
             </div>
             <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition flex items-center justify-center p-2">
-              <span className="text-xs font-medium text-white bg-indigo-600 px-2.5 py-1 rounded-lg">
-                Chỉnh sửa
-              </span>
+              <span className="text-xs font-medium text-white bg-indigo-600 px-2.5 py-1 rounded-lg">{t('editShort')}</span>
             </div>
           </div>
 
           {/* Details */}
           <div className="flex-1 space-y-3 text-center sm:text-left">
             <div>
-              <span className="inline-block px-2.5 py-0.5 bg-indigo-50 border border-indigo-100 rounded-md text-[10px] font-semibold text-indigo-700 uppercase mb-1">
-                CV đang chỉnh sửa
-              </span>
+              <span className="inline-block px-2.5 py-0.5 bg-indigo-50 border border-indigo-100 rounded-md text-[10px] font-semibold text-indigo-700 uppercase mb-1">{t('cvBeingEdited')}</span>
               <h3 className="text-xl font-bold text-slate-900 mt-0.5">
-                {activeCV ? activeCV.sections.intro.fullName || activeCV.title : 'Bạn chưa có CV nào'}
+                {activeCV ? activeCV.sections.intro.fullName || activeCV.title : t('noCVYet')}
               </h3>
               <p className="text-xs font-medium text-slate-600">
-                {activeCV ? activeCV.sections.intro.title || 'Hồ sơ chuyên nghiệp' : 'Tạo CV đầu tiên để bắt đầu'}
+                {activeCV ? activeCV.sections.intro.title || t('professionalProfile') : t('createFirstCVToStart')}
               </p>
               <p className="text-[11px] text-slate-400 mt-1">
-                {activeCV ? `Lần sửa gần nhất: ${activeCV.lastModified}` : 'Tạo CV trắng hoặc tải CV hiện có lên.'}
+                {activeCV ? t('lastEdited', { at: activeCV.lastModified }) : t('blankOrUpload')}
               </p>
             </div>
 
@@ -106,7 +100,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 id="btn-tiep-tuc-chinh-cv"
                 className="inline-flex items-center space-x-2 px-4 py-2 bg-violet-700 hover:bg-violet-800 text-white font-semibold text-xs rounded-xl shadow-xs transition"
               >
-                <span>{hasCV ? 'Sửa CV ngay' : 'Tạo CV đầu tiên'}</span>
+                <span>{hasCV ? t('editCVNow') : t('createFirstCV')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
 
@@ -114,9 +108,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 onClick={() => navigate('/cv')}
                 id="btn-tat-ca-cv"
                 className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 transition"
-              >
-                Tất cả CV
-              </button>
+              >{t('allCVs')}</button>
             </div>
           </div>
         </div>
@@ -125,15 +117,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <span className="inline-block px-2.5 py-0.5 bg-emerald-50 border border-emerald-100 rounded-md text-[10px] font-semibold text-emerald-700 uppercase mb-1">
-                ĐIỂM CHUẨN ATS
-              </span>
-              <h3 className="text-lg font-bold text-slate-900">
-                Độ hoàn thiện hồ sơ
-              </h3>
-              <p className="text-xs text-slate-500 max-w-xs">
-                Mở chi tiết để xem phần nào đã đủ và gợi ý cải thiện từ AI.
-              </p>
+              <span className="inline-block px-2.5 py-0.5 bg-emerald-50 border border-emerald-100 rounded-md text-[10px] font-semibold text-emerald-700 uppercase mb-1">{t('atsBenchmark')}</span>
+              <h3 className="text-lg font-bold text-slate-900">{t('profileCompleteness')}</h3>
+              <p className="text-xs text-slate-500 max-w-xs">{t('completenessHint')}</p>
             </div>
 
             {/* Score Pill */}
@@ -142,9 +128,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="text-2xl font-extrabold text-emerald-700 leading-none">
                   {hasCV ? '85%' : '0%'}
                 </span>
-                <span className="text-[9px] font-semibold text-emerald-600 uppercase tracking-wider mt-1">
-                  ĐẠT CHUẨN
-                </span>
+                <span className="text-[9px] font-semibold text-emerald-600 uppercase tracking-wider mt-1">{t('meetsStandard')}</span>
               </div>
             </div>
           </div>
@@ -154,7 +138,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="flex items-center space-x-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span className="font-semibold text-slate-800">
-                  {hasCV ? `${cvCount} CV đang được quản lý` : 'Chưa có hồ sơ để đánh giá'}
+                  {hasCV ? t('managedCVs', { n: cvCount }) : t('noProfileToScore')}
                 </span>
               </div>
               <button
@@ -162,7 +146,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 id="btn-gom-nhung-gi"
                 className="text-indigo-600 hover:text-indigo-700 font-semibold text-xs flex items-center space-x-1"
               >
-                <span>Chi tiết</span>
+                <span>{t('details')}</span>
                 <Info className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -178,20 +162,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {showCompletionDetails && (
               <div className="mt-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-2">
                 <div className="flex justify-between text-slate-700">
-                  <span>✓ Thông tin liên hệ & Giới thiệu</span>
-                  <span className="text-emerald-600 font-semibold">Đã đủ</span>
+                  <span>{t('checkContact')}</span>
+                  <span className="text-emerald-600 font-semibold">{t('covered')}</span>
                 </div>
                 <div className="flex justify-between text-slate-700">
-                  <span>✓ Kinh nghiệm làm việc</span>
-                  <span className="text-emerald-600 font-semibold">Đã đủ</span>
+                  <span>{t('checkExperience')}</span>
+                  <span className="text-emerald-600 font-semibold">{t('covered')}</span>
                 </div>
                 <div className="flex justify-between text-slate-700">
-                  <span>✓ Kỹ năng & Công nghệ core</span>
-                  <span className="text-emerald-600 font-semibold">Đã đủ</span>
+                  <span>{t('checkSkills')}</span>
+                  <span className="text-emerald-600 font-semibold">{t('covered')}</span>
                 </div>
                 <div className="flex justify-between text-slate-700">
-                  <span>⚠ Bổ sung chứng chỉ MLOps / Deep Learning</span>
-                  <span className="text-amber-600 font-semibold">Khuyên dùng</span>
+                  <span>{t('checkCertifications')}</span>
+                  <span className="text-amber-600 font-semibold">{t('recommended')}</span>
                 </div>
               </div>
             )}
@@ -205,12 +189,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <Sparkles className="w-5 h-5" />
         </div>
         <div className="flex-1">
-          <span className="inline-block px-2 py-0.5 bg-indigo-100/80 rounded text-[10px] font-semibold text-indigo-800 uppercase tracking-wider">
-            GỢI Ý TỪ AI TRỢ LÝ
-          </span>
-          <p className="text-xs md:text-sm font-medium text-slate-700 mt-1">
-            Thêm số liệu đo lường cụ thể vào các dự án (ví dụ: % tối ưu latency, doanh thu, quy mô team) — con số chính là điểm cộng lớn nhất với nhà tuyển dụng!
-          </p>
+          <span className="inline-block px-2 py-0.5 bg-indigo-100/80 rounded text-[10px] font-semibold text-indigo-800 uppercase tracking-wider">{t('aiTipBadge')}</span>
+          <p className="text-xs md:text-sm font-medium text-slate-700 mt-1">{t('aiTip')}</p>
         </div>
       </div>
 
@@ -218,9 +198,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Card 1: Đối chiếu gần đây */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            ĐỐI CHIẾU VIỆC LÀM GẦN ĐÂY
-          </h3>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('recentMatching')}</h3>
 
           <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-200/80">
             <div className="flex items-center space-x-3">
@@ -228,16 +206,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 AI
               </div>
               <div>
-                <h4 className="font-semibold text-slate-900 text-sm">
-                  Vị trí AI Engineer / Edge AI
-                </h4>
-                <span className="text-xs text-slate-500">55 phút trước</span>
+                <h4 className="font-semibold text-slate-900 text-sm">{t('sampleRole')}</h4>
+                <span className="text-xs text-slate-500">{t('minutesAgo', { n: 55 })}</span>
               </div>
             </div>
 
             <div className="text-right bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100">
               <span className="text-lg font-bold text-emerald-700">88%</span>
-              <p className="text-[9px] text-emerald-600 font-medium uppercase">Tương thích</p>
+              <p className="text-[9px] text-emerald-600 font-medium uppercase">{t('compatible')}</p>
             </div>
           </div>
 
@@ -246,16 +222,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             id="btn-xem-phan-tich-chi-tiet"
             className="inline-flex items-center space-x-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition"
           >
-            <span>Phân tích chi tiết JD</span>
+            <span>{t('analyzeJD')}</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
         {/* Card 2: Hành động nhanh */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            HÀNH ĐỘNG NHANH
-          </h3>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('quickActions')}</h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
@@ -267,10 +241,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Plus className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-semibold text-slate-900 text-xs block">
-                  Tạo CV mới
-                </span>
-                <span className="text-[11px] text-slate-500">Mẫu chuẩn ATS</span>
+                <span className="font-semibold text-slate-900 text-xs block">{t('createNewCV')}</span>
+                <span className="text-[11px] text-slate-500">{t('atsTemplate')}</span>
               </div>
             </button>
 
@@ -283,9 +255,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Upload className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-semibold text-slate-900 text-xs block">
-                  Tải CV lên
-                </span>
+                <span className="font-semibold text-slate-900 text-xs block">{t('uploadCV')}</span>
                 <span className="text-[11px] text-slate-500">PDF, DOCX, TXT</span>
               </div>
             </button>

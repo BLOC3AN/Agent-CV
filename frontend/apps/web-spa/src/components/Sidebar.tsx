@@ -96,9 +96,7 @@ export const Sidebar: React.FC = () => {
           <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
           <span>HR-Agent Pro v2.4</span>
         </div>
-        <p className="text-[11px] text-slate-500 leading-normal">
-          Mô hình chạy nội bộ, tối ưu CV theo chuẩn ATS. Dữ liệu cá nhân không rời máy chủ.
-        </p>
+        <p className="text-[11px] text-slate-500 leading-normal">{t('sidebarNote')}</p>
       </div>
     </aside>
   );
