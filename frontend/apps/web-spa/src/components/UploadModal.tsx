@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocale } from '../lib/i18n';
 import { Upload, X, FileText, CheckCircle2 } from 'lucide-react';
 
 interface UploadModalProps {
@@ -8,6 +9,7 @@ interface UploadModalProps {
 }
 
 export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onUploadSuccess }) => {
+  const { t } = useLocale()
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
 
@@ -42,7 +44,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onUpl
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
           <h3 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
             <Upload className="w-5 h-5 text-indigo-600" />
-            <span>Tải CV lên hệ thống</span>
+            <span>{t('uploadCVTitle')}</span>
           </h3>
           <button
             onClick={onClose}
@@ -87,10 +89,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onUpl
               </div>
             ) : (
               <div>
-                <p className="text-sm font-medium text-slate-700">
-                  Kéo thả file CV vào đây hoặc <span className="text-indigo-600 font-semibold underline">chọn từ máy tính</span>
+                <p className="text-sm font-medium text-slate-700">{t('dragDropHint')}<span className="text-indigo-600 font-semibold underline">{t('chooseFromComputer')}</span>
                 </p>
-                <p className="text-xs text-slate-400 mt-1">Hỗ trợ định dạng PDF, DOCX, TXT hoặc JSON</p>
+                <p className="text-xs text-slate-400 mt-1">{t('supportedFormats')}</p>
               </div>
             )}
           </label>
@@ -100,16 +101,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onUpl
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
-          >
-            Hủy
-          </button>
+          >{t('cancel')}</button>
           <button
             onClick={handleConfirmUpload}
             disabled={!fileName}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold text-xs rounded-xl transition shadow-xs"
-          >
-            Tạo & Chỉnh sửa CV
-          </button>
+          >{t('createAndEdit')}</button>
         </div>
       </div>
     </div>

@@ -10,13 +10,20 @@
  */
 const VIETNAMESE = /[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/i
 
+/**
+ * Tên ngôn ngữ luôn viết bằng chính ngôn ngữ đó — "Tiếng Việt" trong danh sách
+ * chọn là ĐÚNG kể cả khi giao diện đang tiếng Anh, giống như "English" không bị
+ * dịch sang tiếng Việt. Đây là ngoại lệ duy nhất, cố ý liệt kê tường minh.
+ */
+const ENDONYMS = new Set(['Tiếng Việt'])
+
 /** Văn bản người dùng nhìn thấy, tách theo từng text node để chỉ đúng chỗ sai. */
 export function vietnameseIn(root: HTMLElement): string[] {
   return [...root.querySelectorAll<HTMLElement>('*')]
     .flatMap((element) => [...element.childNodes])
     .filter((node) => node.nodeType === Node.TEXT_NODE)
     .map((node) => node.textContent?.trim() ?? '')
-    .filter((text) => text && VIETNAMESE.test(text))
+    .filter((text) => text && !ENDONYMS.has(text) && VIETNAMESE.test(text))
 }
 
 /**
@@ -26,5 +33,5 @@ export function vietnameseIn(root: HTMLElement): string[] {
 export function vietnameseLabelsIn(root: HTMLElement): string[] {
   return [...root.querySelectorAll<HTMLElement>('[aria-label], [title], [placeholder]')]
     .flatMap((element) => ['aria-label', 'title', 'placeholder'].map((name) => element.getAttribute(name) ?? ''))
-    .filter((value) => value && VIETNAMESE.test(value))
+    .filter((value) => value && !ENDONYMS.has(value) && VIETNAMESE.test(value))
 }

@@ -204,6 +204,62 @@ export const vi = {
   minutesAgo: '{n} phút trước',
   hoursAgo: '{n} giờ trước',
   daysAgo: '{n} ngày trước',
+
+  // Cài đặt
+  accountSettings: 'Cài đặt tài khoản',
+  settingsHint: 'Quản lý phiên đăng nhập và dữ liệu CV.',
+  deleteAccount: 'Xoá tài khoản',
+  deleteAccountPermanently: 'Xoá tài khoản vĩnh viễn',
+  deleteAccountWarning: 'Thao tác này xoá vĩnh viễn tài khoản và toàn bộ CV, không thể khôi phục.',
+  enterEmailToConfirm: 'Nhập email để xác nhận',
+
+  // Đối chiếu việc làm
+  jdAnalysis: 'Phân tích JD',
+  pickCV: 'Chọn CV',
+  analyzeAction: 'Phân tích',
+  pasteJD: 'Dán JD (ít nhất 50 ký tự)',
+
+  // Mẫu CV
+  templateLibrary: 'THƯ VIỆN GIAO DIỆN',
+  templatesTitle: 'Mẫu CV chuyên nghiệp (CV Templates)',
+  templatesHint: 'Chọn mẫu CV đẹp mắt được chứng nhận chuẩn ATS bởi các chuyên gia tuyển dụng nhân sự.',
+  templateModern: 'Hiện Đại (Modern)',
+  templateModernHint: 'Thiết kế bố cục chuẩn A4 phẳng, thanh lịch với điểm nhấn chỉn chu nổi bật các dự án & kỹ năng cốt lõi.',
+  templateModernBadge: 'Phổ biến cho Tech & AI',
+  templateClassic: 'Kinh Điển (Classic)',
+  templateClassicHint: 'Bố cục 1 cột truyền thống, tối ưu quét ATS cho các tập đoàn đa quốc gia và tổ chức tài chính.',
+  templateClassicBadge: 'Tập đoàn & Ngân hàng',
+  templateProfessional: 'Chuyên Gia (Professional)',
+  templateProfessionalHint: 'Bố cục tinh gọn, làm nổi bật thành tựu quản lý, dẫn dắt đội ngũ và quá trình thăng tiến.',
+  useTemplate: 'Sử dụng mẫu này',
+
+  // Kho tri thức
+  knowledgeBase: 'Kho tri thức',
+  kbHint: 'Curator duyệt nguồn trước khi lời khuyên được trích dẫn.',
+  noKBSources: 'Chưa có nguồn KB.',
+
+  // Đăng nhập
+  signIn: 'Đăng nhập',
+  loginHint: 'Nhập email, chúng tôi gửi cho bạn một đường dẫn đăng nhập. Không cần mật khẩu.',
+  sendLoginLink: 'Gửi link đăng nhập',
+
+  // Tạo CV mới
+  blankCVHint: 'Bắt đầu một CV trống, chỉnh sửa trong trình soạn thảo.',
+  createCV: 'Tạo CV',
+
+  // Tải CV lên
+  uploadCVTitle: 'Tải CV lên hệ thống',
+  dragDropHint: 'Kéo thả file CV vào đây hoặc',
+  chooseFromComputer: 'chọn từ máy tính',
+  supportedFormats: 'Hỗ trợ định dạng PDF, DOCX, TXT hoặc JSON',
+  createAndEdit: 'Tạo & Chỉnh sửa CV',
+
+  // Chia sẻ
+  shareCVLink: 'Chia sẻ liên kết CV',
+  shareHint: 'Liên kết này cho phép nhà tuyển dụng xem trực tuyến bản CV công khai của bạn ở định dạng A4 chuẩn.',
+  copy: 'Sao chép',
+  jobDescription: 'Mô tả công việc',
+  analyzing: 'Đang phân tích…',
 } as const
 
 export type MessageKey = keyof typeof vi

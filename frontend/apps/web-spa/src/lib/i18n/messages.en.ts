@@ -184,4 +184,52 @@ export const en: Record<MessageKey, string> = {
   minutesAgo: '{n} minutes ago',
   hoursAgo: '{n} hours ago',
   daysAgo: '{n} days ago',
+
+  accountSettings: 'Account settings',
+  settingsHint: 'Manage your sign-in session and CV data.',
+  deleteAccount: 'Delete account',
+  deleteAccountPermanently: 'Delete account permanently',
+  deleteAccountWarning: 'This permanently deletes your account and every CV in it. It cannot be undone.',
+  enterEmailToConfirm: 'Type your email to confirm',
+
+  jdAnalysis: 'JD analysis',
+  pickCV: 'Pick a CV',
+  analyzeAction: 'Analyse',
+  pasteJD: 'Paste the job description (at least 50 characters)',
+
+  templateLibrary: 'TEMPLATE LIBRARY',
+  templatesTitle: 'Professional CV templates',
+  templatesHint: 'Pick a polished template, certified ATS-ready by recruiting specialists.',
+  templateModern: 'Modern',
+  templateModernHint: 'A flat, elegant A4 layout with careful accents that bring projects and core skills forward.',
+  templateModernBadge: 'Popular for Tech & AI',
+  templateClassic: 'Classic',
+  templateClassicHint: 'A traditional single-column layout, tuned for ATS scanning at multinationals and financial institutions.',
+  templateClassicBadge: 'Corporates & banking',
+  templateProfessional: 'Professional',
+  templateProfessionalHint: 'A lean layout that highlights management results, team leadership and career progression.',
+  useTemplate: 'Use this template',
+
+  knowledgeBase: 'Knowledge base',
+  kbHint: 'A curator reviews each source before its advice can be cited.',
+  noKBSources: 'No knowledge sources yet.',
+
+  signIn: 'Sign in',
+  loginHint: 'Enter your email and we will send you a sign-in link. No password needed.',
+  sendLoginLink: 'Send sign-in link',
+
+  blankCVHint: 'Start from a blank CV and shape it in the editor.',
+  createCV: 'Create CV',
+
+  uploadCVTitle: 'Upload a CV',
+  dragDropHint: 'Drop a CV file here, or',
+  chooseFromComputer: 'choose from your computer',
+  supportedFormats: 'Supports PDF, DOCX, TXT and JSON',
+  createAndEdit: 'Create & edit CV',
+
+  shareCVLink: 'Share CV link',
+  shareHint: 'This link lets recruiters view your public CV online in standard A4 format.',
+  copy: 'Copy',
+  jobDescription: 'Job description',
+  analyzing: 'Analysing…',
 }

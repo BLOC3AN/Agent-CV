@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useLocale } from '../lib/i18n'
 import { Navigate, useLocation } from 'react-router-dom';
 import { ApiError, requestLogin } from '../lib/api';
 import { useSession } from '../lib/session';
 
 export function LoginPage() {
+  const { t } = useLocale()
   const { status } = useSession();
   const location = useLocation();
   const [email, setEmail] = useState('');
@@ -38,10 +40,8 @@ export function LoginPage() {
     <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
       <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-5">
         <div className="space-y-1">
-          <h1 className="text-xl font-bold text-slate-900">Đăng nhập</h1>
-          <p className="text-xs text-slate-500">
-            Nhập email, chúng tôi gửi cho bạn một đường dẫn đăng nhập. Không cần mật khẩu.
-          </p>
+          <h1 className="text-xl font-bold text-slate-900">{t('signIn')}</h1>
+          <p className="text-xs text-slate-500">{t('loginHint')}</p>
         </div>
 
         <form onSubmit={submit} className="space-y-3">
@@ -61,7 +61,7 @@ export function LoginPage() {
             disabled={sending}
             className="w-full px-4 py-2.5 bg-violet-700 hover:bg-violet-800 disabled:opacity-60 text-white font-semibold text-xs rounded-xl transition"
           >
-            {sending ? 'Đang gửi…' : 'Gửi link đăng nhập'}
+            {sending ? 'Đang gửi…' : t('sendLoginLink')}
           </button>
         </form>
 

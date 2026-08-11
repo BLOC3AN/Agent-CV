@@ -8,6 +8,14 @@ import { Sidebar } from '../src/components/Sidebar'
 import { LocaleProvider, BuilderLocaleProvider } from '../src/lib/i18n'
 import { vietnameseIn, vietnameseLabelsIn } from './helpers/vietnamese'
 import * as api from '../src/lib/api'
+import { SettingsRoute } from '../src/routes/SettingsRoute'
+import { AnalyzeRoute } from '../src/routes/AnalyzeRoute'
+import { TemplatesView } from '../src/components/TemplatesView'
+import { KBRoute } from '../src/routes/KBRoute'
+import { LoginPage } from '../src/routes/LoginPage'
+import { NewCVRoute } from '../src/routes/NewCVRoute'
+import { UploadModal } from '../src/components/UploadModal'
+import { ShareModal } from '../src/components/ShareModal'
 
 /** Fixture toàn tiếng Anh, nên mọi dấu tiếng Việt còn lại đều là chữ giao diện. */
 const summary = { id: 'cv-1', title: 'Resume', updatedAt: '2026-08-10T09:00:00Z' }
@@ -64,5 +72,65 @@ describe('giao diện tiếng Anh — ngoài trình sửa', () => {
 
     expect(vietnameseIn(container)).toEqual([])
     expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+})
+
+describe('giao diện tiếng Anh — các màn hình còn lại', () => {
+  it('cài đặt không còn tiếng Việt', async () => {
+    const { container } = renderInEnglish(<SettingsRoute />)
+    await screen.findByRole('heading', { level: 1 })
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+
+  it('đối chiếu việc làm không còn tiếng Việt', async () => {
+    vi.spyOn(api, 'listCVs').mockResolvedValue([summary])
+    const { container } = renderInEnglish(<AnalyzeRoute />)
+    await screen.findByRole('button', { name: /phân tích|analyse|analyze/i })
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+
+  it('mẫu CV không còn tiếng Việt', () => {
+    const { container } = renderInEnglish(<TemplatesView cvs={[]} />)
+
+    expect(vietnameseIn(container)).toEqual([])
+  })
+
+  it('kho tri thức không còn tiếng Việt', async () => {
+    vi.spyOn(api, 'listKBSources').mockResolvedValue([])
+    const { container } = renderInEnglish(<KBRoute />)
+    await screen.findByRole('heading', { level: 1 })
+
+    expect(vietnameseIn(container)).toEqual([])
+  })
+
+  it('đăng nhập không còn tiếng Việt', () => {
+    const { container } = renderInEnglish(<LoginPage />)
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+
+  it('tạo CV mới không còn tiếng Việt', () => {
+    const { container } = renderInEnglish(<NewCVRoute createCV={async () => ({ id: 'cv-2' } as never)} />)
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+
+  it('hộp thoại tải CV lên không còn tiếng Việt', () => {
+    const { container } = renderInEnglish(<UploadModal isOpen onClose={() => undefined} onUploadSuccess={() => undefined} />)
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+
+  it('hộp thoại chia sẻ không còn tiếng Việt', () => {
+    const { container } = renderInEnglish(<ShareModal isOpen onClose={() => undefined} cvTitle="Resume" />)
+
+    expect(vietnameseIn(container)).toEqual([])
   })
 })

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocale } from '../lib/i18n'
 import { useNavigate } from 'react-router-dom';
 import { CVSchema, type CV } from '@hr/schema';
 import { ApiError, deleteCV, saveCV, type CreateCVInput, type CreateCVResult } from '../lib/api';
@@ -42,6 +43,7 @@ function emptyCV(id: string): CV {
  * khởi tạo thất bại, xoá tài liệu mồ côi để lần thử sau bắt đầu sạch.
  */
 export function NewCVRoute({ createCV }: NewCVRouteProps) {
+  const { t } = useLocale()
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
@@ -89,8 +91,8 @@ export function NewCVRoute({ createCV }: NewCVRouteProps) {
 
   return (
     <div className="p-10 text-center space-y-4">
-      <h1 className="text-xl font-bold text-slate-900">Tạo CV mới</h1>
-      <p className="text-sm text-slate-600">Bắt đầu một CV trống, chỉnh sửa trong trình soạn thảo.</p>
+      <h1 className="text-xl font-bold text-slate-900">{t('createNewCV')}</h1>
+      <p className="text-sm text-slate-600">{t('blankCVHint')}</p>
       {error && (
         <p className="text-sm font-semibold text-rose-600">{error}</p>
       )}
@@ -100,7 +102,7 @@ export function NewCVRoute({ createCV }: NewCVRouteProps) {
         disabled={busy}
         className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition"
       >
-        {busy ? 'Đang tạo…' : 'Tạo CV'}
+        {busy ? 'Đang tạo…' : t('createCV')}
       </button>
     </div>
   );
