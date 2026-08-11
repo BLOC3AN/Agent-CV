@@ -98,6 +98,15 @@ describe('layout draft operations', () => {
 })
 
 describe('CVBlockRenderer', () => {
+  it.each(['editor', 'preview', 'print'] as const)('renders Intro as the section title in %s', (variant) => {
+    const { container } = render(<CVBlockRenderer cv={cv} layout={layout} variant={variant} />)
+    const summaryNode = container.querySelector('[data-cv-node="summary"]')
+    const heading = summaryNode?.querySelector('h3')
+
+    expect(heading).toHaveTextContent('GIỚI THIỆU BẢN THÂN')
+    expect(heading).toHaveAttribute('data-cv-typography', 'section-title')
+  })
+
   it('renders visible Header and Footer in their layout positions and resolves nested item order', () => {
     const reordered: CVLayout = {
       version: 1,

@@ -30,6 +30,7 @@ const nodeLabels: Record<CVNodeType, string> = {
 }
 
 const sectionTitles: Partial<Record<CVNodeType, string>> = {
+  summary: 'GIỚI THIỆU BẢN THÂN',
   experience: 'KINH NGHIỆM LÀM VIỆC',
   projects: 'DỰ ÁN NỔI BẬT',
   education: 'HỌC VẤN & BẰNG CẤP',
@@ -73,6 +74,7 @@ function sectionHeading(context: RenderContext, title: string) {
     <h3
       className={variant === 'print' ? 'cv-section-title' : 'font-bold text-xs uppercase tracking-wider mb-2 border-b border-slate-200 pb-1'}
       style={{ color: cv.design.accentColor, fontSize: 'var(--cv-section-title-size)' }}
+      data-cv-typography="section-title"
     >
       {title}
     </h3>
@@ -161,8 +163,8 @@ function renderSummary(context: RenderContext) {
   const fallbackLocation = !context.layout.nodes.some((node) => node.type === 'header' && node.visible)
   if (!intro.summary && !intro.careerObjective && !(fallbackAvailability && intro.availability) && !(fallbackLocation && intro.location)) return null
   const fallbackContact = fallbackLocation && <>{intro.website && <p><span data-cv-field="website">{intro.website}</span></p>}{intro.avatarUrl && <img className="cv-avatar" data-cv-field="avatarUrl" data-print-style="inline" src={intro.avatarUrl} alt="" />}</>
-  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'GIỚI THIỆU')}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</section>)
-  return nodeFrame(context, <div className="mb-6 text-xs text-slate-700 leading-relaxed"><h3 className="font-bold text-xs uppercase tracking-wider mb-1" style={{ color: cv.design.accentColor }}>GIỚI THIỆU BẢN THÂN</h3><p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</div>)
+  if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</section>)
+  return nodeFrame(context, <div className="mb-6 text-xs text-slate-700 leading-relaxed">{sectionHeading(context, sectionTitles.summary!)}<p data-cv-field="summary">{intro.summary}</p>{intro.careerObjective && <p className="mt-1"><RegisteredValue fieldKey="careerObjective" value={intro.careerObjective} /></p>}{fallbackAvailability && <p className="mt-1"><RegisteredValue fieldKey="availability" value={intro.availability} label="Availability" /></p>}{fallbackLocation && <p className="mt-1"><RegisteredValue fieldKey="location" value={intro.location} label="Location" /></p>}{fallbackContact}</div>)
 }
 
 function renderExperience(context: RenderContext) {

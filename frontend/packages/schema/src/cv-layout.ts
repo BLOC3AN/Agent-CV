@@ -86,7 +86,7 @@ export const CV_FIELD_CATALOG: CVFieldDefinition[] = [
   { key: 'title', label: 'Title', valueType: 'text', allowedIn: ['header'], printStyle: 'inline' },
   { key: 'email', label: 'Email', valueType: 'text', allowedIn: ['header'], printStyle: 'inline' },
   { key: 'phone', label: 'Phone', valueType: 'text', allowedIn: ['header'], printStyle: 'inline' },
-  { key: 'summary', label: 'Summary', valueType: 'multiline', allowedIn: ['summary'], printStyle: 'block' },
+  { key: 'summary', label: 'Intro', valueType: 'multiline', allowedIn: ['summary'], printStyle: 'block' },
   { key: 'role', label: 'Role', valueType: 'text', allowedIn: ['experience', 'projects'], printStyle: 'inline' },
   { key: 'company', label: 'Company', valueType: 'text', allowedIn: ['experience'], printStyle: 'inline' },
   { key: 'time', label: 'Time', valueType: 'date', allowedIn: ['experience', 'projects', 'education'], printStyle: 'date-range' },
