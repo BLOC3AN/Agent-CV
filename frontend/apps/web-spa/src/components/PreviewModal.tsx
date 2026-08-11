@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CV, CVLayout } from '../types';
 import { X, Printer, Download } from 'lucide-react';
-import { PaginatedA4Document } from './PaginatedA4Document';
+import { CVPageComposer } from './CVPageComposer';
 import { CVBlockRenderer } from './CVBlockRenderer';
 import { normalizeLayout } from '../lib/layout-draft';
 import { PRINT_CSS } from '../lib/print-css';
@@ -91,14 +91,14 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
 
       {/* Middle A4 Display Area */}
       <div className="flex-1 overflow-y-auto my-4 w-full flex justify-center custom-scrollbar">
-        <PaginatedA4Document
+        <CVPageComposer
           id="a4-cv-paper"
           className="cv-font-surface my-auto"
-          contentClassName="p-10"
+          cv={cv}
+          layout={layout}
+          variant="preview"
           style={cvTypographyStyle(cv.design)}
-        >
-          <CVBlockRenderer cv={cv} layout={layout} variant="preview" />
-        </PaginatedA4Document>
+        />
       </div>
     </div>
   );

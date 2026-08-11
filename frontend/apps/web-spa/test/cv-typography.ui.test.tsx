@@ -50,7 +50,8 @@ describe('CV typography controls', () => {
 
   it('keeps Intro body content on the shared body-size variable', () => {
     renderEditor()
-    const summary = screen.getByTestId('cv-block-summary') as HTMLElement
+    const summary = screen.getAllByTestId('cv-block-summary').find((element) => element.closest('[data-testid="a4-page"]')) as HTMLElement
+    expect(summary).toBeDefined()
     expect(summary.style.fontSize).toBe('var(--cv-body-size)')
   })
 
@@ -71,7 +72,7 @@ describe('CV typography controls', () => {
 
   it('resolves Auto to Calibri and preserves legacy body-size fallback', () => {
     expect(resolveCVTypography({ font: 'Auto', fontSize: 12 })).toEqual({
-      fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 11, headerFontSize: 20,
+      fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 13, headerFontSize: 20, lineHeight: '1.3',
     })
     expect(resolveCVTypography({ font: 'Auto', fontSize: 14 }).bodyFontSize).toBe(10.5)
     expect(resolveCVTypography({ font: 'Auto', fontSize: 14, bodyFontSize: 14 }).bodyFontSize).toBe(14)

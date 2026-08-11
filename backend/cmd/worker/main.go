@@ -295,7 +295,7 @@ func profileFromSegments(language string, merged map[string]string, id string) m
 		"schemaVersion": 2, "id": id, "title": name,
 		"lastModified": time.Now().UTC().Format(time.RFC3339),
 		"language":     language, "sections": sections,
-		"design":         map[string]any{"template": "modern", "accentColor": "#4F46E5", "font": "Roboto", "fontSize": 14, "spacing": "normal"},
+		"design":         map[string]any{"template": "modern", "accentColor": "#4F46E5", "font": "Auto", "fontSize": 10.5, "sectionTitleFontSize": 13, "headerFontSize": 20, "spacing": "normal"},
 		"activeSections": map[string]any{"intro": true, "experience": true, "projects": true, "education": true, "skills": true, "activities": true, "certifications": true, "languages": true},
 		"_meta":          map[string]any{"source": "pdf_import", "verified": map[string]any{}},
 	}

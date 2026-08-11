@@ -1,10 +1,10 @@
 export const PRINT_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;600;700&family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');
-@page{size:A4;margin:0}
+@page{size:A4;margin:20mm}
 *{box-sizing:border-box}
 .cv-root,.cv-root *{font-family:var(--cv-font-family,Calibri,Arial,sans-serif)}
-.cv-root{color:#111827;line-height:1.5;font-size:var(--cv-body-size,10.5pt)}
-.cv-page{width:210mm;min-height:297mm;padding:14mm;background:#fff;margin:0 auto}
+.cv-root{color:#111827;line-height:var(--cv-line-height,1.3);font-size:var(--cv-body-size,10.5pt)}
+.cv-page{width:210mm;min-height:297mm;padding:20mm;background:#fff;margin:0 auto;box-sizing:border-box}
 .cv-header{margin-bottom:5mm}
 .cv-avatar{width:24mm;height:24mm;border-radius:50%;object-fit:cover}
 .cv-name{font-size:var(--cv-header-size,20pt);font-weight:700;color:var(--cv-accent);margin:0 0 1mm}
@@ -12,7 +12,7 @@ export const PRINT_CSS = `
 .cv-contact{display:flex;flex-wrap:wrap;gap:0 4mm;font-size:9.5pt;color:#4b5563}
 .cv-contact a{color:inherit;text-decoration:none}
 .cv-section{margin-bottom:4.5mm}
-.cv-section-title{font-size:var(--cv-section-title-size,11pt);font-weight:700;color:var(--cv-accent);letter-spacing:.03em;margin:0 0 2mm;border-bottom:.4mm solid var(--cv-accent);padding-bottom:1mm;text-transform:uppercase;break-after:avoid}
+.cv-section-title{font-size:var(--cv-section-title-size,13pt);font-weight:700;color:var(--cv-accent);letter-spacing:.03em;margin:0 0 2mm;border-bottom:.4mm solid var(--cv-accent);padding-bottom:1mm;text-transform:uppercase;break-after:avoid}
 .cv-entry{margin-bottom:3mm;break-inside:auto}
 .cv-entry-head{display:flex;justify-content:space-between;align-items:baseline;gap:4mm}
 .cv-entry-title{font-weight:600}
@@ -29,7 +29,7 @@ export const PRINT_CSS = `
 .cv-skill-group-name{min-width:22mm;font-weight:600;font-size:9.5pt}
 .cv-skill{background:#eef2ff;border-radius:1mm;padding:.6mm 2mm;font-size:9.5pt}
 .cv-two-col{display:grid;grid-template-columns:62% 1fr;gap:0 6mm}
-.cv-root[data-variant=ats] .cv-page{padding:12mm}
+.cv-root[data-variant=ats] .cv-page{padding:20mm}
 .cv-root[data-variant=ats] .cv-skill{background:none;border-radius:0;padding:0}
 .cv-root[data-variant=ats] .cv-skills{display:block}
 .cv-root[data-variant=ats] .cv-skill-group{display:block}
@@ -44,5 +44,5 @@ export const PRINT_CSS = `
 .cv-root[data-variant=thumbnail]{width:600px;overflow:hidden}
 .cv-root[data-variant=thumbnail] .cv-section{margin-bottom:10px}
 .cv-root[data-variant=thumbnail] .cv-page{max-height:850px;overflow:hidden}
-@media print{.cv-page{margin:0;break-after:auto}.cv-root{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+@media print{.cv-page{width:auto;min-height:0;padding:0;margin:0;break-after:auto}.cv-root{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 `

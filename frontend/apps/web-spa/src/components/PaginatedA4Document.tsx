@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react'
+import { A4_PAGE_SETTINGS } from '../lib/a4-settings'
 
 const DEFAULT_PAGE_HEIGHT_PX = 1122
 
@@ -9,19 +10,21 @@ export function pageCountForHeight(height: number, pageHeight: number): number {
 }
 
 interface PaginatedA4DocumentProps {
-  children: React.ReactNode
+  children?: React.ReactNode
   id?: string
   className?: string
   contentClassName?: string
   style?: React.CSSProperties
   measuredHeight?: number
   pageHeight?: number
+  pageGroups?: string[][]
+  renderPage?: (keys: string[], index: number) => React.ReactNode
 }
 
 /**
- * A4 background shells are kept separate from the flowing CV content. This
- * lets long CVs keep their natural HTML flow while the editor still shows the
- * physical A4 boundaries that the browser will use when printing.
+ * Renders physical A4 pages. Composed CVs provide page groups so each page
+ * owns its content and padding; the measured-height path remains available
+ * for generic callers that only need visual shells.
  */
 export function PaginatedA4Document({
   children,
@@ -31,6 +34,8 @@ export function PaginatedA4Document({
   style,
   measuredHeight,
   pageHeight,
+  pageGroups,
+  renderPage,
 }: PaginatedA4DocumentProps) {
   const contentRef = useRef<HTMLDivElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
@@ -58,6 +63,36 @@ export function PaginatedA4Document({
     return () => observer.disconnect()
   }, [measuredHeight, pageHeight, children])
 
+  if (pageGroups && renderPage) {
+    return (
+      <div
+        id={id}
+        data-testid="a4-document"
+        aria-label={`CV ${pageGroups.length} trang`}
+        className={`flex w-[210mm] flex-col gap-6 ${className}`}
+        style={style}
+      >
+        {pageGroups.map((keys, index) => (
+          <section
+            key={`a4-page-${index}`}
+            data-testid="a4-page"
+            className="a4-page relative shrink-0 border border-slate-200 bg-white shadow-lg"
+            style={{
+              boxSizing: 'border-box',
+              width: A4_PAGE_SETTINGS.width,
+              height: A4_PAGE_SETTINGS.height,
+              padding: A4_PAGE_SETTINGS.padding,
+            }}
+          >
+            <div className="a4-page-content h-full w-full">
+              {renderPage(keys, index)}
+            </div>
+          </section>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div
       id={id}
@@ -72,8 +107,14 @@ export function PaginatedA4Document({
             key={index}
             ref={index === 0 ? shellRef : undefined}
             data-testid="a4-page"
-            className="absolute left-0 top-0 w-[210mm] h-[297mm] bg-white border border-slate-200 shadow-lg"
-            style={{ top: `calc(${index} * 297mm)` }}
+            className="a4-page absolute left-0 top-0 bg-white border border-slate-200 shadow-lg"
+            style={{
+              top: `calc(${index} * 297mm)`,
+              boxSizing: 'border-box',
+              width: A4_PAGE_SETTINGS.width,
+              height: A4_PAGE_SETTINGS.height,
+              padding: A4_PAGE_SETTINGS.padding,
+            }}
           />
         ))}
       </div>

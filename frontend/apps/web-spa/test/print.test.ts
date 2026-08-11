@@ -74,6 +74,10 @@ it('SSR /print render cùng template và đổi được presentation/ats/thumbn
     expect(html).toContain('https://cert.example')
     expect(html).toContain('data-cv-field="techStack"')
     expect(html).toContain('data-print-style="tags"')
+    expect(html).toContain('@page{size:A4;margin:20mm}')
+    expect(html).toContain('line-height:var(--cv-line-height,1.3)')
+    expect(html).toContain('--cv-line-height:1.3')
+    expect(html).toContain('.cv-page{width:210mm;min-height:297mm;padding:20mm')
     expect(html.indexOf('data-cv-node="footer"')).toBeGreaterThan(html.indexOf('data-cv-node="experience"'))
     expect(html.indexOf('data-cv-node="header"')).toBeGreaterThan(html.indexOf('data-cv-node="footer"'))
   }

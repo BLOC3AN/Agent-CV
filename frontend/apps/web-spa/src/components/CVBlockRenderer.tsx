@@ -10,6 +10,8 @@ export interface CVBlockRendererProps {
   variant: CVRenderVariant
   onSelect?: (nodeId: string, itemId?: string) => void
   onEdit?: (nodeId: string, itemId?: string) => void
+  nodeIds?: string[]
+  itemIds?: Record<string, string[]>
 }
 
 interface RenderContext extends CVBlockRendererProps {
@@ -85,12 +87,12 @@ function interactiveProps(context: RenderContext, itemId?: string): React.HTMLAt
   const { node, onEdit, onSelect } = context
   const hasNestedEditTargets = node.type === 'experience' || node.type === 'projects' || node.type === 'education'
   return {
+    ...(itemId ? { 'data-cv-item-id': itemId } : {}),
     ...(onEdit ? {
       tabIndex: 0,
       // Item surfaces are buttons; their containing block must remain a group
       // to avoid nesting interactive buttons inside another button.
       role: hasNestedEditTargets && !itemId ? 'group' : 'button',
-      ...(itemId ? { 'data-cv-item-id': itemId } : {}),
       onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
         if (event.key !== 'Enter' && event.key !== ' ') return
         event.preventDefault()
@@ -107,6 +109,11 @@ function interactiveProps(context: RenderContext, itemId?: string): React.HTMLAt
       onEdit(node.id, itemId)
     } : undefined,
   }
+}
+
+function itemsForNode<T extends { id: string }>(context: RenderContext, items: T[]): T[] {
+  const allowed = context.itemIds?.[context.node.id]
+  return allowed ? items.filter((item) => allowed.includes(item.id)) : items
 }
 
 function nodeFrame(context: RenderContext, children: React.ReactNode, element: 'div' | 'header' | 'footer' = 'div') {
@@ -174,7 +181,7 @@ function renderSummary(context: RenderContext) {
 
 function renderExperience(context: RenderContext) {
   const { cv, node, variant } = context
-  const items = orderedItems(cv.sections.experience, 'itemOrder' in node ? node.itemOrder : undefined)
+  const items = itemsForNode(context, orderedItems(cv.sections.experience, 'itemOrder' in node ? node.itemOrder : undefined))
   if (!items.length) return null
   const entries = items.map((item) => <div className="cv-entry space-y-1" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="role" value={item.title} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="company" value={item.company} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.current ? 'Present' : item.endDate].filter(Boolean).join(' – ')} /></span></div><div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" /></div><RegisteredHighlights itemId={item.id} values={item.highlights} /></div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'KINH NGHIỆM')}<div>{entries}</div></section>)
@@ -183,7 +190,7 @@ function renderExperience(context: RenderContext) {
 
 function renderProjects(context: RenderContext) {
   const { cv, node, variant } = context
-  const items = orderedItems(cv.sections.projects, 'itemOrder' in node ? node.itemOrder : undefined)
+  const items = itemsForNode(context, orderedItems(cv.sections.projects, 'itemOrder' in node ? node.itemOrder : undefined))
   if (!items.length) return null
   const entries = items.map((item) => <div className="cv-entry space-y-1" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="name" value={item.name} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="role" value={item.role} /></span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div>{item.link && <RegisteredValue fieldKey="link" value={item.link} />}<div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" /></div>{item.contribution && <p><RegisteredValue fieldKey="contribution" value={item.contribution} label="Contribution" /></p>}<RegisteredHighlights itemId={item.id} values={item.highlights} /></div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'DỰ ÁN')}<div>{entries}</div></section>)
@@ -192,7 +199,7 @@ function renderProjects(context: RenderContext) {
 
 function renderEducation(context: RenderContext) {
   const { cv, node, variant } = context
-  const items = orderedItems(cv.sections.education, 'itemOrder' in node ? node.itemOrder : undefined)
+  const items = itemsForNode(context, orderedItems(cv.sections.education, 'itemOrder' in node ? node.itemOrder : undefined))
   if (!items.length) return null
   const entries = items.map((item) => <div className="cv-entry" key={item.id} {...interactiveProps(context, item.id)}><div className="cv-entry-head"><strong className="cv-entry-title"><RegisteredValue fieldKey="school" value={item.school} /></strong><span className="cv-entry-org"><RegisteredValue fieldKey="degree" value={item.degree} />{item.fieldOfStudy && <> — <RegisteredValue fieldKey="field" value={item.fieldOfStudy} /></>}</span><span className="cv-entry-date"><RegisteredValue fieldKey="time" value={[item.startDate, item.endDate].filter(Boolean).join(' – ')} /></span></div>{item.gpa && <p><RegisteredValue fieldKey="gpa" value={item.gpa} label="GPA" /></p>}<RegisteredHighlights itemId={item.id} values={item.highlights ?? []} /></div>)
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, 'HỌC VẤN')}<div>{entries}</div></section>)
@@ -251,6 +258,7 @@ const nodeRenderers: Record<CVNodeType, (context: RenderContext) => React.ReactN
 }
 
 /** The one ordered-flow resolver used by the editor, preview, and SSR print view. */
-export function CVBlockRenderer({ cv, layout, variant, onSelect, onEdit }: CVBlockRendererProps) {
-  return <>{layout.nodes.filter((node) => node.visible).map((node) => <React.Fragment key={node.id}>{nodeRenderers[node.type]({ cv, layout, variant, onSelect, onEdit, node })}</React.Fragment>)}</>
+export function CVBlockRenderer({ cv, layout, variant, onSelect, onEdit, nodeIds, itemIds }: CVBlockRendererProps) {
+  const nodeIdSet = nodeIds ? new Set(nodeIds) : undefined
+  return <>{layout.nodes.filter((node) => node.visible && (!nodeIdSet || nodeIdSet.has(node.id))).map((node) => <React.Fragment key={node.id}>{nodeRenderers[node.type]({ cv, layout, variant, onSelect, onEdit, node, itemIds })}</React.Fragment>)}</>
 }

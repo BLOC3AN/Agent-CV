@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { PaginatedA4Document, pageCountForHeight } from '../src/components/PaginatedA4Document'
+import { pageGroupsForNodes } from '../src/components/CVPageComposer'
 
 describe('PaginatedA4Document', () => {
+  it('keeps ordered blocks together until the shared page content height is full', () => {
+    expect(pageGroupsForNodes(
+      ['header', 'summary', 'experience', 'education'],
+      new Map([['header', 100], ['summary', 250], ['experience', 500], ['education', 180]]),
+      800,
+    )).toEqual([['header', 'summary'], ['experience', 'education']])
+  })
+
   it('calculates the minimum number of A4 pages without losing the final partial page', () => {
     expect(pageCountForHeight(1, 100)).toBe(1)
     expect(pageCountForHeight(100, 100)).toBe(1)
@@ -19,5 +28,25 @@ describe('PaginatedA4Document', () => {
 
     expect(screen.getAllByTestId('a4-page')).toHaveLength(3)
     expect(screen.getByTestId('a4-document')).toHaveAttribute('aria-label', 'CV 3 trang')
+  })
+
+  it('renders each composed page with the same physical A4 settings', () => {
+    render(
+      <PaginatedA4Document
+        pageGroups={[['header', 'summary'], ['experience']]}
+        renderPage={(keys) => keys.map((key) => <div data-testid={`page-content-${key}`} key={key}>{key}</div>)}
+      />,
+    )
+
+    const pages = screen.getAllByTestId('a4-page')
+    expect(pages).toHaveLength(2)
+    for (const page of pages) {
+      expect(page).toHaveClass('a4-page')
+      expect(page.style.padding).toBe('20mm')
+      expect(page.getAttribute('style')).toContain('width: 210mm')
+      expect(page.getAttribute('style')).toContain('height: 297mm')
+    }
+    expect(screen.getByTestId('page-content-header')).toBeInTheDocument()
+    expect(screen.getByTestId('page-content-experience')).toBeInTheDocument()
   })
 })

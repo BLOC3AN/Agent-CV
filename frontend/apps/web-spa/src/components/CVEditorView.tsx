@@ -3,9 +3,8 @@ import { CV, CVDesign, CVLayout, LayoutNode } from '../types';
 import {
   Check,
 } from 'lucide-react';
-import { PaginatedA4Document } from './PaginatedA4Document';
+import { CVPageComposer } from './CVPageComposer';
 import { ComponentTree } from './ComponentTree';
-import { CVBlockRenderer } from './CVBlockRenderer';
 import { hasDefaultNodeOrder, materializeItemOrder, moveItem, moveNode, normalizeLayout, resetDefaultLayout, setNodeVisible } from '../lib/layout-draft';
 import { CV_FIELDS } from '../lib/cv-fields';
 import { InlineCVEditor } from './InlineCVEditor';
@@ -320,17 +319,18 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
 
       {/* 2. Middle - A4 Live Paper Preview */}
       <div className="flex-1 overflow-y-auto p-6 md:p-10 flex justify-center bg-slate-100/90 custom-scrollbar">
-        <PaginatedA4Document
+        <CVPageComposer
           id="a4-cv-paper"
+          cv={cv}
+          layout={layout}
+          variant="editor"
           className="cv-font-surface transition-all duration-300 print:shadow-none print:m-0"
-          contentClassName="px-[20mm] py-[24mm]"
           style={{
             ...cvTypographyStyle(cv.design),
-            lineHeight: cv.design.spacing === 'condensed' ? '1.4' : cv.design.spacing === 'wide' ? '1.8' : '1.6',
           }}
-        >
-          <CVBlockRenderer cv={cv} layout={layout} variant="editor" onSelect={setSelectedNodeId} onEdit={openInlineEditor} />
-        </PaginatedA4Document>
+          onSelect={setSelectedNodeId}
+          onEdit={openInlineEditor}
+        />
       </div>
 
       {historyOpen && cvId && onRestoreVersion && <VersionHistoryPanel cvId={cvId} dirty={dirty} returnFocusRef={historyInvokerRef} onClose={() => setHistoryOpen(false)} onRestore={onRestoreVersion} />}

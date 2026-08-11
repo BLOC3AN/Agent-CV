@@ -160,7 +160,7 @@ export const CVDesignSchema = z.object({
   font: z.enum(['Auto', 'Calibri', 'Arial', 'Times New Roman', 'Roboto', 'Open Sans', 'Lato']).default('Auto'),
   fontSize: z.number().default(10.5),
   bodyFontSize: z.number().min(9).max(14).optional(),
-  sectionTitleFontSize: z.number().min(10).max(16).optional(),
+  sectionTitleFontSize: z.number().min(10).max(16).default(13),
   headerFontSize: z.number().min(16).max(28).optional(),
   spacing: z.enum(['condensed', 'normal', 'wide']).default('normal'),
 }).strict()

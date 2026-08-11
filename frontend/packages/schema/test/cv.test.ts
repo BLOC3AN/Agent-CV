@@ -24,11 +24,11 @@ describe('CV v2', () => {
   it('supports independent typography sizes and the Auto font', () => {
     const design = CVDesignSchema.parse({
       template: 'modern', accentColor: '#4F46E5', font: 'Auto', fontSize: 14, spacing: 'normal',
-      bodyFontSize: 10.5, sectionTitleFontSize: 11, headerFontSize: 20,
+      bodyFontSize: 10.5, sectionTitleFontSize: 13, headerFontSize: 20,
     })
     expect(design.font).toBe('Auto')
     expect(design.bodyFontSize).toBe(10.5)
-    expect(design.sectionTitleFontSize).toBe(11)
+    expect(design.sectionTitleFontSize).toBe(13)
     expect(design.headerFontSize).toBe(20)
   })
 

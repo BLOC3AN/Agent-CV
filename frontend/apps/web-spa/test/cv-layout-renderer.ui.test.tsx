@@ -125,6 +125,22 @@ describe('CVBlockRenderer', () => {
     expect(container.querySelector('[data-cv-node="experience"]')?.textContent).toMatch(/bTaskee[\s\S]*IMESPRO/)
   })
 
+  it('renders only the nested items assigned to a composed page segment', () => {
+    const { container } = render(
+      <CVBlockRenderer
+        cv={cv}
+        layout={layout}
+        variant="editor"
+        nodeIds={['experience']}
+        itemIds={{ experience: ['exp-1'] }}
+      />,
+    )
+
+    const experience = container.querySelector('[data-cv-node="experience"]')
+    expect(experience).toHaveTextContent('IMESPRO')
+    expect(experience).not.toHaveTextContent('bTaskee')
+  })
+
   it.each(['editor', 'preview', 'print'] as const)('renders activities and canonical registered fields in %s', (variant) => {
     const richCV = structuredClone(cv)
     richCV.sections.intro.careerObjective = 'Build dependable products'
