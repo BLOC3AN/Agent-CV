@@ -53,7 +53,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, cvTitle
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition shrink-0 flex items-center space-x-1"
             >
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Đã chép' : t('copy')}</span>
+              <span>{copied ? t('copied') : t('copy')}</span>
             </button>
           </div>
         </div>

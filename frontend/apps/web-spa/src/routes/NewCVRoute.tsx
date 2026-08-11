@@ -23,11 +23,11 @@ export interface NewCVRouteProps {
  * rồi để zod tự điền phần còn lại — khi schema đổi thêm field mới có default,
  * chỗ này không phải sửa theo, tránh lệch dần với schema thật.
  */
-function emptyCV(id: string): CV {
+function emptyCV(id: string, title: string): CV {
   return CVSchema.parse({
     schemaVersion: 2,
     id,
-    title: 'CV chưa đặt tên',
+    title,
     lastModified: new Date().toISOString(),
     language: 'vi',
     sections: { intro: { fullName: '' } },
@@ -57,8 +57,8 @@ export function NewCVRoute({ createCV }: NewCVRouteProps) {
     // cần dọn CV mồ côi hay không.
     let created: CreateCVResult | undefined;
     try {
-      created = await createCV({ name: 'CV chưa đặt tên' });
-      await saveCV(created.cvId, emptyCV(created.cvId));
+      created = await createCV({ name: t('untitledCV') });
+      await saveCV(created.cvId, emptyCV(created.cvId, t('untitledCV')));
       setOpening(true);
       navigate(`/builder/${created.cvId}`);
     } catch (err) {
@@ -73,9 +73,9 @@ export function NewCVRoute({ createCV }: NewCVRouteProps) {
           // Không có gì thêm để làm: đã cố dọn, không dọn được thì để nguyên
           // và vẫn báo lỗi thất bại bên dưới như bình thường.
         }
-        setError('Tạo CV thất bại giữa chừng. Vui lòng thử lại.');
+        setError(t('createCVIncomplete'));
       } else {
-        setError(err instanceof ApiError ? err.message : 'Không tạo được CV');
+        setError(err instanceof ApiError ? err.message : t('createCVFailed'));
       }
       // Không tắt `opening` vì nó chưa từng bật ở nhánh lỗi — chỉ cần mở khoá
       // nút để người dùng thử lại, không phải màn hình trắng bất động.
@@ -85,7 +85,7 @@ export function NewCVRoute({ createCV }: NewCVRouteProps) {
 
   if (opening) {
     return (
-      <div className="p-10 text-center text-sm text-slate-500">Đang mở CV vừa tạo…</div>
+      <div className="p-10 text-center text-sm text-slate-500">{t('openingNewCV')}</div>
     );
   }
 
@@ -102,7 +102,7 @@ export function NewCVRoute({ createCV }: NewCVRouteProps) {
         disabled={busy}
         className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition"
       >
-        {busy ? 'Đang tạo…' : t('createCV')}
+        {busy ? t('creating') : t('createCV')}
       </button>
     </div>
   );

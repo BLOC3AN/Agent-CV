@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useLocale } from './i18n'
 import { Navigate, useLocation } from 'react-router-dom';
 import { getSession, logout } from './api';
 
@@ -73,14 +74,13 @@ export function useSession(): SessionValue {
  * trong khoảng thời gian chờ backend trả lời.
  */
 export function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { t } = useLocale()
   const { status } = useSession();
   const location = useLocation();
 
   if (status === 'loading') {
     return (
-      <div data-testid="session-loading" className="p-10 text-center text-sm text-slate-500">
-        Đang kiểm tra phiên đăng nhập…
-      </div>
+      <div data-testid="session-loading" className="p-10 text-center text-sm text-slate-500">{t('checkingSession')}</div>
     );
   }
   if (status === 'anonymous') {

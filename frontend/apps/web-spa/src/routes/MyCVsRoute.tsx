@@ -24,7 +24,7 @@ export function MyCVsRoute() {
     try {
       setItems(await listCVs());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Không đọc được danh sách CV');
+      setError(err instanceof ApiError ? err.message : t('cvListReadFailed'));
     }
   }, []);
 
@@ -40,7 +40,7 @@ export function MyCVsRoute() {
       // về trạng thái chờ cho một thao tác đã biết chắc kết quả.
       setItems((current) => (current ?? []).filter((cv) => cv.id !== id));
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Không xoá được CV');
+      setActionError(err instanceof ApiError ? err.message : t('deleteCVFailed'));
     }
   }
 
@@ -58,9 +58,7 @@ export function MyCVsRoute() {
 
   if (items === null) {
     return (
-      <div data-testid="cv-list-loading" className="p-10 text-center text-sm text-slate-500">
-        Đang tải danh sách CV…
-      </div>
+      <div data-testid="cv-list-loading" className="p-10 text-center text-sm text-slate-500">{t('loadingCVList')}</div>
     );
   }
 

@@ -26,6 +26,16 @@ const CODE_TO_KEY: Record<string, MessageKey> = {
   PDF_EXTRACT_FAILED: 'errorPDFExtractFailed',
   PROFILE_CREATE_FAILED: 'errorProfileCreateFailed',
   GO_UNKNOWN_KIND: 'errorUnknownJobKind',
+  // Mã do chính client sinh ra — cùng cơ chế, để lỗi mạng cũng dịch được.
+  NETWORK_UNREACHABLE: 'errorNetworkUnreachable',
+  SERVER_ERROR: 'errorServer',
+  STREAM_OPEN_FAILED: 'errorStreamOpen',
+  STREAM_CLOSED_EARLY: 'errorStreamClosed',
+  SEND_FAILED: 'sendFailed',
+  AI_PATCH_INVALID_CV: 'errorAIPatchInvalidCV',
+  AI_PATCH_INVALID_LAYOUT: 'errorAIPatchInvalidLayout',
+  AI_PATCH_LAYOUT_REPLACE: 'errorAIPatchLayoutReplace',
+  PDF_DOWNLOAD_FAILED: 'downloadFailed',
 }
 
 export function errorMessageKey(code: string | undefined): MessageKey | undefined {

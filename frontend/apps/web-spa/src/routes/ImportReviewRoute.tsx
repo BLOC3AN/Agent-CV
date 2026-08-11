@@ -266,7 +266,7 @@ function collectResidualLeaves(
   if (text === '') return;
   // Ảnh có thể là chuỗi base64 dài hàng chục KB — in nguyên văn phá bố cục,
   // và độ dài chuỗi không phải thứ user cần đọc để biết "có ảnh hay không".
-  const shown = (base.endsWith('/photo') || base.endsWith('/avatarUrl')) && text.length > 80 ? 'Có ảnh đính kèm' : text;
+  const shown = (base.endsWith('/photo') || base.endsWith('/avatarUrl')) && text.length > 80 ? t('hasAttachment') : text;
   out.push({ path: base, label: labelForRawPath(base, t), value: shown });
 }
 
@@ -363,7 +363,7 @@ export function ImportReviewRoute({
       setProgress(review.progress);
       setPhase('ready');
     } catch (err) {
-      setLoadError(apiErrorMessage(err, 'Không tải được dữ liệu để rà soát.'));
+      setLoadError(apiErrorMessage(err, t('reviewLoadFailed')));
       setPhase('error');
     }
   }, [jobId, getImportReview]);
@@ -423,7 +423,7 @@ export function ImportReviewRoute({
       if (refreshed.ready) setProgress(refreshed.progress);
       setRefreshError(undefined);
     } catch (err) {
-      setRefreshError(apiErrorMessage(err, 'Đã lưu xác nhận nhưng không tải lại được tiến độ mới nhất.'));
+      setRefreshError(apiErrorMessage(err, t('reviewProgressReloadFailed')));
     }
   }
 
@@ -452,7 +452,7 @@ export function ImportReviewRoute({
     } catch (err) {
       setItemErrors((prev) => ({
         ...prev,
-        [item.path]: apiErrorMessage(err, 'Không lưu được xác nhận cho mục này. Vui lòng thử lại.'),
+        [item.path]: apiErrorMessage(err, t('reviewConfirmFailed')),
       }));
       setBusyItem(undefined);
       return;
@@ -482,7 +482,7 @@ export function ImportReviewRoute({
       const result = await completeImport(jobId);
       navigate(`/builder/${result.cvId}`);
     } catch (err) {
-      setCompleteError(apiErrorMessage(err, 'Không hoàn tất được. Vui lòng thử lại.'));
+      setCompleteError(apiErrorMessage(err, t('reviewFinishFailed')));
       setCompleting(false);
     }
   }
@@ -491,7 +491,7 @@ export function ImportReviewRoute({
     return (
       <div className="p-10 text-center space-y-4">
         <div className="w-10 h-10 mx-auto rounded-full border-2 border-violet-200 border-t-violet-600 animate-spin" />
-        <p className="text-sm text-slate-600">Đang tải dữ liệu để rà soát…</p>
+        <p className="text-sm text-slate-600">{t('loadingReview')}</p>
       </div>
     );
   }
@@ -500,7 +500,7 @@ export function ImportReviewRoute({
     return (
       <div className="p-10 text-center space-y-4">
         <p className="text-sm text-slate-600">
-          Job chưa xử lý xong (trạng thái: {pendingStatus ?? 'đang chờ'}). Quay lại sau khi xử lý xong để rà soát.
+          {t('reviewJobPending', { status: pendingStatus ?? t('statusQueued') })}
         </p>
       </div>
     );
@@ -546,9 +546,7 @@ export function ImportReviewRoute({
             type="button"
             onClick={() => void refreshProgress()}
             className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition"
-          >
-            Tải lại tiến độ
-          </button>
+          >{t('reloadProgress')}</button>
         </div>
       )}
 
@@ -584,7 +582,7 @@ export function ImportReviewRoute({
                   className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition"
                 >
                   {!pending && <Check className="w-3.5 h-3.5" />}
-                  {busy ? 'Đang lưu…' : pending ? t('confirmItem') : t('confirmed')}
+                  {busy ? t('savingShort') : pending ? t('confirmItem') : t('confirmed')}
                 </button>
               </div>
 
@@ -611,14 +609,14 @@ export function ImportReviewRoute({
                           id={inputId}
                           value={edited[field.path] ?? ''}
                           onChange={(e) => handleFieldChange(field.path, e.target.value)}
-                          placeholder={field.empty ? 'Mỗi dòng một mục — điền vào đây' : undefined}
+                          placeholder={field.empty ? t('oneItemPerLine') : undefined}
                           rows={Math.max(2, (edited[field.path] ?? '').split('\n').length)}
                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-violet-400 focus:outline-none"
                         />
                       )}
                       {kind === 'readonly' && (
                         <p id={inputId} className="text-sm text-slate-700 whitespace-pre-line">
-                          {edited[field.path] || 'Chưa có'}
+                          {edited[field.path] || t('notProvided')}
                         </p>
                       )}
                     </div>
@@ -656,7 +654,7 @@ export function ImportReviewRoute({
           disabled={!canFinish || completing}
           className="ml-auto px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition"
         >
-          {completing ? 'Đang hoàn tất…' : t('finishReview')}
+          {completing ? t('finishing') : t('finishReview')}
         </button>
       </div>
     </div>

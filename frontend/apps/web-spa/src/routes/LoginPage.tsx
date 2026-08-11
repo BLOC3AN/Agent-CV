@@ -30,7 +30,7 @@ export function LoginPage() {
       setSent(true);
       setDevLink(result.devLink);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Không gửi được link đăng nhập');
+      setError(err instanceof ApiError ? err.message : t('loginLinkFailed'));
     } finally {
       setSending(false);
     }
@@ -61,7 +61,7 @@ export function LoginPage() {
             disabled={sending}
             className="w-full px-4 py-2.5 bg-violet-700 hover:bg-violet-800 disabled:opacity-60 text-white font-semibold text-xs rounded-xl transition"
           >
-            {sending ? 'Đang gửi…' : t('sendLoginLink')}
+            {sending ? t('sending') : t('sendLoginLink')}
           </button>
         </form>
 
@@ -69,11 +69,9 @@ export function LoginPage() {
 
         {sent && !error && (
           <div className="space-y-2 text-xs text-slate-600">
-            <p>Đã gửi link đăng nhập. Mở hộp thư của bạn và bấm vào đường dẫn trong email.</p>
+            <p>{t('loginLinkSent')}</p>
             {devLink && (
-              <a href={devLink} className="inline-block font-semibold text-violet-700 hover:underline">
-                Mở link đăng nhập (chỉ có ở môi trường chạy thử)
-              </a>
+              <a href={devLink} className="inline-block font-semibold text-violet-700 hover:underline">{t('openLoginLinkDev')}</a>
             )}
           </div>
         )}

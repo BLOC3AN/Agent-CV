@@ -25,7 +25,7 @@ import { SettingsRoute } from './SettingsRoute';
 import { GuidedRoute } from './GuidedRoute';
 import { KBRoute } from './KBRoute';
 import { RequireAuth, SessionProvider } from '../lib/session';
-import { BuilderLocaleProvider, LocaleProvider } from '../lib/i18n';
+import { BuilderLocaleProvider, LocaleProvider, useLocale } from '../lib/i18n';
 
 /**
  * Bản đồ URL — một chỗ duy nhất.
@@ -36,13 +36,12 @@ import { BuilderLocaleProvider, LocaleProvider } from '../lib/i18n';
  * Các màn hình SPA production đều lấy dữ liệu qua `lib/api.ts`.
  */
 function NotFound() {
+  const { t } = useLocale()
   return (
     <div className="p-10 text-center space-y-3">
-      <h1 className="text-2xl font-bold text-slate-900">Không tìm thấy trang</h1>
-      <p className="text-sm text-slate-600">Đường dẫn bạn mở không tồn tại hoặc đã được đổi tên.</p>
-      <Link to="/" className="inline-block text-sm font-semibold text-violet-700 hover:underline">
-        Về trang tổng quan
-      </Link>
+      <h1 className="text-2xl font-bold text-slate-900">{t('pageNotFound')}</h1>
+      <p className="text-sm text-slate-600">{t('pageNotFoundHint')}</p>
+      <Link to="/" className="inline-block text-sm font-semibold text-violet-700 hover:underline">{t('backToDashboard')}</Link>
     </div>
   );
 }

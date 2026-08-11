@@ -40,7 +40,7 @@ export function DashboardRoute() {
     return <div className="p-10 text-center text-sm text-rose-600">{error}</div>
   }
   if (items === null) {
-    return <div data-testid="dashboard-loading" className="p-10 text-center text-sm text-slate-500">Đang tải tổng quan…</div>
+    return <div data-testid="dashboard-loading" className="p-10 text-center text-sm text-slate-500">{t('loadingDashboard')}</div>
   }
 
   return (

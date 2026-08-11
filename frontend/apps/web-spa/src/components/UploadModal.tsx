@@ -84,7 +84,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onUpl
                 <span className="font-bold text-slate-900 text-sm block">{fileName}</span>
                 <span className="text-xs text-indigo-600 flex items-center justify-center space-x-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Sẵn sàng trích xuất dữ liệu bằng AI</span>
+                  <span>{t('readyToExtract')}</span>
                 </span>
               </div>
             ) : (

@@ -81,7 +81,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       headers,
     })
   } catch {
-    throw new ApiError(0, 'Không kết nối được máy chủ')
+    throw new ApiError(0, 'Network unreachable', 'NETWORK_UNREACHABLE')
   }
 
   const text = await res.text()
@@ -106,7 +106,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
         : undefined
     // Giữ nguyên văn của máy chủ làm chỗ lùi; giao diện ưu tiên dịch theo
     // `code` qua `lib/error-messages.ts`.
-    throw new ApiError(res.status, serverMessage ?? 'Máy chủ trả về lỗi', code)
+    throw new ApiError(res.status, serverMessage ?? 'Server error', code ?? 'SERVER_ERROR')
   }
 
   return body as T
@@ -228,10 +228,10 @@ export async function sendChat(
       layout: context.layout,
     } : {}) }),
   })
-  if (!res.ok) throw new ApiError(res.status, ((await res.json().catch(() => null)) as { error?: string })?.error ?? 'Không gửi được tin nhắn')
-  if (!res.body) throw new ApiError(0, 'Máy chủ không mở được luồng trả lời')
+  if (!res.ok) throw new ApiError(res.status, ((await res.json().catch(() => null)) as { error?: string })?.error ?? 'Send failed', 'SEND_FAILED')
+  if (!res.body) throw new ApiError(0, 'Stream open failed', 'STREAM_OPEN_FAILED')
   const result = await readSSE(res.body, onStep)
-  if (!result) throw new ApiError(0, 'Máy chủ đóng kết nối giữa chừng')
+  if (!result) throw new ApiError(0, 'Stream closed early', 'STREAM_CLOSED_EARLY')
   return result as unknown as ChatResult
 }
 

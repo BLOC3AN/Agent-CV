@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocale } from './i18n'
 import type { CV, CVLayout, LayoutNode } from '../types'
 import { ApiError, commitCV, getCV, restoreCVRevision } from './api'
 import { validateCVFieldPlacement } from './cv-fields'
@@ -681,6 +682,7 @@ function deepEqual(left: unknown, right: unknown): boolean {
 }
 
 export function useCVStore(id: string) {
+  const { t } = useLocale()
   const [documents, setDocuments] = useState<DocumentState>(emptyDocuments)
   const documentsRef = useRef(documents)
   const [profileId, setProfileId] = useState<string>()
@@ -722,7 +724,7 @@ export function useCVStore(id: string) {
       setStatus('ready')
     } catch (err) {
       setStatus('error')
-      setError(err instanceof ApiError ? err.message : 'Không tải được CV')
+      setError(err instanceof ApiError ? err.message : t('storeLoadFailed'))
     }
   }, [id, replaceDocuments])
 
@@ -835,7 +837,7 @@ export function useCVStore(id: string) {
           setPendingAIProvenance(provenanceRef.current)
         }
         setStatus(documentVersionRef.current === saveVersion ? 'error' : 'dirty')
-        setError(err instanceof ApiError ? err.message : 'Không lưu được CV')
+        setError(err instanceof ApiError ? err.message : t('storeSaveFailed'))
         throw err
       } finally {
         for (const savedEntry of savedProvenance) inFlightProvenanceIDsRef.current.delete(savedEntry.id)
@@ -848,8 +850,8 @@ export function useCVStore(id: string) {
   }, [baseRevision, id, replaceDocuments])
 
   const restoreRevision = useCallback((revisionId: string): Promise<void> => {
-    if (pendingSaveRef.current) return Promise.reject(new ApiError(409, 'Đang lưu thay đổi, chưa thể khôi phục phiên bản'))
-    if (!documentsEqual(documentsRef.current.committed, documentsRef.current.draft)) return Promise.reject(new ApiError(409, 'Bản nháp chưa lưu. Hãy lưu hoặc bỏ thay đổi trước khi khôi phục.'))
+    if (pendingSaveRef.current) return Promise.reject(new ApiError(409, t('restoreBlockedSaving')))
+    if (!documentsEqual(documentsRef.current.committed, documentsRef.current.draft)) return Promise.reject(new ApiError(409, t('restoreBlockedDirty')))
     setSavePending(true)
     setStatus('saving')
     setError(undefined)
@@ -870,7 +872,7 @@ export function useCVStore(id: string) {
       } catch (err) {
         const current = documentsRef.current
         setStatus(documentsEqual(current.committed, current.draft) ? 'ready' : 'dirty')
-        setError(err instanceof ApiError ? err.message : 'Không thể khôi phục phiên bản')
+        setError(err instanceof ApiError ? err.message : t('storeRestoreFailed'))
         throw err
       } finally {
         if (pendingSaveRef.current === pending) pendingSaveRef.current = undefined

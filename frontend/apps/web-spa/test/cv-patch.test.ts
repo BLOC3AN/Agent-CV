@@ -32,7 +32,7 @@ describe('applyChatOpsToDraft', () => {
     expect(() => applyChatOpsToDraft({ cv, layout }, [operation('replace', '/sections/intro/missing', 'AI draft')])).toThrow(/không được phép/i)
     expect(() => applyChatOpsToDraft({ cv, layout }, [operation('add', '/layout/nodes/0/unknown', true)])).toThrow(/không được phép/i)
     expect(() => applyChatOpsToDraft({ cv, layout }, [operation('replace', '/sections/intro', false)])).toThrow(/không được phép/i)
-    expect(() => applyChatOpsToDraft({ cv, layout }, [operation('add', '/sections/skills/-', { id: 'skills-1', category: 'Data', skills: [7] })])).toThrow(/CV.*không hợp lệ/i)
+    expect(() => applyChatOpsToDraft({ cv, layout }, [operation('add', '/sections/skills/-', { id: 'skills-1', category: 'Data', skills: [7] })])).toThrow(/^AI_PATCH_INVALID_CV:/)
   })
 
   it.each([

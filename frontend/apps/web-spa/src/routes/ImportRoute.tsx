@@ -29,10 +29,15 @@ export interface ImportRouteProps {
 /** Trạng thái CHƯA xong — máy chủ còn cần xử lý tiếp, phải hỏi lại. */
 const NON_TERMINAL_STATUSES = new Set(['queued', 'running']);
 
-/** Câu tiếng Việt cho từng trạng thái chưa xong; job.go chỉ sinh hai giá trị này. */
-const STATUS_LABEL: Record<string, string> = {
-  queued: 'Đang xếp hàng chờ xử lý…',
-  running: 'Đang trích xuất dữ liệu từ CV…',
+/**
+ * Khoá message cho từng trạng thái chưa xong; job.go chỉ sinh hai giá trị này.
+ *
+ * Giữ dạng KHOÁ vì bảng nằm ở tầng module — nhúng chữ đã dịch vào đây sẽ đóng
+ * băng ngôn ngữ của lần nạp file đầu tiên.
+ */
+const STATUS_LABEL_KEYS: Record<string, MessageKey> = {
+  queued: 'queued',
+  running: 'extracting',
 };
 
 /**
@@ -101,7 +106,7 @@ export function ImportRoute({ uploadCV, getJob, pollIntervalMs = 2000 }: ImportR
         current = await getJob(jobId as string);
       } catch (err) {
         if (stopped) return;
-        setError(err instanceof ApiError ? err.message : 'Không theo dõi được tiến trình xử lý.');
+        setError(err instanceof ApiError ? err.message : t('jobTrackFailed'));
         return;
       }
       // Unmount xảy ra TRONG lúc chờ phản hồi — component đã rời đi, không
@@ -141,7 +146,7 @@ export function ImportRoute({ uploadCV, getJob, pollIntervalMs = 2000 }: ImportR
       setJobId(result.jobId);
     } catch (err) {
       setUploading(false);
-      setError(err instanceof ApiError ? err.message : 'Không tải file lên được.');
+      setError(err instanceof ApiError ? err.message : t('uploadFailed'));
     }
   }
 
@@ -178,7 +183,7 @@ export function ImportRoute({ uploadCV, getJob, pollIntervalMs = 2000 }: ImportR
     return (
       <div className="p-10 text-center space-y-4">
         <div className="w-10 h-10 mx-auto rounded-full border-2 border-violet-200 border-t-violet-600 animate-spin" />
-        <p className="text-sm text-slate-600">{(status && STATUS_LABEL[status]) ?? 'Đang xử lý…'}</p>
+        <p className="text-sm text-slate-600">{t((status ? STATUS_LABEL_KEYS[status] : undefined) ?? 'processing')}</p>
       </div>
     );
   }
@@ -193,7 +198,7 @@ export function ImportRoute({ uploadCV, getJob, pollIntervalMs = 2000 }: ImportR
       >
         <Upload className="w-8 h-8 text-violet-600 mx-auto mb-2" />
         <span className="text-sm font-medium text-slate-700">
-          {uploading ? 'Đang tải lên…' : t('dropOrPickPDF')}
+          {uploading ? t('uploading') : t('dropOrPickPDF')}
         </span>
         <input
           id="import-file-input"

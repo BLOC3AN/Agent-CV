@@ -27,8 +27,8 @@ export const Header: React.FC<HeaderProps> = ({
   const location = useLocation();
   const isEditor = location.pathname.startsWith('/builder');
   const { email, signOut } = useSession();
-  const userEmail = email ?? 'Chưa đăng nhập';
   const { t, locale, setLocale } = useLocale();
+  const userEmail = email ?? t('notSignedIn');
   // Nút ngôn ngữ là nút chung: nó đổi giao diện toàn ứng dụng, và khi có CV
   // đang mở thì ghi luôn `cv.language`. Ghi vào CV là điều kiện để bản PDF in
   // đúng ngôn ngữ — máy chủ dựng PDF đọc CV đã lưu, nó không thấy được tuỳ chọn

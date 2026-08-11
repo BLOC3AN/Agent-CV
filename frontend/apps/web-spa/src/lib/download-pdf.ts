@@ -37,7 +37,7 @@ export async function downloadCVPDF(cvId: string): Promise<void> {
   const response = await fetch(`/print/${encodeURIComponent(cvId)}/pdf`, { credentials: 'include' })
   if (!response.ok) {
     const message = await response.text().catch(() => '')
-    throw new ApiError(response.status, message || 'Không tải được PDF')
+    throw new ApiError(response.status, message || 'PDF download failed', 'PDF_DOWNLOAD_FAILED')
   }
 
   const blob = await response.blob()

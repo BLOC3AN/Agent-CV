@@ -12,7 +12,7 @@ export function SettingsRoute() {
 
   async function removeAccount() {
     if (!email || confirmEmail.trim().toLowerCase() !== email.toLowerCase()) {
-      setError('Email xác nhận phải trùng chính xác với email tài khoản.')
+      setError(t('confirmEmailMismatch'))
       return
     }
     setBusy(true)
@@ -22,7 +22,7 @@ export function SettingsRoute() {
       await signOut()
     } catch (err) {
       setBusy(false)
-      setError(err instanceof ApiError ? err.message : 'Không xoá được tài khoản')
+      setError(err instanceof ApiError ? err.message : t('deleteAccountFailed'))
     }
   }
 
@@ -39,7 +39,7 @@ export function SettingsRoute() {
         <label className="block text-xs font-semibold text-slate-700" htmlFor="delete-account-email">{t('enterEmailToConfirm')}</label>
         <input id="delete-account-email" value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} className="w-full max-w-md rounded-xl border border-slate-300 px-3 py-2 text-sm" placeholder={email ?? ''} />
         {error && <p role="alert" className="text-xs font-medium text-rose-600">{error}</p>}
-        <button disabled={busy} onClick={() => void removeAccount()} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{busy ? 'Đang xoá…' : t('deleteAccountPermanently')}</button>
+        <button disabled={busy} onClick={() => void removeAccount()} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{busy ? t('deleting') : t('deleteAccountPermanently')}</button>
       </section>
     </div>
   )

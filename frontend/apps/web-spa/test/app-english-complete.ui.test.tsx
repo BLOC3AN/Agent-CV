@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { DashboardRoute } from '../src/routes/DashboardRoute'
 import { MyCVsRoute } from '../src/routes/MyCVsRoute'
@@ -19,6 +19,7 @@ import { SettingsRoute } from '../src/routes/SettingsRoute'
 import { AnalyzeRoute } from '../src/routes/AnalyzeRoute'
 import { TemplatesView } from '../src/components/TemplatesView'
 import { KBRoute } from '../src/routes/KBRoute'
+import { BuilderRoute } from '../src/routes/BuilderRoute'
 import { LoginPage } from '../src/routes/LoginPage'
 import { NewCVRoute } from '../src/routes/NewCVRoute'
 import { UploadModal } from '../src/components/UploadModal'
@@ -311,6 +312,82 @@ describe('trợ lý AI ở trạng thái có đề xuất', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /write a summary/i }))
     await screen.findByRole('button', { name: /apply to cv/i })
+
+    expect(vietnameseIn(container)).toEqual([])
+    expect(vietnameseLabelsIn(container)).toEqual([])
+  })
+})
+
+/*
+ * Các trạng thái mà fixture trước đây không chạm tới: đang tải, lỗi, rỗng, và
+ * nhánh AI hỏi lại. Mỗi lần bỏ sót trong đợt này đều rơi vào đúng loại này —
+ * lưới chỉ bắt được chuỗi nào thực sự render ra, nên phải dựng đủ trạng thái
+ * thay vì chờ gặp rồi sửa.
+ */
+describe('trạng thái đang tải, lỗi và rỗng', () => {
+  it('trình sửa lúc đang tải và lúc lỗi', async () => {
+    vi.spyOn(api, 'getCV').mockRejectedValue(new ApiError(500, 'boom'))
+    const router = createMemoryRouter([{ path: '/builder/:cvId', element: <BuilderRoute /> }], { initialEntries: ['/builder/cv-1'] })
+    const { container } = render(
+      <LocaleProvider><BuilderLocaleProvider><RouterProvider router={router} /></BuilderLocaleProvider></LocaleProvider>,
+    )
+    await screen.findByRole('button', { name: /try again/i })
+
+    expect(vietnameseIn(container)).toEqual([])
+  })
+
+  it('trang tổng quan lúc lỗi', async () => {
+    vi.spyOn(api, 'listCVs').mockRejectedValue(new ApiError(500, 'boom'))
+    const { container } = renderInEnglish(<DashboardRoute />)
+    await waitFor(() => expect(container.textContent).not.toBe(''))
+
+    expect(vietnameseIn(container)).toEqual([])
+  })
+
+  it('danh sách CV lúc lỗi và lúc rỗng', async () => {
+    vi.spyOn(api, 'listCVs').mockRejectedValue(new ApiError(500, 'boom'))
+    const { container } = renderInEnglish(<MyCVsRoute />)
+    await screen.findByRole('button', { name: /try again/i })
+
+    expect(vietnameseIn(container)).toEqual([])
+  })
+
+  it('kho tri thức lúc lỗi', async () => {
+    vi.spyOn(api, 'listKBSources').mockRejectedValue(new ApiError(500, 'boom'))
+    const { container } = renderInEnglish(<KBRoute />)
+    await screen.findByRole('heading', { level: 1 })
+
+    expect(vietnameseIn(container)).toEqual([])
+  })
+
+  it('màn rà soát import lúc job chưa xong', async () => {
+    const router = createMemoryRouter([{ path: '/import/:jobId/review', element: (
+      <ImportReviewRoute
+        getImportReview={async () => ({ ready: false, status: 'running' }) as never}
+        patchProfile={async () => ({}) as never}
+        verifyProfile={async () => ({}) as never}
+        completeImport={async () => ({}) as never}
+      />
+    ) }], { initialEntries: ['/import/job-1/review'] })
+    const { container } = render(
+      <LocaleProvider><BuilderLocaleProvider><RouterProvider router={router} /></BuilderLocaleProvider></LocaleProvider>,
+    )
+    await waitFor(() => expect(container.textContent).not.toBe(''))
+
+    expect(vietnameseIn(container)).toEqual([])
+  })
+
+  it('trợ lý AI lúc hỏi lại và lúc lỗi', async () => {
+    vi.spyOn(api, 'sendChat').mockResolvedValue({
+      kind: 'clarify',
+      request: { reason: 'Need more detail', questions: [{ id: 'q1', question: 'Which team?', placeholder: 'Platform' }] },
+    } as never)
+    const { container } = renderInEnglish(
+      <ChatPanel profileId="profile-1" cvId="cv-1" cv={profileSnapshot} layout={undefined as never} draftVersion={0} onApplyAIProposal={() => undefined} onClose={() => undefined} />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /write a summary/i }))
+    await screen.findByRole('button', { name: /send answers/i })
 
     expect(vietnameseIn(container)).toEqual([])
     expect(vietnameseLabelsIn(container)).toEqual([])

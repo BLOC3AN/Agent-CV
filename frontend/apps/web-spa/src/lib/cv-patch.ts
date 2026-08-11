@@ -101,7 +101,7 @@ export function applyChatOpsToDraft(draft: ChatDraftDocument, ops: ChatOp[]): Ch
     const parts = pointerParts(operation.path)
     assertAllowedOperation(operation, parts)
     if (parts[0] === 'layout') {
-      if (parts.length === 1) throw new Error('Không thể thay thế toàn bộ bố cục từ đề xuất AI')
+      if (parts.length === 1) throw new Error('AI_PATCH_LAYOUT_REPLACE: the whole layout cannot be replaced')
       applyOperation(result.layout, { ...operation, path: `/${parts.slice(1).map((part) => part.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}` })
       layoutChanged = true
     } else {
@@ -109,9 +109,9 @@ export function applyChatOpsToDraft(draft: ChatDraftDocument, ops: ChatOp[]): Ch
     }
   }
   const parsedLayout = CVLayoutSchema.safeParse(result.layout)
-  if (layoutChanged && !parsedLayout.success) throw new Error('Bố cục từ JSON Patch không hợp lệ')
+  if (layoutChanged && !parsedLayout.success) throw new Error('AI_PATCH_INVALID_LAYOUT: the patch produced an invalid layout')
   const parsedCV = CVSchema.safeParse(result.cv)
-  if (!parsedCV.success) throw new Error('CV từ JSON Patch không hợp lệ')
+  if (!parsedCV.success) throw new Error('AI_PATCH_INVALID_CV: the patch produced an invalid CV')
   return {
     cv: parsedCV.data as CV,
     layout: (parsedLayout.success ? parsedLayout.data : result.layout) as CVLayout,
