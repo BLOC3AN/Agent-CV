@@ -6,6 +6,16 @@ import { nodeLabel, sectionTitle } from '../lib/cv-section-titles'
 
 export type CVRenderVariant = 'editor' | 'preview' | 'print'
 
+/**
+ * Một item bị cắt ngang trang: `head` cho biết trang này có render phần đầu
+ * (chức danh, tổ chức, ngày, tech stack…) hay không, `highlights` là các index
+ * GỐC trong mảng `highlights` mà trang này nhận. Vắng mặt = render đầy đủ.
+ */
+export interface CVItemSlice {
+  head: boolean
+  highlights: number[]
+}
+
 export interface CVBlockRendererProps {
   cv: CV
   layout: CVLayout
@@ -14,6 +24,7 @@ export interface CVBlockRendererProps {
   onEdit?: (nodeId: string, itemId?: string) => void
   nodeIds?: string[]
   itemIds?: Record<string, string[]>
+  itemSlices?: Record<string, CVItemSlice>
   /** Highlights the block the left-hand tree currently points at. */
   selectedNodeId?: string
   selectedItemId?: string
@@ -56,10 +67,13 @@ function RegisteredValue({ fieldKey, value, label, change }: { fieldKey: string;
   return <span className={`cv-field-${definition.printStyle}`} data-cv-field={fieldKey} data-print-style={definition.printStyle} data-cv-change={change}>{prefix}{text}</span>
 }
 
-function RegisteredHighlights({ fieldKey = 'highlights', itemId, values, changes, changePath }: { fieldKey?: string; itemId: string; values: string[]; changes?: CVChangeMap; changePath?: string }) {
+function RegisteredHighlights({ fieldKey = 'highlights', itemId, values, changes, changePath, indexes }: { fieldKey?: string; itemId: string; values: string[]; changes?: CVChangeMap; changePath?: string; indexes?: number[] }) {
   const definition = CV_FIELD_CATALOG.find((field) => field.key === fieldKey)
-  if (!definition || !values.length) return null
-  return <ul className="cv-bullets" data-cv-field={fieldKey} data-print-style={definition.printStyle}>{values.map((text, index) => <li key={`${itemId}-${index}`} data-cv-change={changePath ? changes?.[`${changePath}.${index}`] : undefined}>{text}</li>)}</ul>
+  // `indexes` là index GỐC, không phải vị trí sau khi lọc: `data-cv-change` tra
+  // theo `${changePath}.${index}` nên đánh số lại sẽ trỏ nhầm ô diff.
+  const picked = (indexes ?? values.map((_, index) => index)).filter((index) => values[index] != null)
+  if (!definition || !picked.length) return null
+  return <ul className="cv-bullets" data-cv-field={fieldKey} data-print-style={definition.printStyle}>{picked.map((index) => <li key={`${itemId}-${index}`} data-cv-change={changePath ? changes?.[`${changePath}.${index}`] : undefined}>{values[index]}</li>)}</ul>
 }
 
 /**
@@ -221,14 +235,17 @@ function renderExperience(context: RenderContext) {
   const entries = items.map((item) => {
     const changed = changeAt(context, 'experience', item.id)
     const time = dateRange(item.startDate, item.current ? 'Present' : item.endDate)
+    const slice = context.itemSlices?.[item.id]
     return <div className="cv-entry space-y-1" key={item.id} {...interactiveProps(context, item.id)}>
-      <EntryHead
-        title={<RegisteredValue fieldKey="role" value={item.title} change={changed('title')} />}
-        organisation={item.company ? <RegisteredValue fieldKey="company" value={item.company} change={changed('company')} /> : null}
-        date={time ? <RegisteredValue fieldKey="time" value={time} change={changed('startDate') ?? changed('endDate') ?? changed('current')} /> : null}
-      />
-      <div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" change={changed('teamSize')} /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" change={changed('techStack')} /></div>
-      <RegisteredHighlights itemId={item.id} values={item.highlights} changes={context.changes} changePath={`experience.${item.id}.highlights`} />
+      {(!slice || slice.head) && <>
+        <EntryHead
+          title={<RegisteredValue fieldKey="role" value={item.title} change={changed('title')} />}
+          organisation={item.company ? <RegisteredValue fieldKey="company" value={item.company} change={changed('company')} /> : null}
+          date={time ? <RegisteredValue fieldKey="time" value={time} change={changed('startDate') ?? changed('endDate') ?? changed('current')} /> : null}
+        />
+        <div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" change={changed('teamSize')} /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" change={changed('techStack')} /></div>
+      </>}
+      <RegisteredHighlights itemId={item.id} values={item.highlights} indexes={slice?.highlights} changes={context.changes} changePath={`experience.${item.id}.highlights`} />
     </div>
   })
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.language ?? context.cv.language))}<div>{entries}</div></section>)
@@ -242,16 +259,19 @@ function renderProjects(context: RenderContext) {
   const entries = items.map((item) => {
     const changed = changeAt(context, 'projects', item.id)
     const time = dateRange(item.startDate, item.endDate)
+    const slice = context.itemSlices?.[item.id]
     return <div className="cv-entry space-y-1" key={item.id} {...interactiveProps(context, item.id)}>
-      <EntryHead
-        title={<RegisteredValue fieldKey="name" value={item.name} change={changed('name')} />}
-        organisation={item.role ? <RegisteredValue fieldKey="role" value={item.role} change={changed('role')} /> : null}
-        date={time ? <RegisteredValue fieldKey="time" value={time} change={changed('startDate') ?? changed('endDate')} /> : null}
-      />
-      {item.link && <RegisteredValue fieldKey="link" value={item.link} change={changed('link')} />}
-      <div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" change={changed('teamSize')} /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" change={changed('techStack')} /></div>
-      {item.contribution && <p><RegisteredValue fieldKey="contribution" value={item.contribution} label="Contribution" change={changed('contribution')} /></p>}
-      <RegisteredHighlights itemId={item.id} values={item.highlights} changes={context.changes} changePath={`projects.${item.id}.highlights`} />
+      {(!slice || slice.head) && <>
+        <EntryHead
+          title={<RegisteredValue fieldKey="name" value={item.name} change={changed('name')} />}
+          organisation={item.role ? <RegisteredValue fieldKey="role" value={item.role} change={changed('role')} /> : null}
+          date={time ? <RegisteredValue fieldKey="time" value={time} change={changed('startDate') ?? changed('endDate')} /> : null}
+        />
+        {item.link && <RegisteredValue fieldKey="link" value={item.link} change={changed('link')} />}
+        <div className="flex flex-wrap gap-x-3 text-xs"><RegisteredValue fieldKey="teamSize" value={item.teamSize} label="Team size" change={changed('teamSize')} /><RegisteredValue fieldKey="techStack" value={item.techStack} label="Tech stack" change={changed('techStack')} /></div>
+        {item.contribution && <p><RegisteredValue fieldKey="contribution" value={item.contribution} label="Contribution" change={changed('contribution')} /></p>}
+      </>}
+      <RegisteredHighlights itemId={item.id} values={item.highlights} indexes={slice?.highlights} changes={context.changes} changePath={`projects.${item.id}.highlights`} />
     </div>
   })
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.language ?? context.cv.language))}<div>{entries}</div></section>)
@@ -265,14 +285,17 @@ function renderEducation(context: RenderContext) {
   const entries = items.map((item) => {
     const changed = changeAt(context, 'education', item.id)
     const time = dateRange(item.startDate, item.endDate)
+    const slice = context.itemSlices?.[item.id]
     return <div className="cv-entry" key={item.id} {...interactiveProps(context, item.id)}>
-      <EntryHead
-        title={<RegisteredValue fieldKey="school" value={item.school} change={changed('school')} />}
-        organisation={item.degree || item.fieldOfStudy ? <><RegisteredValue fieldKey="degree" value={item.degree} change={changed('degree')} />{item.degree && item.fieldOfStudy ? ' — ' : ''}<RegisteredValue fieldKey="field" value={item.fieldOfStudy} change={changed('fieldOfStudy')} /></> : null}
-        date={time ? <RegisteredValue fieldKey="time" value={time} change={changed('startDate') ?? changed('endDate')} /> : null}
-      />
-      {item.gpa && <p><RegisteredValue fieldKey="gpa" value={item.gpa} label="GPA" change={changed('gpa')} /></p>}
-      <RegisteredHighlights itemId={item.id} values={item.highlights ?? []} changes={context.changes} changePath={`education.${item.id}.highlights`} />
+      {(!slice || slice.head) && <>
+        <EntryHead
+          title={<RegisteredValue fieldKey="school" value={item.school} change={changed('school')} />}
+          organisation={item.degree || item.fieldOfStudy ? <><RegisteredValue fieldKey="degree" value={item.degree} change={changed('degree')} />{item.degree && item.fieldOfStudy ? ' — ' : ''}<RegisteredValue fieldKey="field" value={item.fieldOfStudy} change={changed('fieldOfStudy')} /></> : null}
+          date={time ? <RegisteredValue fieldKey="time" value={time} change={changed('startDate') ?? changed('endDate')} /> : null}
+        />
+        {item.gpa && <p><RegisteredValue fieldKey="gpa" value={item.gpa} label="GPA" change={changed('gpa')} /></p>}
+      </>}
+      <RegisteredHighlights itemId={item.id} values={item.highlights ?? []} indexes={slice?.highlights} changes={context.changes} changePath={`education.${item.id}.highlights`} />
     </div>
   })
   if (variant === 'print') return nodeFrame(context, <section className="cv-section">{sectionHeading(context, sectionTitle(context.node.type, context.language ?? context.cv.language))}<div>{entries}</div></section>)
@@ -353,7 +376,7 @@ const nodeRenderers: Record<CVNodeType, (context: RenderContext) => React.ReactN
 }
 
 /** The one ordered-flow resolver used by the editor, preview, and SSR print view. */
-export function CVBlockRenderer({ cv, layout, variant, onSelect, onEdit, nodeIds, itemIds, selectedNodeId, selectedItemId, changes, language }: CVBlockRendererProps) {
+export function CVBlockRenderer({ cv, layout, variant, onSelect, onEdit, nodeIds, itemIds, itemSlices, selectedNodeId, selectedItemId, changes, language }: CVBlockRendererProps) {
   const nodeIdSet = nodeIds ? new Set(nodeIds) : undefined
-  return <>{layout.nodes.filter((node) => node.visible && (!nodeIdSet || nodeIdSet.has(node.id))).map((node) => <React.Fragment key={node.id}>{nodeRenderers[node.type]({ cv, layout, variant, onSelect, onEdit, node, itemIds, selectedNodeId, selectedItemId, changes, language })}</React.Fragment>)}</>
+  return <>{layout.nodes.filter((node) => node.visible && (!nodeIdSet || nodeIdSet.has(node.id))).map((node) => <React.Fragment key={node.id}>{nodeRenderers[node.type]({ cv, layout, variant, onSelect, onEdit, node, itemIds, itemSlices, selectedNodeId, selectedItemId, changes, language })}</React.Fragment>)}</>
 }
