@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { render } from '@testing-library/react'
 import { heightsForItem, pageGroupsForNodes, pageSlices, parseSegment, segmentsForLayout } from '../src/components/CVPageComposer'
+import { CVBlockRenderer } from '../src/components/CVBlockRenderer'
 import { initialCVs } from './fixtures/cvs'
 import type { CVLayout } from '../src/types'
 
@@ -70,6 +72,36 @@ describe('page segments', () => {
       ['experience::exp-1::head', 'experience::exp-1::h0', 'experience::exp-1::h1', 'experience::exp-1::h2'],
       ['experience::exp-1::h3', 'experience::exp-1::h4'],
     ])
+  })
+})
+
+describe('heightsForItem against real CVBlockRenderer markup', () => {
+  // `heightsForItem`/`bulletListOf` giả định `ul.cv-bullets` là CON TRỰC TIẾP
+  // của `[data-cv-item-id]`. CVPageComposer chỉ ghép hàm này với DOM do
+  // CVBlockRenderer render ra (không phải cây tự dựng), nên hợp đồng đó phải
+  // được ghim vào đúng markup thật — nếu CVBlockRenderer đổi cấu trúc lồng,
+  // test này phải đỏ trước khi tách trang theo bullet lặng lẽ tắt ngóm.
+  it('measures head and highlight heights off the item CVBlockRenderer actually renders', () => {
+    const { container } = render(
+      <CVBlockRenderer
+        cv={cv}
+        layout={{ version: 1, nodes: [{ id: 'experience', type: 'experience', visible: true }] }}
+        variant="preview"
+        nodeIds={['experience']}
+        itemIds={{ experience: ['exp-1'] }}
+      />,
+    )
+    const item = container.querySelector('[data-cv-item-id="exp-1"]')!
+    const list = item.querySelector('ul.cv-bullets')!
+    const bullets = [...list.querySelectorAll('li')]
+    expect(bullets).toHaveLength(4)
+
+    stubHeight(item, 300)
+    stubHeight(list, 180)
+    const bulletHeights = bullets.map((bullet, index) => 40 + index * 10)
+    bullets.forEach((bullet, index) => stubHeight(bullet, bulletHeights[index]!))
+
+    expect(heightsForItem(item)).toEqual({ head: 120, highlights: bulletHeights })
   })
 })
 
