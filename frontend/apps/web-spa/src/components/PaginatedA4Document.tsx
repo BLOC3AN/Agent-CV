@@ -70,7 +70,7 @@ export function PaginatedA4Document({
         data-testid="a4-document"
         aria-label={`CV ${pageGroups.length} trang`}
         className={`flex w-[210mm] flex-col ${className}`}
-        style={style}
+        style={{ gap: 'var(--cv-page-margin, 0mm)', ...style }}
       >
         {pageGroups.map((keys, index) => (
           <section
@@ -86,7 +86,6 @@ export function PaginatedA4Document({
               paddingBottom: 'var(--cv-padding-bottom, 20mm)',
               paddingLeft: 'var(--cv-padding-left, 20mm)',
               paddingRight: 'var(--cv-padding-right, 20mm)',
-              marginBottom: 'var(--cv-page-margin, 0mm)',
             }}
           >
             <div className="a4-page-content h-full w-full">

@@ -167,7 +167,7 @@ export const CVDesignSchema = z.object({
   paddingBottom: z.number().min(0).max(40).default(20),
   paddingLeft: z.number().min(0).max(40).default(20),
   paddingRight: z.number().min(0).max(40).default(20),
-  pageMargin: z.number().min(0).max(20).default(0),
+  pageMargin: z.number().min(0).max(20).default(20),
   lineHeight: z.number().min(1).max(2).default(1.3),
   textAlign: z.enum(['left', 'right', 'justify']).default('left'),
 }).strict()

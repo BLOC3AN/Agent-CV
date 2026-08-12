@@ -49,4 +49,18 @@ describe('PaginatedA4Document', () => {
     expect(screen.getByTestId('page-content-header')).toBeInTheDocument()
     expect(screen.getByTestId('page-content-experience')).toBeInTheDocument()
   })
+
+  it('separates composed pages with the preview-only page gap', () => {
+    render(
+      <PaginatedA4Document
+        pageGroups={[['header'], ['experience']]}
+        renderPage={(keys) => keys.map((key) => <div key={key}>{key}</div>)}
+      />,
+    )
+
+    expect(screen.getByTestId('a4-document').getAttribute('style')).toContain('gap: var(--cv-page-margin, 0mm)')
+    for (const page of screen.getAllByTestId('a4-page')) {
+      expect(page.getAttribute('style') ?? '').not.toContain('margin-bottom')
+    }
+  })
 })

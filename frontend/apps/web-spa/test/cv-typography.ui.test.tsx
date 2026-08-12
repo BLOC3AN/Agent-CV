@@ -43,7 +43,7 @@ describe('CV typography controls', () => {
     expect(screen.getByLabelText('Padding dưới')).toHaveValue('20')
     expect(screen.getByLabelText('Padding trái')).toHaveValue('20')
     expect(screen.getByLabelText('Padding phải')).toHaveValue('20')
-    expect(screen.getByLabelText('Margin trang')).toHaveValue('0')
+    expect(screen.getByLabelText('Khe giữa trang (chỉ xem trước)')).toHaveValue('20')
     expect(screen.getByLabelText('Line-height')).toHaveValue('1.15')
     expect(screen.getByLabelText('Căn lề nội dung')).toHaveValue('left')
 
@@ -93,7 +93,7 @@ describe('CV typography controls', () => {
 
   it('resolves Auto to Calibri and preserves legacy body-size fallback', () => {
     expect(resolveCVTypography({ font: 'Auto', fontSize: 12 })).toEqual({
-      fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 13, headerFontSize: 20, lineHeight: '1.3', paddingTop: 20, paddingBottom: 20, paddingLeft: 20, paddingRight: 20, pageMargin: 0, textAlign: 'left',
+      fontFamily: 'Calibri, Arial, sans-serif', bodyFontSize: 12, sectionTitleFontSize: 13, headerFontSize: 20, lineHeight: '1.3', paddingTop: 20, paddingBottom: 20, paddingLeft: 20, paddingRight: 20, pageMargin: 20, textAlign: 'left',
     })
     expect(resolveCVTypography({ font: 'Auto', fontSize: 14 }).bodyFontSize).toBe(10.5)
     expect(resolveCVTypography({ font: 'Auto', fontSize: 14, bodyFontSize: 14 }).bodyFontSize).toBe(14)

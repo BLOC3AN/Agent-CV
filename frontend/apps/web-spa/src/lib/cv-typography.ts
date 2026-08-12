@@ -45,7 +45,7 @@ export function resolveCVTypography(design: CVTypographyDesign): CVTypography {
     paddingBottom: design.paddingBottom ?? 20,
     paddingLeft: design.paddingLeft ?? 20,
     paddingRight: design.paddingRight ?? 20,
-    pageMargin: design.pageMargin ?? 0,
+    pageMargin: design.pageMargin ?? 20,
     textAlign: design.textAlign ?? 'left',
   }
 }

@@ -50,12 +50,12 @@ const envelope: CVEnvelope = {
 const servers: Array<() => Promise<void>> = []
 afterEach(async () => { while (servers.length) await servers.pop()!() })
 
-it('builds print page margins from editable padding and page margin settings', () => {
+it('builds print page margins from the editable padding settings alone', () => {
   const css = printCSSForDesign({
     font: 'Auto', fontSize: 10.5, bodyFontSize: 10.5, sectionTitleFontSize: 13, headerFontSize: 20,
     spacing: 'normal', paddingTop: 12, paddingBottom: 14, paddingLeft: 16, paddingRight: 18, pageMargin: 2, lineHeight: 1.4, textAlign: 'justify',
   })
-  expect(css).toContain('@page{size:A4;margin:14mm 20mm 16mm 18mm}')
+  expect(css).toContain('@page{size:A4;margin:12mm 18mm 14mm 16mm}')
 })
 
 it('SSR /print render cùng template và đổi được presentation/ats/thumbnail', async () => {

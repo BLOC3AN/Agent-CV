@@ -54,10 +54,8 @@ export const PRINT_CSS = `
 
 export function printCSSForDesign(design: Parameters<typeof resolveCVTypography>[0]): string {
   const typography = resolveCVTypography(design)
-  const margin = typography.pageMargin
-  const top = typography.paddingTop + margin
-  const right = typography.paddingRight + margin
-  const bottom = typography.paddingBottom + margin
-  const left = typography.paddingLeft + margin
-  return `${PRINT_CSS}\n@page{size:A4;margin:${top}mm ${right}mm ${bottom}mm ${left}mm}`
+  // `pageMargin` KHÔNG góp vào đây: nó chỉ là khe hở giữa các tờ giấy trên màn
+  // hình xem trước. Lề giấy thật chỉ do bốn padding quyết định, nhờ vậy vùng
+  // nội dung mà preview dùng để phân trang khớp đúng với vùng nội dung của PDF.
+  return `${PRINT_CSS}\n@page{size:A4;margin:${typography.paddingTop}mm ${typography.paddingRight}mm ${typography.paddingBottom}mm ${typography.paddingLeft}mm}`
 }

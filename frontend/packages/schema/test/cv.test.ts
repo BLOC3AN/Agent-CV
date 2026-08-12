@@ -38,7 +38,7 @@ describe('CV v2', () => {
     expect(design.paddingBottom).toBe(20)
     expect(design.paddingLeft).toBe(20)
     expect(design.paddingRight).toBe(20)
-    expect(design.pageMargin).toBe(0)
+    expect(design.pageMargin).toBe(20)
     expect(design.lineHeight).toBe(1.3)
     expect(design.textAlign).toBe('left')
   })

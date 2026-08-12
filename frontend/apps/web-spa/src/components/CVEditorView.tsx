@@ -338,7 +338,7 @@ export const CVEditorView: React.FC<CVEditorViewProps> = ({
                   ['paddingBottom', t('paddingBottom')],
                   ['paddingLeft', t('paddingLeft')],
                   ['paddingRight', t('paddingRight')],
-                  ['pageMargin', 'Margin trang'],
+                  ['pageMargin', t('pageGap')],
                 ] as const).map(([field, label]) => {
                   const value = typography[field]
                   const max = field === 'pageMargin' ? 20 : 40
