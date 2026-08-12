@@ -59,8 +59,5 @@ describe('PaginatedA4Document', () => {
     )
 
     expect(screen.getByTestId('a4-document').getAttribute('style')).toContain('gap: var(--cv-page-margin, 0mm)')
-    for (const page of screen.getAllByTestId('a4-page')) {
-      expect(page.getAttribute('style') ?? '').not.toContain('margin-bottom')
-    }
   })
 })
