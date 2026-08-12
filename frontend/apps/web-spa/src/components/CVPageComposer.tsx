@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react'
 import type { CV, CVLayout } from '../types'
 import { A4_PAGE_SETTINGS } from '../lib/a4-settings'
-import { CVBlockRenderer, type CVRenderVariant } from './CVBlockRenderer'
+import { CVBlockRenderer, type CVItemSlice, type CVRenderVariant } from './CVBlockRenderer'
 import { PaginatedA4Document } from './PaginatedA4Document'
 
 const SEGMENT_SEPARATOR = '::'
@@ -45,27 +45,83 @@ function pageGroupsForNodes(nodeIds: string[], heights: Map<string, number>, cap
   return pages.filter((page) => page.length > 0)
 }
 
-function segmentNodeId(segment: string): string {
-  return segment.split(SEGMENT_SEPARATOR, 1)[0]!
+const SPLITTABLE_SECTIONS = ['experience', 'projects', 'education'] as const
+
+interface ParsedSegment {
+  nodeId: string
+  itemId?: string
+  /** 'head' = phần đầu item; số = index GỐC của một gạch đầu dòng. */
+  part?: 'head' | number
 }
 
-function segmentItemId(segment: string): string | undefined {
-  const separator = segment.indexOf(SEGMENT_SEPARATOR)
-  return separator === -1 ? undefined : segment.slice(separator + SEGMENT_SEPARATOR.length)
+function parseSegment(segment: string): ParsedSegment {
+  const [nodeId, itemId, part] = segment.split(SEGMENT_SEPARATOR)
+  if (!itemId) return { nodeId: nodeId! }
+  if (part === 'head') return { nodeId: nodeId!, itemId, part: 'head' }
+  return { nodeId: nodeId!, itemId, part: Number(part!.slice(1)) }
+}
+
+function segmentsForLayout(cv: CV, layout: CVLayout): string[] {
+  // Khoá theo `type:id` chứ không riêng id: hai section khác nhau về lý thuyết
+  // có thể mang trùng id item, và nhầm ở đây thì số bullet sẽ sai câm.
+  const highlightCounts = new Map<string, number>()
+  for (const type of SPLITTABLE_SECTIONS) {
+    for (const item of cv.sections[type]) highlightCounts.set(`${type}:${item.id}`, item.highlights?.length ?? 0)
+  }
+  const itemIdsByNode = new Map<string, string[]>(SPLITTABLE_SECTIONS.map((type) => [
+    type,
+    orderedItemIds(cv.sections[type], layout.nodes.find((node) => node.type === type && 'itemOrder' in node)?.itemOrder),
+  ]))
+  return layout.nodes.filter((node) => node.visible).flatMap((node) => {
+    if (!SPLITTABLE_NODES.has(node.type)) return [node.id]
+    const itemIds = itemIdsByNode.get(node.type) ?? []
+    return itemIds.flatMap((itemId) => {
+      const base = `${node.id}${SEGMENT_SEPARATOR}${itemId}`
+      const count = highlightCounts.get(`${node.type}:${itemId}`) ?? 0
+      return [`${base}${SEGMENT_SEPARATOR}head`, ...Array.from({ length: count }, (_, index) => `${base}${SEGMENT_SEPARATOR}h${index}`)]
+    })
+  })
+}
+
+function heightOf(element?: Element): number {
+  if (!element) return 0
+  return element.getBoundingClientRect().height || (element as HTMLElement).offsetHeight || 0
+}
+
+function bulletListOf(item?: Element): Element | undefined {
+  // Duyệt con trực tiếp thay vì `:scope > ul.cv-bullets` — bám vào cấu trúc thật
+  // của `.cv-entry` và không phụ thuộc mức hỗ trợ selector của môi trường test.
+  return item ? [...item.children].find((child) => child.classList.contains('cv-bullets')) : undefined
+}
+
+function heightsForItem(item?: Element): { head: number; highlights: number[] } {
+  const list = bulletListOf(item)
+  return {
+    head: heightOf(item) - heightOf(list),
+    highlights: list ? [...list.children].map((bullet) => heightOf(bullet)) : [],
+  }
+}
+
+function pageSlices(pageSegments: string[]): { nodeIds: string[]; itemIds: Record<string, string[]>; itemSlices: Record<string, CVItemSlice> } {
+  const nodeIds: string[] = []
+  const itemIds: Record<string, string[]> = {}
+  const itemSlices: Record<string, CVItemSlice> = {}
+  for (const segment of pageSegments) {
+    const { nodeId, itemId, part } = parseSegment(segment)
+    if (!nodeIds.includes(nodeId)) nodeIds.push(nodeId)
+    if (!itemId) continue
+    if (!itemIds[nodeId]) itemIds[nodeId] = []
+    if (!itemIds[nodeId]!.includes(itemId)) itemIds[nodeId]!.push(itemId)
+    if (!itemSlices[itemId]) itemSlices[itemId] = { head: false, highlights: [] }
+    if (part === 'head') itemSlices[itemId]!.head = true
+    else if (typeof part === 'number') itemSlices[itemId]!.highlights.push(part)
+  }
+  return { nodeIds, itemIds, itemSlices }
 }
 
 export function CVPageComposer({ cv, layout, variant, style, className = '', id, selectedNodeId, selectedItemId, onSelect, onEdit, language }: CVPageComposerProps) {
   const visibleNodeIds = layout.nodes.filter((node) => node.visible).map((node) => node.id)
-  const itemIdsByNode = new Map<string, string[]>([
-    ['experience', orderedItemIds(cv.sections.experience, layout.nodes.find((node) => node.type === 'experience' && 'itemOrder' in node)?.itemOrder)],
-    ['projects', orderedItemIds(cv.sections.projects, layout.nodes.find((node) => node.type === 'projects' && 'itemOrder' in node)?.itemOrder)],
-    ['education', orderedItemIds(cv.sections.education, layout.nodes.find((node) => node.type === 'education' && 'itemOrder' in node)?.itemOrder)],
-  ])
-  const segments = layout.nodes.filter((node) => node.visible).flatMap((node) => {
-    if (!SPLITTABLE_NODES.has(node.type)) return [node.id]
-    const itemIds = itemIdsByNode.get(node.type) ?? []
-    return itemIds.map((itemId) => `${node.id}${SEGMENT_SEPARATOR}${itemId}`)
-  })
+  const segments = segmentsForLayout(cv, layout)
   const measurementKey = `${variant}:${language ?? ''}:${JSON.stringify(cv)}:${JSON.stringify(layout)}`
   const measurementRef = useRef<HTMLDivElement>(null)
   const [pageGroups, setPageGroups] = useState<string[][]>(() => [visibleNodeIds])
@@ -81,16 +137,23 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
       return
     }
     const heights = new Map<string, number>()
+    const itemHeights = new Map<string, { head: number; highlights: number[] }>()
     for (const segment of segments) {
-      const nodeId = segmentNodeId(segment)
-      const itemId = segmentItemId(segment)
-      const selector = itemId ? '[data-cv-item-id]' : '[data-cv-node-id]'
+      const { nodeId, itemId, part } = parseSegment(segment)
       const element = [...measurement.querySelectorAll<HTMLElement>('[data-cv-node-id]')]
         .find((candidate) => candidate.dataset.cvNodeId === nodeId)
-      const item = itemId ? [...(element?.querySelectorAll<HTMLElement>(selector) ?? [])]
-        .find((candidate) => candidate.dataset.cvItemId === itemId) : undefined
-      const heightTarget = item ?? element
-      heights.set(segment, heightTarget?.getBoundingClientRect().height || heightTarget?.offsetHeight || 0)
+      if (!itemId) {
+        heights.set(segment, heightOf(element))
+        continue
+      }
+      const cacheKey = `${nodeId}${SEGMENT_SEPARATOR}${itemId}`
+      if (!itemHeights.has(cacheKey)) {
+        const item = element ? [...element.querySelectorAll<HTMLElement>('[data-cv-item-id]')]
+          .find((candidate) => candidate.dataset.cvItemId === itemId) : undefined
+        itemHeights.set(cacheKey, heightsForItem(item))
+      }
+      const measured = itemHeights.get(cacheKey)!
+      heights.set(segment, part === 'head' ? measured.head : (measured.highlights[part as number] ?? 0))
     }
     setPageGroups(pageGroupsForNodes(segments, heights, contentHeightPx))
     setMeasuredKey(measurementKey)
@@ -111,17 +174,10 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
         className={`cv-page-composer ${className}`}
         pageGroups={pageGroups}
         renderPage={(pageSegments) => {
-          const nodeIds = [...new Set(pageSegments.map(segmentNodeId))]
-          const itemIds = pageSegments.reduce<Record<string, string[]>>((result, segment) => {
-            const itemId = segmentItemId(segment)
-            if (!itemId) return result
-            const nodeId = segmentNodeId(segment)
-            result[nodeId] = [...(result[nodeId] ?? []), itemId]
-            return result
-          }, {})
+          const { nodeIds, itemIds, itemSlices } = pageSlices(pageSegments)
           return (
           <div className="cv-page-flow" style={{ lineHeight: 'var(--cv-line-height)' }}>
-            <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={nodeIds} itemIds={itemIds} selectedNodeId={selectedNodeId} selectedItemId={selectedItemId} onSelect={onSelect} onEdit={onEdit} language={language} />
+            <CVBlockRenderer cv={cv} layout={layout} variant={variant} nodeIds={nodeIds} itemIds={itemIds} itemSlices={itemSlices} selectedNodeId={selectedNodeId} selectedItemId={selectedItemId} onSelect={onSelect} onEdit={onEdit} language={language} />
           </div>
           )
         }}
@@ -131,4 +187,4 @@ export function CVPageComposer({ cv, layout, variant, style, className = '', id,
   )
 }
 
-export { pageGroupsForNodes }
+export { heightsForItem, pageGroupsForNodes, pageSlices, parseSegment, segmentsForLayout }
