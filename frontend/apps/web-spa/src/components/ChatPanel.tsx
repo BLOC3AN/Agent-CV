@@ -1,10 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocale } from '../lib/i18n'
 import { errorMessageKey, stepText } from '../lib/error-messages'
-import { Bot, Check, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
+import { Bot, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
 import type { CV, CVLayout } from '../types'
 import { applyChatOpsToDraft } from '../lib/cv-patch'
 import { sendChat, settleChatProposal, type ChatOp, type ClarifyRequest } from '../lib/api'
+
+/** Còn cách đáy trong ngần này thì vẫn coi là "đang ở đáy" và tiếp tục bám theo. */
+const STICK_TO_BOTTOM_SLACK_PX = 64
 
 interface Props {
   profileId: string
@@ -61,7 +64,10 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
   const currentDraftRef = useRef({ cv, layout: effectiveLayout, draftVersion: effectiveDraftVersion })
   currentDraftRef.current = { cv, layout: effectiveLayout, draftVersion: effectiveDraftVersion }
   const [modelRef, setModelRef] = useState<ModelRef>('local.reasoner')
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
+  // `proposalId` neo bảng đề xuất vào đúng tin nhắn sinh ra nó. Trước đây bảng
+  // được render sau CẢ danh sách nên nó luôn nằm ở đáy, dưới mọi câu mới hơn —
+  // sai thứ tự thời gian, và cái bảng cao ấy che mất câu vừa gửi.
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; text: string; proposalId?: string }[]>([])
   const [input, setInput] = useState('')
   const [step, setStep] = useState<string>()
   const [busy, setBusy] = useState(false)
@@ -71,8 +77,22 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState<number[]>([])
   const controller = useRef<AbortController | undefined>(undefined)
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  // Bám đáy khi người dùng vốn đã ở đáy. Nếu họ đã cuộn lên đọc lại đề xuất cũ
+  // thì mỗi câu trả lời tới lại giật họ về — auto-scroll thành phiền chứ không
+  // còn giúp gì. Câu do CHÍNH họ gửi thì luôn cuộn, không xét điều kiện.
+  const stickToBottom = useRef(true)
 
   useEffect(() => () => controller.current?.abort(), [])
+
+  function scrollToBottom() {
+    const scroller = scrollerRef.current
+    if (scroller) scroller.scrollTop = scroller.scrollHeight
+  }
+
+  useLayoutEffect(() => {
+    if (stickToBottom.current) scrollToBottom()
+  }, [messages, busy, step, clarify, proposal, error])
 
   async function send(text: string, suppliedAnswers: { question: string; answer: string }[] = []) {
     if (!text.trim() || busy) return
@@ -82,6 +102,9 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
     setError(undefined)
     setStep(undefined)
     setClarify(undefined)
+    // Người dùng vừa gửi thì câu của họ phải nằm trong tầm mắt, dù trước đó họ
+    // đang cuộn ở đâu.
+    stickToBottom.current = true
     setMessages((m) => [...m, { role: 'user', text }])
     const requestDraftVersion = effectiveDraftVersion
     try {
@@ -92,7 +115,7 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
         setClarify({ original: text, request: result.request })
         setAnswers({})
       } else if (result.kind === 'patch') {
-        setMessages((m) => [...m, { role: 'assistant', text: result.summary }])
+        setMessages((m) => [...m, { role: 'assistant', text: result.summary, proposalId: result.proposalId }])
         setProposal({ id: result.proposalId, summary: result.summary, ops: result.ops, rejected: result.rejected, draftVersion: requestDraftVersion })
         setChecked(result.ops.map((op, i) => op.grounding.type === 'inference' ? -1 : i).filter((i) => i >= 0))
       } else {
@@ -142,6 +165,24 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
     }
   }
 
+  // Câu tóm tắt KHÔNG lặp lại ở đây: bong bóng chat ngay phía trên bảng đã mang
+  // đúng câu đó rồi.
+  const proposalPanel = proposal && (
+    <div data-testid="ai-proposal" className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm">
+      <div className="flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />{t('aiSuggestion')}</div>
+      {proposal.ops.map((op, i) => (
+        <label key={`${op.path}-${i}`} className="flex gap-2">
+          <input type="checkbox" checked={checked.includes(i)} onChange={() => setChecked((c) => c.includes(i) ? c.filter((x) => x !== i) : [...c, i])} />
+          <span><code>{op.path}</code>{op.op !== 'add' && <><br /><del>{display(readAt(cv, op.path))}</del> → </>}{display(op.value)}</span>
+        </label>
+      ))}
+      <div className="mt-3 border-t border-slate-100 pt-2">
+        <button disabled={busy || !checked.length} onClick={() => void applyProposal(checked)} className="flex w-full items-center justify-center gap-1 rounded-lg bg-violet-600 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"><Zap className="h-3.5 w-3.5" />{t('applyToCV')}</button>
+        <button disabled={busy} onClick={() => void applyProposal([])} className="mt-2 w-full text-xs text-slate-500 underline">{t('skip')}</button>
+      </div>
+    </div>
+  )
+
   return (
     <section aria-label={t('assistantTitle')} className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-xl">
       <header className="flex shrink-0 items-center justify-between bg-[#10132d] px-4 py-4 text-white">
@@ -173,20 +214,35 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4 text-xs">
+      <div
+        ref={scrollerRef}
+        data-testid="chat-scroll"
+        onScroll={(e) => {
+          const scroller = e.currentTarget
+          stickToBottom.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= STICK_TO_BOTTOM_SLACK_PX
+        }}
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4 text-xs"
+      >
         {!messages.length && <p className="text-slate-500">{t('pickSuggestion')}</p>}
         {messages.map((message, i) => (
-          <div key={`${message.role}-${i}`} className={`flex flex-col gap-1 ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <div className={message.role === 'user' ? 'max-w-[90%] rounded-2xl rounded-br-md bg-violet-600 px-3 py-3 leading-relaxed text-white shadow-sm' : 'max-w-[95%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-3 leading-relaxed text-slate-700 shadow-sm'}>
-              {message.role === 'assistant' && <div className="mb-2 flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />{t('aiSuggestion')}</div>}
-              <span className="whitespace-pre-line">{message.text}</span>
+          <React.Fragment key={`${message.role}-${i}`}>
+            <div className={`flex flex-col gap-1 ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className={message.role === 'user' ? 'max-w-[90%] rounded-2xl rounded-br-md bg-violet-600 px-3 py-3 leading-relaxed text-white shadow-sm' : 'max-w-[95%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-3 leading-relaxed text-slate-700 shadow-sm'}>
+                {message.role === 'assistant' && <div className="mb-2 flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />{t('aiSuggestion')}</div>}
+                <span className="whitespace-pre-line">{message.text}</span>
+              </div>
+              <span className="px-1 text-[10px] text-slate-400">{t('justNow')}</span>
             </div>
-            <span className="px-1 text-[10px] text-slate-400">{t('justNow')}</span>
-          </div>
+            {/*
+              Bảng chỉ hiện cạnh tin nhắn đã sinh ra nó, và chỉ khi đó vẫn là đề
+              xuất đang sống. Đề xuất mới thay thế đề xuất cũ thì bảng cũ tự rụng
+              vì id không còn khớp — câu tóm tắt của nó vẫn ở lại làm lịch sử.
+            */}
+            {message.proposalId && proposal?.id === message.proposalId && proposalPanel}
+          </React.Fragment>
         ))}
         {busy && <p role="status" className="animate-pulse rounded-xl border border-violet-100 bg-violet-50 p-3 font-medium text-violet-700">{stepText(step, t) ?? t('aiAnalysing')}…</p>}
         {clarify && <form onSubmit={(e) => { e.preventDefault(); void send(clarify.original, clarify.request.questions.map((q) => ({ question: q.question, answer: answers[q.id] ?? '' })).filter((a) => a.answer.trim())) }} className="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3"><p className="font-medium">{clarify.request.reason}</p>{clarify.request.questions.map((q) => <label key={q.id} className="block">{q.question}<input value={answers[q.id] ?? ''} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} placeholder={q.placeholder} className="mt-1 w-full rounded border px-2 py-1" /></label>)}<button disabled={busy || !Object.values(answers).some(Boolean)} className="rounded bg-violet-600 px-3 py-1.5 text-white">{t('sendAnswers')}</button><button type="button" onClick={() => void send(clarify.original, [{ question: t('hasFiguresQuestion'), answer: t('noFigures') }])} className="ml-2 underline">{t('noFiguresAction')}</button></form>}
-        {proposal && <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 text-slate-700 shadow-sm"><div className="flex w-fit items-center gap-1 rounded border border-violet-100 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-700"><Sparkles className="h-3 w-3" />{t('aiSuggestion')}</div><p className="font-medium">{proposal.summary}</p>{proposal.ops.map((op, i) => <label key={`${op.path}-${i}`} className="flex gap-2"><input type="checkbox" checked={checked.includes(i)} onChange={() => setChecked((c) => c.includes(i) ? c.filter((x) => x !== i) : [...c, i])} /><span><code>{op.path}</code>{op.op !== 'add' && <><br /><del>{display(readAt(cv, op.path))}</del> → </>}{display(op.value)}</span></label>)}<div className="mt-3 border-t border-slate-100 pt-2"><button disabled={busy || !checked.length} onClick={() => void applyProposal(checked)} className="flex w-full items-center justify-center gap-1 rounded-lg bg-violet-600 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"><Zap className="h-3.5 w-3.5" />{t('applyToCV')}</button><button disabled={busy} onClick={() => void applyProposal([])} className="mt-2 w-full text-xs text-slate-500 underline">{t('skip')}</button></div></div>}
         {error && <p role="alert" className="rounded bg-rose-50 p-2 text-rose-700">{error}</p>}
       </div>
 
