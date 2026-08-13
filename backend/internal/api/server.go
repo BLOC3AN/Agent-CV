@@ -2570,7 +2570,44 @@ func chatResponseSchema() map[string]any {
 	}
 }
 
+// appBaseURL là gốc của ứng dụng phía người dùng. Ba chỗ đang tự đọc biến môi
+// trường này rồi tự cắt dấu `/` cuối; gom lại một chỗ để redirect và
+// `redirect_uri` của OAuth không thể lệch nhau.
+func appBaseURL() string {
+	base := os.Getenv("APP_BASE_URL")
+	if base == "" {
+		base = "http://localhost:3000"
+	}
+	return strings.TrimRight(base, "/")
+}
+
+// magicLinkEnabled: magic link chỉ còn là đường đăng nhập của dev.
+//
+// Ở production nó vô dụng — repo không có mailer nào, `authRequest` luôn trả
+// `"sent": false` — nhưng vẫn nhận request và vẫn ghi vào `login_tokens`. Hỏng
+// im lặng như vậy tệ hơn hỏng ở chỗ nhìn thấy được.
+func magicLinkEnabled() bool {
+	return os.Getenv("NODE_ENV") != "production"
+}
+
+// startSession tạo phiên và gắn cookie. Dùng chung cho magic link và Google:
+// chép đôi đoạn này nghĩa là lần sau sửa vòng đời phiên sẽ chỉ sửa một nửa.
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID string) error {
+	session := newID() + newID()
+	if _, err := s.db.ExecContext(r.Context(), `
+		INSERT INTO sessions (token_hash, user_id, expires_at, user_agent)
+		VALUES ($1, $2, now() + interval '30 days', $3)`, tokenHash(session), userID, r.UserAgent()); err != nil {
+		return err
+	}
+	http.SetCookie(w, &http.Cookie{Name: "hr_session", Value: session, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 3600, Secure: r.TLS != nil})
+	return nil
+}
+
 func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
+	if !magicLinkEnabled() {
+		http.NotFound(w, r)
+		return
+	}
 	if s.db == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Auth endpoints require PostgreSQL"})
 		return
@@ -2591,18 +2628,18 @@ func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create the sign-in link"})
 		return
 	}
-	base := os.Getenv("APP_BASE_URL")
-	if base == "" {
-		base = "http://localhost:3000"
-	}
 	result := map[string]any{"ok": true, "sent": false}
 	if os.Getenv("NODE_ENV") != "production" {
-		result["devLink"] = strings.TrimRight(base, "/") + "/api/auth/verify?token=" + url.QueryEscape(token)
+		result["devLink"] = appBaseURL() + "/api/auth/verify?token=" + url.QueryEscape(token)
 	}
 	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) authVerify(w http.ResponseWriter, r *http.Request) {
+	if !magicLinkEnabled() {
+		http.NotFound(w, r)
+		return
+	}
 	if s.db == nil {
 		http.Error(w, "Auth endpoints require PostgreSQL", http.StatusServiceUnavailable)
 		return
@@ -2633,20 +2670,11 @@ func (s *Server) authVerify(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not create the account", http.StatusInternalServerError)
 		return
 	}
-	session := newID() + newID()
-	_, err = s.db.ExecContext(r.Context(), `
-		INSERT INTO sessions (token_hash, user_id, expires_at, user_agent)
-		VALUES ($1, $2, now() + interval '30 days', $3)`, tokenHash(session), userID, r.UserAgent())
-	if err != nil {
+	if err := s.startSession(w, r, userID); err != nil {
 		http.Error(w, "Could not create the session", http.StatusInternalServerError)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "hr_session", Value: session, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 3600, Secure: r.TLS != nil})
-	base := os.Getenv("APP_BASE_URL")
-	if base == "" {
-		base = "http://localhost:3000"
-	}
-	http.Redirect(w, r, strings.TrimRight(base, "/"), http.StatusFound)
+	http.Redirect(w, r, appBaseURL(), http.StatusFound)
 }
 
 func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
@@ -2679,11 +2707,7 @@ func tokenHash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 func redirectLogin(w http.ResponseWriter, r *http.Request, reason string) {
-	base := os.Getenv("APP_BASE_URL")
-	if base == "" {
-		base = "http://localhost:3000"
-	}
-	http.Redirect(w, r, strings.TrimRight(base, "/")+"/login?error="+url.QueryEscape(reason), http.StatusFound)
+	http.Redirect(w, r, appBaseURL()+"/login?error="+url.QueryEscape(reason), http.StatusFound)
 }
 
 func contentKey(bytes []byte) string {
@@ -2774,13 +2798,13 @@ func (s *Server) listCV(w http.ResponseWriter, r *http.Request) {
 func (s *Server) authSession(w http.ResponseWriter, r *http.Request) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false, "magicLink": magicLinkEnabled()})
 		return
 	}
 	var email string
 	if err := s.db.QueryRowContext(r.Context(), `SELECT email FROM users WHERE id = $1`, userID).Scan(&email); err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
+		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false, "magicLink": magicLinkEnabled()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "email": email})
+	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "email": email, "magicLink": magicLinkEnabled()})
 }
