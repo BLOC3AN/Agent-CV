@@ -183,7 +183,7 @@ describe('useCVStore', () => {
     await waitFor(() => expect(result.current.draft).not.toBeNull())
     act(() => result.current.updateDraft({ cv: { ...cv, title: 'Unsaved' }, layout }))
 
-    await act(async () => { await expect(result.current.restoreRevision('revision-1')).rejects.toThrow(/chưa lưu/i) })
+    await act(async () => { await expect(result.current.restoreRevision('revision-1')).rejects.toThrow(/unsaved/i) })
     expect(restore).not.toHaveBeenCalled()
     expect(result.current.draft?.cv.title).toBe('Unsaved')
   })

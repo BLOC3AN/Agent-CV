@@ -23,17 +23,26 @@ interface LocaleValue { locale: Locale; setLocale: (locale: Locale) => void; t: 
 const Context = createContext<LocaleValue | null>(null)
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocale] = useState<Locale>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('hr-locale') === 'en' ? 'en' : 'vi'))
+  // Tiếng Anh là mặc định: nó phục vụ được nhiều người dùng nhất. Tiếng Việt là
+  // ngôn ngữ hỗ trợ thêm, người dùng chọn rồi thì lựa chọn đó được nhớ lại.
+  const [locale, setLocale] = useState<Locale>(storedLocale)
   function change(next: Locale) { setLocale(next); if (typeof localStorage !== 'undefined') localStorage.setItem('hr-locale', next) }
   const value = useMemo(() => ({ locale, setLocale: change, t: (key: MessageKey, params?: MessageParams) => format(messages[locale][key], params) }), [locale])
   return <Context.Provider value={value}>{children}</Context.Provider>
 }
 
+function storedLocale(): Locale {
+  return typeof localStorage !== 'undefined' && localStorage.getItem('hr-locale') === 'vi' ? 'vi' : 'en'
+}
+
 export function useLocale(): LocaleValue {
   const value = useContext(Context)
   // Components remain independently testable and embeddable (the route tree
-  // provides the real context); standalone renders use Vietnamese defaults.
-  return value ?? { locale: 'vi', setLocale: () => {}, t: (key: MessageKey, params?: MessageParams) => format(messages.vi[key], params) }
+  // provides the real context). A standalone render has no provider, so it
+  // reads the stored choice by the same rule the provider uses — otherwise the
+  // locale would be unsteerable exactly where a component is rendered alone.
+  const locale = storedLocale()
+  return value ?? { locale, setLocale: () => {}, t: (key: MessageKey, params?: MessageParams) => format(messages[locale][key], params) }
 }
 
 interface BuilderLocaleValue {
