@@ -301,7 +301,7 @@ Hai DB tách biệt ở bước 1 chứ không dùng chung: chạy song song tr�
 
 ## 8. Ngoài phạm vi
 
-- Sửa driver NVIDIA và bật lại `local.ocr` (`config.yml` → `risks.gpu_driver_mismatch`). Luồng import vẫn chỉ xử lý PDF có text layer.
+- Sửa driver NVIDIA (`config.yml` → `risks.gpu_driver_mismatch`). Luồng import chỉ xử lý PDF có text layer.
 - Bật provider cloud. `cost_mode` giữ `local_only`.
 - Đổi mật khẩu yếu trên staging-master (`risks.weak_credentials`) — việc hạ tầng, theo dõi riêng.
 - Chuyển KB sang `hybrid_retrieval`. Giữ `context_injection` cho tới khi vượt ngưỡng token.

@@ -279,8 +279,8 @@ không cần một Word đẹp hơn.
 1. UC vào `/import`, kéo thả file PDF (≤10MB).
 2. SYS lưu file, tạo `jobs(kind=parse_cv, idempotency_key=sha256(file))`.
 3. SYS gọi `pdfkit`: kiểm tra có text layer không.
-4. **Có text layer và bố cục 1 cột** → trích text + tọa độ bằng `pdfplumber`.
-5. **Không có text layer, hoặc 2 cột/bảng phức tạp** → render trang thành PNG 200dpi → gọi `ocr` (LightOnOCR :5012).
+4. **Có text layer** → trích text + tọa độ bằng `pdfplumber`, kèm cổng kiểm tra chất lượng (TDD §8.1.1).
+5. **Không có text layer** → dừng có kiểm soát, mời user nhập tay (UC-23).
 6. SYS gọi `redact_pii` (**bắt buộc local**) → tách PII sang bảng riêng.
 7. SYS gọi `parse_cv_to_profile` → validate `ProfileSchema`.
 8. SYS ghép PII trở lại, đặt toàn bộ `_meta.verified = false`.
@@ -288,7 +288,6 @@ không cần một Word đẹp hơn.
 
 **Luồng thay thế**
 - 3a. File không phải PDF / hỏng → báo lỗi, gợi ý nhập tay (UC-23).
-- 5a. `ocr` không khả dụng → thử `reasoner` (multimodal) làm dự phòng.
 - 7a. Schema fail → thử lại tối đa 2 lần → vẫn fail → chuyển UC-23, giữ text thô để user tự copy.
 
 **Luồng ngoại lệ**

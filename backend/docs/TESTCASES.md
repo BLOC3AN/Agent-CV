@@ -64,7 +64,7 @@ npm run test:int    integration (cần Postgres, Redis, pdfkit, model server)
 |---|---|---|
 | `CV-01` | 1 cột, có text layer, tiếng Việt, fresher IT | Đường cơ bản |
 | `CV-02` | 2 cột, có text layer, tiếng Việt | Bẫy thứ tự đọc |
-| `CV-03` | Bản scan (không text layer), tiếng Việt | Đường OCR |
+| `CV-03` | Bản scan (không text layer), tiếng Việt | Dừng có kiểm soát → nhập tay |
 | `CV-04` | 1 cột, tiếng Anh, junior | Song ngữ |
 | `CV-05` | Có bảng kỹ năng + thanh phần trăm | Bẫy bảng biểu |
 | `CV-06` | 3 trang, nội dung dài (~4000 từ) | Vượt ngân sách token |
@@ -190,16 +190,15 @@ giữ cho mọi con số hiện ra đều tra được nguồn.
 
 | TC | Mô tả | Loại | Mức | Kỳ vọng |
 |---|---|---|---|---|
-| TC-21-01 | Import `CV-01` (1 cột, text layer) | I | P0 | Dùng `pdfplumber`, **không** gọi OCR. `field_accuracy ≥ 0.90` so với golden |
-| TC-21-02 | Import `CV-02` (2 cột) | I | P0 | Hệ thống **tự chọn đường ảnh** dù có text layer. Thứ tự mục đúng, không trộn 2 cột |
-| TC-21-03 | Import `CV-03` (scan) | I | P0 | Không có text layer → gọi `ocr` :5012 với ảnh. Trả Profile hợp lệ |
+| TC-21-01 | Import `CV-01` (1 cột, text layer) | I | P0 | Dùng `pdfplumber`. `field_accuracy ≥ 0.90` so với golden |
+| TC-21-02 | Import `CV-02` (2 cột) | I | P0 | Text layer 2 cột bị đánh dấu `suspect`, có cảnh báo ở màn hình rà soát |
+| TC-21-03 | Import `CV-03` (scan) | I | P0 | Không có text layer → job `failed` với `error_code='NO_TEXT_LAYER'`, FE mời nhập tay |
 | TC-21-04 | Import `CV-04` (tiếng Anh) | I | P0 | `profiles.language = 'en'` |
 | TC-21-05 | Import `CV-06` (3 trang, dài) | I | P0 | Không lỗi. Nếu phải cắt → `CallMeta.truncated = true` và UI cảnh báo |
 | TC-21-06 | Import `CV-09` (file hỏng) | I | P0 | Job `failed`, thông báo thân thiện + link nhập tay. **Không** stack trace |
 | TC-21-07 | Import cùng file 2 lần | I | P1 | `idempotency_key` trùng → trả kết quả cũ, không tạo job mới |
 | TC-21-08 | File > 10MB | E | P0 | Chặn ở client + server, thông báo giới hạn |
 | TC-21-09 | Quá 5 lần import/ngày | I | P1 | Lần thứ 6 bị từ chối, thông báo rõ |
-| TC-21-10 | `ocr` chết, `reasoner` sống | I | P1 | Fallback sang `reasoner` (multimodal), job vẫn xong |
 | TC-21-11 | Schema fail 3 lần liên tiếp | I | P0 | Sau 2 retry → job `failed`, giữ text thô cho user copy, gợi ý nhập tay |
 | TC-21-12 | CV nhiều trang: đọc ĐỦ số chỗ làm | I | **P0** | Đo trên CV thật 5 chỗ làm / 5.301 ký tự. Chia mục đúng KHÔNG có nghĩa model đọc ra đủ — giữa hai điều đó là lượt gọi model, và đó chính là chỗ hỏng ban đầu |
 | TC-21-13 | Không khúc nào hỏng | I | **P0** | Một khúc hỏng là mất nguyên một chỗ làm; số lượng vẫn "gần đúng" nên rất dễ lọt |
