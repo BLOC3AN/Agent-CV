@@ -1,18 +1,20 @@
 /**
  * Mã lỗi của máy chủ → khoá message của giao diện.
  *
- * Máy chủ (Go) dựng câu chữ bằng tiếng Việt cố định — ví dụ worker trả
- * `NO_CV_SECTIONS: Không nhận ra mục CV như học vấn, kinh nghiệm hoặc kỹ năng`.
- * Giao diện không dịch được chữ tự do đó, nhưng dịch được cái MÃ đứng trước:
- * mã là hợp đồng ổn định giữa hai phía, còn câu chữ thì server đổi lúc nào
- * cũng được.
+ * Máy chủ (Go) dựng câu chữ bằng tiếng Anh cố định — ví dụ worker trả
+ * `NO_CV_SECTIONS: Could not find CV sections such as education, experience or
+ * skills`. Giao diện tra theo MÃ đứng trước để có câu chữ của riêng nó: mã là
+ * hợp đồng ổn định giữa hai phía, còn câu chữ thì server đổi lúc nào cũng được.
  *
- * Bảng này ở tầng UI chứ không nằm trong `lib/api.ts` như trước: `api.ts` là
- * tầng vận chuyển, không có `t` trong tay, nên đặt bảng dịch ở đó là lý do
- * mọi thông báo lỗi kẹt lại tiếng Việt.
+ * Câu chữ tra ra CŨNG là tiếng Anh ở mọi ngôn ngữ giao diện — xem
+ * `i18n/messages.errors.ts`. Bảng này chỉ đổi một chuỗi tiếng Anh của server
+ * lấy một chuỗi tiếng Anh viết cho người dùng cuối, chứ không dịch.
  *
- * Mã lạ trả `undefined` — chỗ gọi lùi về nguyên văn của máy chủ. Thà hiện một
- * câu tiếng Việt còn hơn nuốt lỗi hoặc hiện một chuỗi rỗng.
+ * Bảng đặt ở tầng UI chứ không nằm trong `lib/api.ts`: `api.ts` là tầng vận
+ * chuyển, không có `t` trong tay.
+ *
+ * Mã lạ trả `undefined` — chỗ gọi lùi về nguyên văn của máy chủ. Thà hiện câu
+ * thô của server còn hơn nuốt lỗi hoặc hiện một chuỗi rỗng.
  */
 
 import type { MessageKey } from './i18n'
@@ -48,8 +50,8 @@ export function errorMessageKey(code: string | undefined): MessageKey | undefine
  * Tách mã khỏi thông báo lỗi của job.
  *
  * Worker trả chuỗi thô dạng `MÃ: mô tả`, không phải JSON có trường `code`.
- * Chỉ nhận dạng CHỮ HOA và gạch dưới để một câu tiếng Việt có dấu hai chấm
- * ("Không tải được CV: hết thời gian chờ") không bị hiểu nhầm thành mã.
+ * Chỉ nhận dạng CHỮ HOA và gạch dưới để một câu có dấu hai chấm
+ * ("Could not read the CV: timed out") không bị hiểu nhầm thành mã.
  */
 export function jobErrorCode(message: string | undefined): string | undefined {
   const match = /^([A-Z][A-Z0-9_]*):/.exec(message?.trim() ?? '')

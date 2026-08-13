@@ -851,7 +851,7 @@ func (s *Server) previewCVRevision(ctx context.Context, userID, cvID, revisionID
 func (s *Server) cvCommit(w http.ResponseWriter, r *http.Request, cvID string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var body struct {
@@ -862,11 +862,11 @@ func (s *Server) cvCommit(w http.ResponseWriter, r *http.Request, cvID string) {
 		BaseRevision *int            `json:"baseRevision"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body) != nil || len(body.CV) == 0 || len(body.Layout) == 0 || body.BaseRevision == nil || *body.BaseRevision < 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 	if body.Source != "user" && body.Source != "ai" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid source"})
 		return
 	}
 	revision, cv, err := s.commitCVRevision(r.Context(), userID, cvID, body.CV, body.Layout, body.Source, body.Message, *body.BaseRevision)
@@ -880,7 +880,7 @@ func (s *Server) cvCommit(w http.ResponseWriter, r *http.Request, cvID string) {
 func (s *Server) cvRevisionList(w http.ResponseWriter, r *http.Request, cvID string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	revisions, err := s.listCVRevisions(r.Context(), userID, cvID)
@@ -894,7 +894,7 @@ func (s *Server) cvRevisionList(w http.ResponseWriter, r *http.Request, cvID str
 func (s *Server) cvRevisionPreview(w http.ResponseWriter, r *http.Request, cvID, revisionID string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	revision, before, err := s.previewCVRevision(r.Context(), userID, cvID, revisionID)
@@ -912,14 +912,14 @@ func (s *Server) cvRevisionPreview(w http.ResponseWriter, r *http.Request, cvID,
 func (s *Server) cvRevisionRestore(w http.ResponseWriter, r *http.Request, cvID, revisionID string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var body struct {
 		BaseRevision *int `json:"baseRevision"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || body.BaseRevision == nil || *body.BaseRevision < 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 	revision, cv, err := s.restoreCVRevision(r.Context(), userID, cvID, revisionID, *body.BaseRevision)
@@ -933,16 +933,16 @@ func (s *Server) cvRevisionRestore(w http.ResponseWriter, r *http.Request, cvID,
 func (s *Server) writeCVRevisionError(w http.ResponseWriter, err error) {
 	switch {
 	case isInvalidCVIdentifier(err):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV hoặc revision không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid CV or revision id"})
 	case errors.Is(err, errCVNotFound), errors.Is(err, errCVRevisionAbsent):
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV hoặc revision"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "CV or revision not found"})
 	case errors.Is(err, errSchemaV2Invalid), errors.Is(err, errCVSnapshotInvalid):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cv phải là schemaVersion 2", "code": "SCHEMA_V2_INVALID"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cv must be schemaVersion 2", "code": "SCHEMA_V2_INVALID"})
 	case errors.Is(err, errCVLayoutInvalid):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "layout không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid layout"})
 	case errors.Is(err, errCVRevisionConflict):
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "CV đã có phiên bản mới hơn. Hãy tải lại trước khi lưu.", "code": "CV_REVISION_CONFLICT"})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "This CV has a newer version. Reload before saving.", "code": "CV_REVISION_CONFLICT"})
 	default:
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save the CV"})
 	}
 }
