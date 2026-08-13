@@ -1789,6 +1789,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	if modelOutput.Kind == "patch" {
 		if err := validateChatProposalDocuments(profileRaw, body.Layout, modelOutput.Ops); err != nil {
+			// Ghi lại op bị chặn: người dùng chỉ thấy câu từ chối, còn muốn biết
+			// mô hình thật sự đã đề xuất gì thì không còn dấu vết nào khác.
+			log.Printf("chat proposal rejected requestId=%s modelRef=%q session=%s err=%v ops=%s", requestID, body.ModelRef, sessionID, err, jsonRawArray(modelOutput.Ops))
 			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa thể tạo đề xuất an toàn từ yêu cầu này: " + err.Error()}
 			assistantContent = modelOutput.Text
 		} else {
@@ -1881,7 +1884,9 @@ Nếu người dùng yêu cầu sửa, viết lại, nhóm, sắp xếp hoặc c
 Quy tắc bắt buộc: không tự ghi hồ sơ; không bịa dữ kiện; tối đa 20 ops; value bắt buộc với add/replace; mỗi op/path chỉ xuất hiện một lần.
 
 
-Đường dẫn: phần giới thiệu cá nhân luôn là /sections/intro/summary. Mỗi gạch đầu dòng của kinh nghiệm, dự án, học vấn và hoạt động là một phần tử riêng — sửa một ý thì nhắm đúng vào nó, ví dụ /sections/experience/0/highlights/2, KHÔNG ghi đè cả mảng highlights. Kỹ năng gom theo nhóm: một phần tử của /sections/skills có category và skills là mảng chuỗi; thêm một kỹ năng thì dùng /sections/skills/0/skills/-.`
+Đường dẫn: phần giới thiệu cá nhân luôn là /sections/intro/summary. Mỗi gạch đầu dòng của kinh nghiệm, dự án, học vấn và hoạt động là một phần tử riêng — sửa một ý thì nhắm đúng vào nó, ví dụ /sections/experience/0/highlights/2, KHÔNG ghi đè cả mảng highlights. Kỹ năng gom theo nhóm: một phần tử của /sections/skills có category và skills là mảng chuỗi; thêm một kỹ năng thì dùng /sections/skills/0/skills/- với op add.
+
+Token "-" ở cuối path nghĩa là NỐI VÀO CUỐI mảng, nên nó chỉ đi được với op add. Muốn sửa hoặc xoá một phần tử đã có thì trỏ đúng chỉ số của nó, ví dụ replace /sections/skills/0/skills/2. Dùng replace hay remove với "-" sẽ bị từ chối.`
 }
 
 func parseChatModelOutput(raw string) chatModelOutput {
@@ -2015,6 +2020,13 @@ func validateChatProposalDocuments(profileRaw, layoutRaw []byte, ops []json.RawM
 			return fmt.Errorf("op không hợp lệ")
 		}
 		if !allowedChatPatchPath(op.Op, op.Path) {
+			// Path có thể đúng mà chỉ sai op: token "-" của JSON Pointer nghĩa là
+			// "nối vào cuối mảng" nên chỉ có nghĩa với add. Báo "path không được
+			// hỗ trợ" trong trường hợp đó là sai sự thật, và nó đẩy cả người dùng
+			// lẫn người sửa lỗi đi tìm nhầm chỗ.
+			if allowed := allowedChatPatchOps(op.Path); len(allowed) > 0 {
+				return fmt.Errorf("op %q không dùng được với path %s, path này chỉ nhận: %s", op.Op, op.Path, strings.Join(allowed, ", "))
+			}
 			return fmt.Errorf("path không được hỗ trợ: %s", op.Path)
 		}
 		if strings.HasPrefix(op.Path, "/layout/") {
@@ -2116,6 +2128,18 @@ func allowedChatPatchPath(op, path string) bool {
 		}
 	}
 	return false
+}
+
+// allowedChatPatchOps liệt kê những op mà path này chấp nhận. Rỗng nghĩa là
+// path thật sự không được hỗ trợ; khác rỗng nghĩa là lỗi nằm ở op, không ở path.
+func allowedChatPatchOps(path string) []string {
+	allowed := make([]string, 0, 3)
+	for _, candidate := range []string{"add", "replace", "remove"} {
+		if allowedChatPatchPath(candidate, path) {
+			allowed = append(allowed, candidate)
+		}
+	}
+	return allowed
 }
 
 func decimalPathPart(value string) bool {
