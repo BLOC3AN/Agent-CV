@@ -105,64 +105,6 @@ providers:
           Bộ não chính giai đoạn 1: gap analysis, chat editing, viết lại bullet,
           sinh summary, planning, nén hội thoại, đọc ảnh trang CV.
 
-      # ---- Model phụ: 8B nén 1-bit ----------------------------------------
-      generalist:
-        container: bonsai_llamacpp
-        port: 5010
-        model_id: "prism-ml/Bonsai-8B-gguf"
-        model_file: "Bonsai-8B-Q1_0.gguf"
-        params: 8.19e9
-        quant: Q1_0              # nén 1-bit — nhiều tham số, độ chính xác thấp hơn
-        n_embd: 4096
-        ctx_size_runtime: 4096   # ⚠️ NGẮN — không đủ cho Profile+JD+KB
-        ctx_size_train: 65536
-        n_gpu_layers: 99
-        measured:
-          vi_generation_quality: good
-          latency_ms_24tok: 581
-        role: >
-          Dự phòng cho `reasoner` khi quá tải. Task ngắn, độc lập.
-          KHÔNG dùng cho task cần context dài (ctx chỉ 4096).
-
-      # ---- OCR / đọc tài liệu ---------------------------------------------
-      ocr:
-        container: lightonocr_llamacpp
-        port: 5012
-        status: DOWN                     # ⚠️ chết 2026-08-07, xem TDD §2.6
-        down_since: "2026-08-07"
-        down_reason: >
-          Payload ảnh 417KB làm cudaMalloc thất bại → SIGSEGV. Không khởi động
-          lại được vì driver NVIDIA mismatch (kernel 580.159.03 vs userspace
-          580.173.02). Cần gỡ nvidia-driver-550 + reboot.
-        max_image_bytes: 122880           # trần 120KB khi hoạt động lại (P1)
-        model_id: "LightOnOCR-2-1B-q8_0.gguf"
-        params: 5.96e8
-        quant: q8_0
-        ctx_size_runtime: 8192
-        n_gpu_layers: 99
-        multimodal: true         # BẮT BUỘC input ảnh, gọi text-only sẽ echo lại prompt
-        measured:
-          text_only_call: "echoes prompt — must send image"
-        role: >
-          Đọc CV dạng scan / PDF không có text layer / CV 2 cột phức tạp.
-          Đây là mảnh ghép giúp toàn bộ luồng parse CV chạy được offline.
-
-      # ---- Classifier siêu nhẹ --------------------------------------------
-      classifier:
-        container: slm-entitie-relationships
-        port: 5013
-        model_id: "qwen2.5-0.5b-instruct-Q8_0.gguf"
-        params: 4.94e8
-        quant: Q8_0
-        ctx_size_runtime: 2048   # ⚠️ rất ngắn
-        n_gpu_layers: 10         # offload một phần
-        measured:
-          vi_generation_quality: weak    # logic lệch — chỉ dùng phân loại
-          latency_ms: 978
-        role: >
-          Phân loại nhãn ngắn, tag, gate rẻ. TUYỆT ĐỐI không sinh text
-          hiển thị cho user.
-
       # ---- Embedding (dense + sparse) -------------------------------------
       embedder:
         container: neura-embedding-service
@@ -258,38 +200,26 @@ routing:
   detect_pdf_text_layer:
     primary: deterministic               # pdfplumber/PyMuPDF, không cần LLM
     fallback: null
-  ocr_cv_page:
-    primary: local.ocr
-    # KHÔNG fallback sang reasoner: nó là model CHỦ LỰC, và chính payload ảnh
-    # lớn đã giết local.ocr. Mất reasoner là mất toàn bộ hệ thống (TDD §2.6 P3).
-    fallback: null
-    enabled: false                       # ⚠️ hoãn tới khi :5012 hoạt động lại
-    when_funded: local.ocr
   parse_cv_to_profile:
     primary: local.reasoner
-    # KHÔNG dùng generalist làm fallback: ctx của nó chỉ 4096, mà task này cần
-    # ~7500 (system 1200 + CV 3000 + Profile JSON 3500). Nó chắc chắn fail —
-    # escalate sang đó chỉ tốn thêm 100 giây rồi vẫn hỏng.
+    # Không có model dự phòng: task này cần ~7500 token ngữ cảnh
+    # (system 1200 + CV 3000 + Profile JSON 3500).
     fallback: null
     schema: ProfileSchema
     on_schema_fail: retry_then_fail
     max_retries: 2
     timeout_ms: 180000                   # sinh ~3500 token ở 35 tok/s ≈ 100s
     when_funded: anthropic.write         # nâng chất lượng khi có tiền
-  classify_cv_block:
-    primary: local.classifier
-    fallback: local.reasoner
-
   # ---- JD & Matching -------------------------------------------------------
   parse_jd:
     primary: local.reasoner
-    fallback: local.generalist
+    fallback: null
     schema: JDRequirementsSchema
     on_schema_fail: retry_then_escalate
     when_funded: anthropic.cheap
   normalize_skill:
     primary: dictionary                  # từ điển taxonomy lo ~80%
-    fallback: local.classifier
+    fallback: null
   embed_text:
     primary: local.embedder
     fallback: null
@@ -304,7 +234,7 @@ routing:
   # ---- Giá trị lõi ---------------------------------------------------------
   gap_analysis:
     primary: local.reasoner
-    fallback: local.generalist
+    fallback: null
     when_funded: anthropic.deep
   insight_mining:                        # đào sâu trải nghiệm, đặt câu hỏi làm rõ
     primary: local.reasoner
@@ -312,11 +242,11 @@ routing:
     when_funded: anthropic.deep
   rewrite_bullet:
     primary: local.reasoner
-    fallback: local.generalist
+    fallback: null
     when_funded: anthropic.write
   generate_summary:
     primary: local.reasoner
-    fallback: local.generalist
+    fallback: null
     when_funded: anthropic.write
   propose_patch:                         # sinh JSON Patch cho CV
     primary: local.reasoner
@@ -329,7 +259,7 @@ routing:
   # ---- Nội bộ, user không đọc ---------------------------------------------
   answer_question:                       # trả lời câu hỏi về CV (UC-56)
     primary: local.reasoner
-    fallback: null                       # generalist ctx 4096 không đủ cho hồ sơ + đối chiếu
+    fallback: null
     required_local: true                 # prompt chứa hồ sơ → không ra cloud
     schema: AnswerSchema
     on_schema_fail: retry_then_fail
@@ -342,10 +272,10 @@ routing:
     schema: AgentPlanSchema              # schema NHỎ (≤3 field) cho model 4B
   compact_chat:
     primary: local.reasoner
-    fallback: local.generalist
+    fallback: null
   session_title:
-    primary: local.classifier
-    fallback: local.reasoner
+    primary: local.reasoner
+    fallback: null
 
 # ============================================================================
 # CHÍNH SÁCH VẬN HÀNH
@@ -360,9 +290,6 @@ policies:
   per_model_limits:
     # 1 GPU 3060 dùng chung cho 5 model → đừng để queue vỡ
     local.reasoner:   { max_concurrency: 3, queue_size: 20, timeout_ms: 60000 }
-    local.generalist: { max_concurrency: 2, queue_size: 10, timeout_ms: 45000 }
-    local.ocr:        { max_concurrency: 2, queue_size: 30, timeout_ms: 60000 }
-    local.classifier: { max_concurrency: 6, queue_size: 50, timeout_ms: 10000 }
     local.embedder:   { max_concurrency: 8, queue_size: 200, timeout_ms: 15000, batch_size: 32 }
     local.reranker:   { max_concurrency: 4, queue_size: 50, timeout_ms: 15000 }
 
@@ -467,7 +394,7 @@ risks:
   vram_unknown:
     severity: medium
     detail: "4 model đặt --n-gpu-layers 99 trên 1 card 12GB. Không đo được vì nvidia-smi hỏng."
-    action: "đo lại ngay sau khi fix driver; có thể phải giảm gpu-layers của generalist"
+    action: "đo lại ngay sau khi fix driver"
 
   ctx_too_small:
     severity: medium

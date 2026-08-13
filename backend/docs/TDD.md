@@ -78,9 +78,6 @@ Hệ quả thiết kế:
 | Alias | Port | Model | ctx | Ghi chú đo được |
 |---|---|---|---|---|
 | `reasoner` | 5011 | Qwen3.5-4B-Q8_0 | **16384** | 4 slot · multimodal (mmproj) · ~35 tok/s |
-| `generalist` | 5010 | Bonsai-8B-Q1_0 | **4096** | context ngắn — chỉ task độc lập |
-| `ocr` | 5012 | LightOnOCR-2-1B | 8192 | **bắt buộc input ảnh** |
-| `classifier` | 5013 | qwen2.5-0.5b | **2048** | chất lượng sinh ngữ yếu |
 | `reranker` | 5014 | bge-reranker-v2-m3 | 8192 | `POST /v1/rerank` |
 | `embedder` | 8003 | bge-m3-onnx-int8 | — | **API riêng**, `POST /embed` body `{"text": "..."}` |
 
@@ -98,7 +95,6 @@ Tiếng Anh  : 45 token
 Tỷ lệ      : 1.29×
 ```
 
-(`generalist` và `classifier` cho tỷ lệ 1.38× — vocab nhỏ hơn.)
 
 **Hệ quả:** mọi ngân sách token phải nhân 1.3 khi nội dung là tiếng Việt. Một CV tiếng Việt tốn ~30% context nhiều hơn cùng CV tiếng Anh.
 
@@ -122,16 +118,15 @@ Không có GPU cục bộ → **mọi inference đều qua Tailscale**. Độ tr
 | C3 | ~35 tok/s, 4 slot | §14 — streaming bắt buộc, hàng đợi |
 | C4 | Server có thể chết vĩnh viễn | §5 — circuit breaker, degrade |
 | C5 | Không GPU cục bộ | Không có fallback tại chỗ |
-| C6 | `generalist` ctx chỉ 4096 | Không dùng làm fallback cho task context dài |
 | C7 | `embedder` API không chuẩn OpenAI | Adapter riêng |
 | C8 | **Payload lớn có thể GIẾT tiến trình model, không chỉ lỗi** | §2.6 — trần kích thước bắt buộc |
 
 ### 2.6 Trần kích thước payload — ràng buộc học được từ sự cố
 
-> Ghi ngày 2026-08-07, sau khi làm sập `local.ocr`.
+> Ghi ngày 2026-08-07.
 
-GPU RTX 3060 12GB đang gánh 4 model với `--n-gpu-layers 99`. VRAM gần đầy
-thường trực. Một request ảnh 417KB (trang A4 ở 150dpi) gửi cho LightOnOCR gây:
+GPU RTX 3060 12GB chạy `--n-gpu-layers 99`, VRAM gần đầy thường trực. Một
+request ảnh 417KB (trang A4 ở 150dpi) gửi cho một model đa phương thức gây:
 
 ```
 cudaMalloc failed: out of memory  (xin 522 MiB)
@@ -149,6 +144,10 @@ nvidia-container-cli: initialization error: nvml error: driver/library version m
 Đây chính là rủi ro **R1 (§16)** hiện thực hoá. Khôi phục cần gỡ
 `nvidia-driver-550` + reboot — mà máy chạy 109 container khác.
 
+Ràng buộc này vẫn còn hiệu lực: `reasoner` cũng là model đa phương thức
+(có `mmproj`), nên mọi request ảnh gửi tới nó đều nằm trong phạm vi các quy
+tắc dưới đây.
+
 **Quy tắc bắt buộc từ nay:**
 
 | # | Quy tắc |
@@ -158,8 +157,8 @@ nvidia-container-cli: initialization error: nvml error: driver/library version m
 | P3 | Model đa phương thức mặc định coi là **mong manh** — retry một lần rồi bỏ, không dồn |
 | P4 | Trên GPU dùng chung, **không chạy song song** hai request ảnh |
 
-Trần đề xuất cho đường ảnh khi `local.ocr` hoạt động trở lại: **≤120KB PNG mỗi
-trang** (tương đương ~72dpi cho A4), tăng dần và đo lại nếu cần nét hơn.
+Trần đề xuất cho mọi request ảnh: **≤120KB PNG mỗi trang** (tương đương ~72dpi
+cho A4), tăng dần và đo lại nếu cần nét hơn.
 
 ---
 
@@ -188,8 +187,7 @@ trang** (tương đương ~72dpi cho A4), tăng dần và đo lại nếu cần 
                    │ Tailscale (100.x)
                    ▼
 ┌──────────────── MODEL SERVER 100.68.50.41 (CHỈ ĐỌC) ──────────────────────────┐
-│  :5011 reasoner  :5010 generalist  :5012 ocr  :5013 classifier                │
-│  :5014 reranker  :8003 embedder                                               │
+│  :5011 reasoner  :5014 reranker  :8003 embedder                               │
 └───────────────────────────────────────────────────────────────────────────────┘
                    ┆ (disabled — bật sau gọi vốn)
                    ┄► Anthropic API
@@ -375,7 +373,6 @@ run(task, input)
 // ❌ POST :8003/v1/embeddings           → 404 (không phải OpenAI API)
 // ❌ POST :8003/embed {"texts":[...]}   → 422 missing field "text"
 // ✅ POST :8003/embed {"text":"..."}    → {success, dense_vector[1024], sparse...}
-// ❌ POST :5012 chat text-only          → echo lại prompt (OCR cần ảnh)
 ```
 
 ### 5.4.2 Grammar hỏng thì llama.cpp IM LẶNG bỏ qua
@@ -488,7 +485,7 @@ Prompt-only không đủ để model 4B trả JSON hợp lệ. Đo thực tế t
 
 | | Kết quả |
 |---|---|
-| Chỉ dùng prompt | Schema hợp lệ = **false**. Retry 2 lần trên `reasoner`, escalate sang `generalist`, retry tiếp → **6 lần thử, 12.3s, vẫn fail** |
+| Chỉ dùng prompt | Schema hợp lệ = **false**. Retry 2 lần trên `reasoner` → vẫn fail |
 | Bật `response_format: json_schema` | **1 lần thử, 2.8s, không escalate** |
 
 llama.cpp (build b8833) dựng GBNF grammar từ JSON Schema và ép sinh token theo
@@ -523,7 +520,7 @@ Task trả văn xuôi tự do đặt `constrainedOutput: false`.
 policies = {
   circuitBreaker: { failureThreshold: 5, cooldownSec: 60, halfOpenProbes: 1 },
   healthCheck:    { intervalSec: 30, unhealthyAfter: 3 },
-  timeouts:       { connect: 3_000, reasoner: 60_000, classifier: 10_000 },
+  timeouts:       { connect: 3_000, reasoner: 60_000 },
 }
 ```
 
@@ -938,12 +935,11 @@ User upload PDF
    ▼ Worker
    ├─ [1] pdfkit service: có text layer không?
    │        ├─ CÓ  → pdfplumber trích text + toạ độ block
-   │        └─ KHÔNG → render page → PNG 200dpi
-   │                    → run('ocr_cv_page', {image})      [model: ocr :5012]
+   │        └─ KHÔNG → dừng có kiểm soát, mời user nhập tay (§8.1.1)
    │
-   ├─ [2] Heuristic phát hiện bố cục
-   │        Nếu 2 cột / bảng phức tạp → dùng đường ảnh (kể cả khi có text layer),
-   │        vì text layer 2 cột hay bị trộn thứ tự.
+   ├─ [2] Cổng kiểm tra chất lượng text layer (§8.1.1)
+   │        Text layer 2 cột hay bị trộn thứ tự → đánh dấu `suspect`
+   │        và cảnh báo ở màn hình rà soát.
    │
    ├─ [3] run('redact_pii', {text})        [BẮT BUỘC local — §15]
    │        → tách PII ra bảng riêng, thay bằng placeholder
@@ -980,12 +976,12 @@ Mất dòng tên = mất field quan trọng nhất. Và **so sánh độ dài kh
 
 ```
 [1] Trích text
-     ├─ Không có text layer            → đường ảnh (OCR)
-     ├─ Có Type3 font                  → đường ảnh   ← tín hiệu deterministic,
-     │                                                  khớp 1:1 với file hỏng
+     ├─ Không có text layer            → quality = none
+     ├─ Có Type3 font                  → quality = suspect  ← tín hiệu deterministic,
+     │                                                        khớp 1:1 với file hỏng
      ├─ Ký tự lỗi (ˇ ˘ ˙ ˚ ﬁ ﬂ, hoa
-     │  kẹt giữa thường) vượt ngưỡng   → đường ảnh
-     ├─ Hai engine bất đồng > 15%      → đường ảnh
+     │  kẹt giữa thường) vượt ngưỡng   → quality = suspect
+     ├─ Hai engine bất đồng > 15%      → quality = suspect
      └─ Còn lại                        → PyMuPDF (có toạ độ, cần cho tô sáng
                                           vùng ở màn hình rà soát UC-22)
 ```
@@ -993,20 +989,17 @@ Mất dòng tên = mất field quan trọng nhất. Và **so sánh độ dài kh
 Chạy cả hai engine là rẻ (đều cục bộ, không tốn LLM), nên luôn chạy cả hai và
 so sánh thay vì tin một engine.
 
-**Nhánh khi đường ảnh KHÔNG khả dụng** (hiện tại — `local.ocr` chết, §2.6):
+**Xử lý theo `quality`:**
 
-| `quality` | Có OCR | Không có OCR (hiện tại) |
-|---|---|---|
-| `good` | dùng text | dùng text — **không đổi** |
-| `suspect` | đi đường ảnh | dùng text, **kèm cảnh báo** ở màn hình rà soát |
-| `none` | đi đường ảnh | **dừng có kiểm soát** → mời user nhập tay |
+| `quality` | Xử lý |
+|---|---|
+| `good` | dùng text |
+| `suspect` | dùng text, **kèm cảnh báo** ở màn hình rà soát |
+| `none` | **dừng có kiểm soát** → mời user nhập tay |
 
-Nguyên tắc: thiếu OCR làm *giảm chất lượng*, không được làm *sập luồng*. Job kết
+Nguyên tắc: text layer kém làm *giảm chất lượng*, không được làm *sập luồng*. Job kết
 thúc `status='failed'` với `error_code='NO_TEXT_LAYER'` — mã máy đọc được để FE
 hiện đúng lời mời nhập tay chứ không phải màn hình lỗi trắng (BR-71.1).
-
-Khi `local.ocr` sống lại, chỉ cần bật `routing.ocr_cv_page.enabled: true` trong
-`config.yml`; nhánh trong worker đã viết sẵn và có test.
 
 **Ảnh hưởng:** `services/pdfkit` phải expose `quality: 'good' | 'suspect' |
 'none'` cùng với text, để worker quyết định nhánh. Trường này cũng đi vào
@@ -1123,7 +1116,6 @@ Ghi lại vì cả ba đều hỏng âm thầm và đã có test hồi quy:
 |---|---|---|---|
 | Cache JSON Schema theo **tên task** | 4/5 mục fail `SCHEMA_INVALID` | 7 task parse-section dùng chung tên `parse_cv_to_profile` để chia sẻ route → mục sau bị ép sinh JSON hình dạng của mục trước | Cache bằng `WeakMap` khoá theo **chính đối tượng schema** |
 | `connect_timeout_ms` áp cho cả cuộc gọi | Mọi task sinh dài đều `TIMEOUT` | 3s là timeout *kết nối*, không phải timeout *toàn cuộc gọi*; task sinh 3.500 token mất ~100s | Provider không đặt timeout cho `chat()`; gateway kiểm soát qua `AbortSignal` |
-| `generalist` làm fallback cho task ngữ cảnh lớn | Escalate rồi vẫn fail, tốn thêm ~100s | ctx của `generalist` chỉ 4.096, task cần ~7.500 — không thể thành công | `fallback: null` cho `parse_cv_to_profile`, ghi rõ lý do trong config |
 
 ### 8.2 F2 — Phân tích JD & Matching
 
@@ -2430,12 +2422,12 @@ Model server chỉ tiếp cận được qua Tailscale. Không expose ra Interne
 
 | # | Rủi ro | Mức | Xử lý |
 |---|---|---|---|
-| R1 | **Model server chết vĩnh viễn** (driver mismatch, ai đó restart) | 🔴 **ĐÃ XẢY RA** | `local.ocr` (:5012) chết 2026-08-07 do payload ảnh quá lớn, **không khởi động lại được** vì driver mismatch. 5/6 model còn sống. Đường OCR hoãn tới khi có cửa sổ reboot. Xem §2.6 |
+| R1 | **Model server chết vĩnh viễn** (driver mismatch, ai đó restart) | 🔴 **ĐÃ XẢY RA** | Một model chết 2026-08-07 do payload ảnh quá lớn, **không khởi động lại được** vì driver mismatch. Khôi phục cần cửa sổ reboot. Xem §2.6 |
 | R2 | **Throughput không đủ khi có traffic** | 🔴 | Waitlist ngay từ đầu · hàng đợi minh bạch · cache · kế hoạch bật cloud (§14.2) |
 | R3 | **Không có nguồn KB thật** | 🔴 | Seed mẫu để mời HR phản biện (§10.6). Không có HR thật thì sản phẩm mất moat |
 | R4 | Context 16384 không đủ cho CV dài | 🟠 | §6.4 nén → chia nhỏ task → báo user. Không cắt âm thầm |
 | R5 | Qwen3.5-4B chất lượng gap analysis chưa đạt | 🟠 | Eval trước khi cam kết. Nếu không đạt → bật cloud sớm hơn kế hoạch |
-| R6 | Parse CV 2 cột sai | 🟠 | Đường ảnh + LightOnOCR · màn hình review bắt buộc |
+| R6 | Parse CV 2 cột sai | 🟠 | Màn hình review bắt buộc |
 | R7 | AI bịa kinh nghiệm | 🟠 | `grounding` bắt buộc · `_meta.verified` · UI không tick sẵn op `inference` |
 | R8 | Máy dev là điểm chết duy nhất | 🟡 | Backup DB định kỳ · docker-compose tái tạo được · code trong git |
 | R9 | Prompt injection qua KB | 🟡 | §10.5 |
@@ -2448,7 +2440,7 @@ Model server chỉ tiếp cận được qua Tailscale. Không expose ra Interne
 |---|---|---|---|
 | **M0** | Model Gateway · schema validation · budget manager · health/breaker · eval harness · docker-compose | `run('parse_jd', ...)` chạy được từ CLI, có log `CallMeta`. Tắt Tailscale → breaker mở, không sập. `eval/run.ts` chạy được trên 5 mẫu | 1.5 tuần |
 | **M1** | Profile CRUD · template mức A · preview · export 2 bản | Nhập tay → PDF tiếng Việt có dấu đúng, bản ATS-safe 1 cột. Không cần LLM | 2 tuần |
-| **M2** | Upload PDF · pdfkit · OCR · redact PII · màn hình review | 20 CV mẫu: ≥90% field đúng sau review. PII không xuất hiện trong `llm_calls` | 2 tuần |
+| **M2** | Upload PDF · pdfkit · redact PII · màn hình review | 20 CV mẫu: ≥90% field đúng sau review. PII không xuất hiện trong `llm_calls` | 2 tuần |
 | **M3** | JD parse · matching hybrid · gap report | Score deterministic (chạy 3 lần ra cùng kết quả). Mỗi match có evidence. Tắt embedder → degrade đúng | 1.5 tuần |
 | **M4** | Chat · insight mining · propose patch · diff UI | Patch không hợp lệ không apply được. Undo/redo hoạt động. Op `inference` không tick sẵn | 2 tuần |
 | **M5** | KB: upload · curator UI · SQL selector · citation | Lời khuyên có kbRefs hiển thị nguồn. Lời khuyên không nguồn gắn nhãn khác. Seed được HR duyệt ≥1 rubric | 1.5 tuần |
