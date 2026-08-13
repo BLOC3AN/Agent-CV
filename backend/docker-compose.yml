@@ -20,6 +20,14 @@ x-env: &env
 
 services:
   backend:
+    # `../.env` mang sang container những biến KHÔNG được viết cứng ở đây:
+    # APP_BASE_URL, MAGIC_LINK_DEV, GOOGLE_CLIENT_ID/SECRET.
+    #
+    # Chúng phải nằm ở env_file chứ KHÔNG phải khối `environment:` dưới đây:
+    # `environment:` thắng `env_file`, mà phép thế `${VAR}` của compose chỉ đọc
+    # shell và `.env` NẰM CẠNH file compose này (backend/.env — không tồn tại),
+    # chứ không đọc `../.env`. Viết `APP_BASE_URL: ${APP_BASE_URL:-...}` vào
+    # đây sẽ ghi đè giá trị thật trong `../.env` bằng giá trị mặc định.
     env_file:
       - ../.env
     build:

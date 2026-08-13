@@ -41,7 +41,12 @@ export function LoginPage() {
       <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-5">
         <div className="space-y-1">
           <h1 className="text-xl font-bold text-slate-900">{t('signIn')}</h1>
-          <p className="text-xs text-slate-500">{t('loginHint')}</p>
+          {/*
+            Lời dẫn nói về CÁI FORM ("nhập email, chúng tôi gửi đường dẫn"), nên
+            nó phải biến mất cùng form. Giữ lại là bảo người dùng gõ vào một ô
+            không tồn tại.
+          */}
+          {magicLink && <p className="text-xs text-slate-500">{t('loginHint')}</p>}
         </div>
 
         {/*

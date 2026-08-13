@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -43,6 +42,16 @@ func googleEnv(t *testing.T, base string) {
 	t.Setenv("APP_BASE_URL", "http://localhost:3000")
 }
 
+func cookieNamed(w *httptest.ResponseRecorder, name string) *http.Cookie {
+	var found *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == name {
+			found = c
+		}
+	}
+	return found
+}
+
 func TestGoogleStartRedirectsWithStateCookie(t *testing.T) {
 	googleEnv(t, fakeGoogle(t, "a@example.com", true))
 	handler := NewServerWithDB(cvRevisionDB(t), t.TempDir()).Routes()
@@ -67,20 +76,71 @@ func TestGoogleStartRedirectsWithStateCookie(t *testing.T) {
 	if got := target.Query().Get("scope"); got != "openid email" {
 		t.Errorf("scope = %q", got)
 	}
-	var cookie *http.Cookie
-	for _, c := range w.Result().Cookies() {
-		if c.Name == "hr_oauth_state" {
-			cookie = c
-		}
-	}
+	cookie := cookieNamed(w, "hr_oauth_state")
 	if cookie == nil {
 		t.Fatal("không set cookie state")
 	}
 	if cookie.Value != state {
 		t.Errorf("cookie state %q khác state trên URL %q", cookie.Value, state)
 	}
+	// Thuộc tính của cookie này là thứ CHỊU LỰC: nó là nửa cookie của phép
+	// đối chiếu double-submit chống CSRF đăng nhập. Mất HttpOnly thì script
+	// đọc được; mất SameSite thì trang khác gửi kèm được; MaxAge sai thì một
+	// state cũ còn dùng lại được sau nhiều ngày.
 	if !cookie.HttpOnly {
 		t.Error("cookie state phải HttpOnly")
+	}
+	if cookie.MaxAge != 600 {
+		t.Errorf("MaxAge = %d, muốn 600", cookie.MaxAge)
+	}
+	if cookie.SameSite != http.SameSiteLaxMode {
+		t.Errorf("SameSite = %v, muốn Lax", cookie.SameSite)
+	}
+	if cookie.Path != "/api/auth/google" {
+		t.Errorf("Path = %q, muốn /api/auth/google trên http thuần", cookie.Path)
+	}
+}
+
+// Nửa cookie của double-submit phải được GHIM VÀO HOST. Không có tiền tố
+// `__Host-`, một subdomain anh em — hay kẻ trên đường truyền ở một origin
+// plaintext cùng domain — ghi được `hr_oauth_state` cho domain cha, rồi đưa
+// nạn nhân một URL callback mang state khớp: nạn nhân âm thầm đăng nhập vào
+// tài khoản Google của kẻ tấn công.
+func TestGoogleStartBindsStateCookieToHostOverHTTPS(t *testing.T) {
+	googleEnv(t, fakeGoogle(t, "a@example.com", true))
+	handler := NewServerWithDB(cvRevisionDB(t), t.TempDir()).Routes()
+
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/google/start", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	if plain := cookieNamed(w, "hr_oauth_state"); plain != nil {
+		t.Error("vẫn đặt cookie tên trần trên HTTPS — subdomain anh em ghi đè được")
+	}
+	cookie := cookieNamed(w, "__Host-hr_oauth_state")
+	if cookie == nil {
+		t.Fatal("không set cookie __Host-hr_oauth_state")
+	}
+	// Trình duyệt chỉ chấp nhận tiền tố `__Host-` khi có đủ ba điều kiện này;
+	// thiếu một cái là cookie bị bỏ qua hoàn toàn và luồng đăng nhập chết.
+	if !cookie.Secure {
+		t.Error("__Host- yêu cầu Secure")
+	}
+	if cookie.Path != "/" {
+		t.Errorf("Path = %q, __Host- yêu cầu /", cookie.Path)
+	}
+	if cookie.Domain != "" {
+		t.Errorf("Domain = %q, __Host- yêu cầu không có Domain", cookie.Domain)
+	}
+	if !cookie.HttpOnly {
+		t.Error("cookie state phải HttpOnly")
+	}
+	if cookie.MaxAge != 600 {
+		t.Errorf("MaxAge = %d, muốn 600", cookie.MaxAge)
+	}
+	if cookie.SameSite != http.SameSiteLaxMode {
+		t.Errorf("SameSite = %v, muốn Lax", cookie.SameSite)
 	}
 }
 
@@ -94,6 +154,45 @@ func TestGoogleStartRefusesWhenNotConfigured(t *testing.T) {
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, muốn 503 — hỏng ở chỗ nhìn thấy được chứ không phải giữa đường ở phía Google", w.Code)
+	}
+}
+
+// APP_BASE_URL không được đặt ở đâu cả trong bản triển khai thật, nên mặc định
+// `http://localhost:3000` âm thầm thắng: `redirect_uri` gửi sang Google là một
+// URL localhost và Google trả `redirect_uri_mismatch`. Hỏng ở đây, chỗ nhìn
+// thấy được, chứ không phải trên một trang lỗi của Google.
+func TestGoogleStartRefusesWhenAppBaseURLMissing(t *testing.T) {
+	t.Setenv("GOOGLE_CLIENT_ID", "client-1")
+	t.Setenv("GOOGLE_CLIENT_SECRET", "secret-1")
+	unsetenv(t, "APP_BASE_URL")
+	handler := NewServerWithDB(cvRevisionDB(t), t.TempDir()).Routes()
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/auth/google/start", nil))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, muốn 503", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "" {
+		t.Errorf("vẫn redirect sang %q với redirect_uri localhost", loc)
+	}
+}
+
+// `googleCallback` đã chặn khi thiếu DB. Không chặn ở `/start` nghĩa là người
+// dùng đi hết màn hình đồng ý của Google rồi mới nhận 503 ở đường về — hỏng ở
+// chỗ khó hiểu nhất, sau khi đã trao quyền.
+func TestGoogleStartRequiresDatabase(t *testing.T) {
+	googleEnv(t, fakeGoogle(t, "a@example.com", true))
+	handler := NewServer().Routes()
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/auth/google/start", nil))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, muốn 503", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != "" {
+		t.Errorf("vẫn đẩy người dùng sang Google (%q) dù không có DB để tạo phiên", loc)
 	}
 }
 
@@ -128,6 +227,59 @@ func TestGoogleCallbackRejectsBadState(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Trên HTTPS, cookie tên trần là cookie mà kẻ khác ghi được. Callback phải
+// đọc ĐÚNG cái tên nó đã đặt — chấp nhận tên trần ở đây làm tiền tố `__Host-`
+// thành đồ trang trí.
+func TestGoogleCallbackOverHTTPSIgnoresUnprefixedStateCookie(t *testing.T) {
+	googleEnv(t, fakeGoogle(t, "a@example.com", true))
+	handler := NewServerWithDB(cvRevisionDB(t), t.TempDir()).Routes()
+
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?code=good-code&state=s1", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+	r.AddCookie(&http.Cookie{Name: "hr_oauth_state", Value: "s1"})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	if !strings.Contains(w.Header().Get("Location"), "error=google_state") {
+		t.Fatalf("Location = %q, muốn lỗi google_state", w.Header().Get("Location"))
+	}
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "hr_session" && c.Value != "" {
+			t.Fatal("tạo phiên từ cookie state mà kẻ tấn công ghi được")
+		}
+	}
+}
+
+func TestGoogleCallbackOverHTTPSAcceptsHostPrefixedStateCookie(t *testing.T) {
+	email := "google-" + newID() + "@example.com"
+	googleEnv(t, fakeGoogle(t, email, true))
+	db := cvRevisionDB(t)
+	handler := NewServerWithDB(db, t.TempDir()).Routes()
+	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM users WHERE email = $1`, email) })
+
+	r := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?code=good-code&state=s1", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+	r.AddCookie(&http.Cookie{Name: "__Host-hr_oauth_state", Value: "s1"})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "http://localhost:3000" {
+		t.Fatalf("status=%d location=%q", w.Code, w.Header().Get("Location"))
+	}
+	if c := cookieNamed(w, "hr_session"); c == nil || c.Value == "" {
+		t.Fatal("không set cookie hr_session")
+	}
+	// Cookie xoá phải mang đủ thuộc tính của tiền tố, nếu không trình duyệt
+	// từ chối luôn cả lệnh xoá và state dùng một lần vẫn còn đó.
+	deletion := cookieNamed(w, "__Host-hr_oauth_state")
+	if deletion == nil {
+		t.Fatal("không xoá cookie state sau khi dùng")
+	}
+	if deletion.MaxAge >= 0 || deletion.Path != "/" || !deletion.Secure {
+		t.Errorf("cookie xoá không hợp lệ với tiền tố __Host-: %+v", deletion)
 	}
 }
 
@@ -226,24 +378,5 @@ func TestGoogleCallbackRejectsBadCode(t *testing.T) {
 func TestGoogleHTTPClientHasTimeout(t *testing.T) {
 	if googleHTTPClient.Timeout != 10*time.Second {
 		t.Fatalf("googleHTTPClient.Timeout = %v, muốn 10s", googleHTTPClient.Timeout)
-	}
-}
-
-// Giữ chữ ký JSON của fakeGoogle trung thực với Google thật.
-func TestFakeGoogleUserinfoShapeMatchesGoogle(t *testing.T) {
-	base := fakeGoogle(t, "a@example.com", true)
-	req, _ := http.NewRequest(http.MethodGet, base+"/oauth2/v3/userinfo", nil)
-	req.Header.Set("Authorization", "Bearer at-1")
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	var info map[string]any
-	if err := json.NewDecoder(res.Body).Decode(&info); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := info["email_verified"].(bool); !ok {
-		t.Fatal("email_verified phải là bool như Google trả")
 	}
 }

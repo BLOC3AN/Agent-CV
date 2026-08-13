@@ -2599,10 +2599,17 @@ func appBaseURL() string {
 // magicLinkEnabled: magic link chỉ còn là đường đăng nhập của dev.
 //
 // Ở production nó vô dụng — repo không có mailer nào, `authRequest` luôn trả
-// `"sent": false` — nhưng vẫn nhận request và vẫn ghi vào `login_tokens`. Hỏng
-// im lặng như vậy tệ hơn hỏng ở chỗ nhìn thấy được.
+// `"sent": false` — nhưng vẫn nhận request, vẫn ghi vào `login_tokens`, và vẫn
+// trả `devLink` chứa token thô. Ai gọi được endpoint này cũng đăng nhập được
+// vào BẤT KỲ tài khoản nào.
+//
+// Vì vậy cổng phải HỎNG-ĐÓNG, và phải có biến của chính nó. Suy ra từ
+// `NODE_ENV != "production"` là hỏng-mở: biến không được đặt, gõ sai, hay một
+// môi trường lạ đều thành "bật" — và bản triển khai thật KHÔNG đặt
+// `NODE_ENV=production` ở service backend, nên cổng chưa từng được lên đạn.
+// Chỉ đúng chuỗi "true" mới mở.
 func magicLinkEnabled() bool {
-	return os.Getenv("NODE_ENV") != "production"
+	return os.Getenv("MAGIC_LINK_DEV") == "true"
 }
 
 // startSession tạo phiên và gắn cookie. Dùng chung cho magic link và Google:
@@ -2643,11 +2650,12 @@ func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create the sign-in link"})
 		return
 	}
-	result := map[string]any{"ok": true, "sent": false}
-	if magicLinkEnabled() {
-		result["devLink"] = appBaseURL() + "/api/auth/verify?token=" + url.QueryEscape(token)
-	}
-	writeJSON(w, http.StatusOK, result)
+	// Không cần kiểm `magicLinkEnabled()` lần nữa: hàm đã trả 404 ở đầu nếu tắt.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"sent":    false,
+		"devLink": appBaseURL() + "/api/auth/verify?token=" + url.QueryEscape(token),
+	})
 }
 
 func (s *Server) authVerify(w http.ResponseWriter, r *http.Request) {

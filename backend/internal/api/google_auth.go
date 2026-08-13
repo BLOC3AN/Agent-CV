@@ -17,6 +17,28 @@ import (
 // cần migration.
 const googleStateCookie = "hr_oauth_state"
 
+// stateCookieShape quyết định tên và phạm vi cookie state theo từng request.
+//
+// Trên HTTPS phải dùng tiền tố `__Host-`: nó là thứ DUY NHẤT ghim cookie vào
+// đúng host đã đặt nó. Thiếu nó, nửa cookie của phép đối chiếu double-submit
+// là thứ kẻ khác GHI ĐƯỢC — một subdomain anh em, hoặc kẻ trên đường truyền ở
+// một origin plaintext cùng domain, đặt `hr_oauth_state` cho domain cha rồi
+// đưa nạn nhân một URL callback mang state khớp; nạn nhân âm thầm đăng nhập
+// vào tài khoản Google của chúng.
+//
+// Trình duyệt chỉ chấp nhận tiền tố này khi cookie có `Secure`, `Path=/` và
+// KHÔNG có `Domain`. `Path=/` rộng hơn mong muốn, nhưng cookie chỉ sống 10
+// phút và đổi lại là ràng buộc host thật sự.
+//
+// Trên http thuần (dev cục bộ) trình duyệt từ chối tiền tố, nên giữ tên trần
+// và phạm vi hẹp như cũ.
+func stateCookieShape(r *http.Request) (name, path string, secure bool) {
+	if secureCookies(r) {
+		return "__Host-" + googleStateCookie, "/", true
+	}
+	return googleStateCookie, "/api/auth/google", false
+}
+
 // googleHTTPClient: http.DefaultClient không có timeout riêng — đường huỷ
 // duy nhất là r.Context(), chỉ kích hoạt khi TRÌNH DUYỆT ngắt kết nối. Một
 // endpoint token/userinfo của Google bị treo sẽ ghim goroutine vô thời hạn,
@@ -39,17 +61,28 @@ func googleRedirectURI() string {
 }
 
 func (s *Server) googleStart(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		// `googleCallback` cũng chặn, nhưng chặn ở đó là quá muộn: người dùng
+		// đã đi hết màn hình đồng ý của Google và đã trao quyền, rồi mới nhận
+		// 503 ở đường về.
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Auth endpoints require PostgreSQL"})
+		return
+	}
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
-	if clientID == "" || os.Getenv("GOOGLE_CLIENT_SECRET") == "" {
-		// Hỏng ở đây, chỗ nhìn thấy được — chứ không redirect sang Google rồi
-		// để người dùng nhận một trang lỗi của Google mà không hiểu vì sao.
+	// APP_BASE_URL quyết định `redirect_uri`. Không đặt thì mặc định
+	// `http://localhost:3000` âm thầm thắng và Google trả
+	// `redirect_uri_mismatch` — hỏng ở đây, chỗ nhìn thấy được, chứ không
+	// redirect sang Google rồi để người dùng nhận một trang lỗi của Google mà
+	// không hiểu vì sao.
+	if clientID == "" || os.Getenv("GOOGLE_CLIENT_SECRET") == "" || os.Getenv("APP_BASE_URL") == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Google sign-in is not configured"})
 		return
 	}
 	state := newID() + newID()
+	cookieName, cookiePath, cookieSecure := stateCookieShape(r)
 	http.SetCookie(w, &http.Cookie{
-		Name: googleStateCookie, Value: state, Path: "/api/auth/google",
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600, Secure: secureCookies(r),
+		Name: cookieName, Value: state, Path: cookiePath,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600, Secure: cookieSecure,
 	})
 	authURL, _, _ := googleEndpoints()
 	query := url.Values{
@@ -74,13 +107,21 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 	// Đối chiếu state là chốt chặn CSRF: thiếu nó, kẻ khác ép được nạn nhân
 	// đăng nhập vào tài khoản của chúng.
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie(googleStateCookie)
+	// Đọc ĐÚNG cái tên `/start` đã đặt cho request cùng dạng: trên HTTPS mà
+	// chấp nhận cả tên trần thì tiền tố `__Host-` chỉ còn là đồ trang trí, vì
+	// tên trần là tên kẻ tấn công ghi được.
+	cookieName, cookiePath, cookieSecure := stateCookieShape(r)
+	cookie, err := r.Cookie(cookieName)
 	if state == "" || err != nil || cookie.Value != state {
 		redirectLogin(w, r, "google_state")
 		return
 	}
-	// State dùng một lần.
-	http.SetCookie(w, &http.Cookie{Name: googleStateCookie, Value: "", Path: "/api/auth/google", MaxAge: -1, HttpOnly: true})
+	// State dùng một lần. Cookie xoá phải mang lại đủ thuộc tính của tiền tố,
+	// nếu không trình duyệt từ chối luôn cả lệnh xoá.
+	http.SetCookie(w, &http.Cookie{
+		Name: cookieName, Value: "", Path: cookiePath,
+		MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: cookieSecure,
+	})
 
 	email, verified, err := googleEmailForCode(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {

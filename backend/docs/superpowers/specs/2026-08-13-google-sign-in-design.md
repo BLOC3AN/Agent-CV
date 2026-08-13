@@ -52,6 +52,16 @@ kéo một thư viện vào để tiết kiệm chừng đó là đổi sai chi�
 Dùng cookie thay vì một bảng DB cho `state`: nó chỉ sống trong một vòng redirect, không
 cần bền vững, và không cần migration.
 
+Cookie phải được **ghim vào host**. Trên HTTPS tên của nó là `__Host-hr_oauth_state`; trên
+http thuần (dev cục bộ) trình duyệt từ chối tiền tố nên giữ tên trần `hr_oauth_state`.
+Không có tiền tố, nửa cookie của phép đối chiếu double-submit là thứ kẻ khác GHI ĐƯỢC: một
+subdomain anh em, hoặc kẻ trên đường truyền ở một origin plaintext cùng domain, đặt được
+cookie cho domain cha rồi đưa nạn nhân một URL callback mang `state` khớp — nạn nhân âm
+thầm đăng nhập vào tài khoản Google của chúng. Trình duyệt chỉ chấp nhận tiền tố khi cookie
+có `Secure`, `Path=/` và không có `Domain`; `Path=/` rộng hơn mong muốn nhưng cookie chỉ
+sống 10 phút. Callback đọc đúng cái tên mà `/start` đặt cho request cùng dạng — chấp nhận
+cả tên trần trên HTTPS làm tiền tố thành đồ trang trí.
+
 ### `GET /api/auth/google/callback`
 
 1. **Đối chiếu `state` với cookie.** Lệch hoặc thiếu → từ chối. Đây là chốt chặn CSRF; bỏ
@@ -96,19 +106,31 @@ sẽ chỉ sửa một nửa. Đây là loại trùng lặp im lặng gây lệc
 
 ## Magic link lui về chỉ-dev
 
-`/api/auth/request` và `/api/auth/verify` trả 404 khi `NODE_ENV=production`.
+`/api/auth/request` và `/api/auth/verify` trả 404 TRỪ KHI `MAGIC_LINK_DEV=true`.
 
 Hôm nay chúng đã vô dụng ở production nhưng vẫn nhận request và vẫn ghi vào `login_tokens`
 — hỏng một cách im lặng. Đóng hẳn thì nó hỏng ở chỗ nhìn thấy được. Bảng `login_tokens`
 và toàn bộ mã giữ nguyên: dev và test vẫn cần một đường tạo phiên không phụ thuộc mạng
 ngoài.
 
+**Cổng phải hỏng-ĐÓNG, bằng biến của chính nó.** Bản thiết kế đầu tiên nói `NODE_ENV=
+production` → 404, tức là suy ra "bật" từ việc *thiếu* một giá trị. Đó là hỏng-MỞ, và nó
+đã thành lỗ thật: service `backend` trong `docker-compose.yml` không đặt `NODE_ENV=
+production` bao giờ (nó nhận `NODE_ENV=development` từ `../.env`), nên cổng chưa từng
+được lên đạn. Với `/api/auth/request` mở toang và `devLink` chứa token thô, bất kỳ ai gọi
+được backend cũng đăng nhập được vào bất kỳ tài khoản nào.
+
+Cổng đọc `MAGIC_LINK_DEV` và chỉ mở khi giá trị đúng bằng chuỗi `"true"`. Không đặt, gõ
+sai, hay một môi trường lạ đều là ĐÓNG.
+
 ## Frontend
 
 `LoginPage` thêm nút "Sign in with Google" — chỉ là `<a href="/api/auth/google/start">`,
 không giữ state gì.
 
-Form magic link ẩn khi không phải môi trường dev. SPA không đọc được `NODE_ENV` của máy
+Form magic link — VÀ lời dẫn "nhập email, chúng tôi gửi đường dẫn" đi kèm nó — ẩn khi
+không phải môi trường dev. Giữ lại lời dẫn mà ẩn form là bảo người dùng gõ vào một ô
+không tồn tại. SPA không đọc được biến môi trường của máy
 chủ, nên nó phải được **báo cho biết**: `GET /api/auth/session` — endpoint đã có, SPA đã
 gọi sẵn khi khởi động — trả thêm một trường `magicLink: bool` ở cả hai nhánh
 `authenticated` true và false. Máy chủ là nơi duy nhất biết sự thật này, và thêm một
@@ -128,12 +150,30 @@ thông báo lỗi vẫn tiếng Anh theo `messages.errors.ts`.
 | `GOOGLE_CLIENT_ID` | định danh OAuth client |
 | `GOOGLE_CLIENT_SECRET` | bí mật, chỉ nằm phía máy chủ |
 | `GOOGLE_OAUTH_BASE` | gốc endpoint của Google; **chỉ để test tiêm được**, mặc định là endpoint thật |
-| `APP_BASE_URL` | đã có; quyết định `redirect_uri` |
+| `APP_BASE_URL` | quyết định `redirect_uri`, đích redirect sau đăng nhập, và cờ Secure của cookie. **BẮT BUỘC** |
+| `MAGIC_LINK_DEV` | mở magic link cho dev; chỉ `"true"` mới mở. **Không đặt ở production** |
 
 `redirect_uri` là `${APP_BASE_URL}/api/auth/google/callback` và phải được đăng ký y hệt
 trong Google Cloud Console — sai một ký tự là Google từ chối.
 
-Thêm `GOOGLE_CLIENT_ID` và `GOOGLE_CLIENT_SECRET` vào `.env.example` với giá trị rỗng.
+**Sửa lỗi của bản thiết kế đầu:** bảng này từng ghi `APP_BASE_URL` là "đã có". Sai — nó
+chỉ tồn tại trong mã Go và test, không có trong `.env`, `.env.example`, hay khối
+`environment:` nào. `appBaseURL()` vì vậy rơi về mặc định `http://localhost:3000` trên máy
+chủ thật: `redirect_uri` gửi sang Google là URL localhost (Google đáp
+`redirect_uri_mismatch`), `secureCookies()` mất đường dự phòng `https://`, và redirect sau
+đăng nhập ném người dùng production về localhost. Do đó `/api/auth/google/start` phải **từ
+chối bằng 503 khi `APP_BASE_URL` trống**, y như khi thiếu client ID — hỏng ở chỗ nhìn thấy
+được, đúng nguyên tắc phần trên.
+
+Thêm vào `.env.example`: `GOOGLE_CLIENT_ID` và `GOOGLE_CLIENT_SECRET` (rỗng),
+`APP_BASE_URL`, `MAGIC_LINK_DEV=true`, và `GOOGLE_OAUTH_BASE` **để trống** kèm ghi chú
+rằng nó chỉ dành cho test và tuyệt đối không đặt ở production — đặt nó là chuyển bước đổi
+code, kèm `GOOGLE_CLIENT_SECRET`, sang một host của bên thứ ba.
+
+Những biến này tới được container `backend` qua `env_file: ../.env`, **không** qua khối
+`environment:`: `environment:` thắng `env_file`, mà phép thế `${VAR}` của compose chỉ đọc
+shell và `.env` nằm cạnh file compose (`backend/.env`, không tồn tại) chứ không đọc
+`../.env` — viết chúng vào `environment:` sẽ ghi đè giá trị thật bằng giá trị mặc định.
 
 ## Kiểm chứng
 
@@ -149,10 +189,18 @@ Test viết trước theo TDD:
   (`HttpOnly`, `SameSite=Lax`, `MaxAge` 30 ngày), redirect về `APP_BASE_URL`.
 - Email đã tồn tại → dùng lại đúng `user.id`, `users` không sinh hàng thứ hai.
 - Thiếu `GOOGLE_CLIENT_ID` → `/start` trả lỗi cấu hình, không redirect.
-- `NODE_ENV=production` → `/api/auth/request` và `/api/auth/verify` trả 404.
-- `GET /api/auth/session` trả `magicLink: false` ở production, `true` ngoài production —
-  ở cả hai nhánh `authenticated`.
-- `LoginPage` ẩn form magic link khi `magicLink: false`, luôn hiện nút Google.
+- Thiếu `APP_BASE_URL` → `/start` trả 503, không redirect.
+- Không có DB → `/start` trả 503, không đẩy người dùng qua màn hình đồng ý của Google.
+- Cookie `state`: `MaxAge=600`, `SameSite=Lax`, `HttpOnly`; trên HTTPS mang tên
+  `__Host-hr_oauth_state` với `Secure`, `Path=/`, không `Domain`.
+- Trên HTTPS, cookie `hr_oauth_state` tên trần khớp `state` → vẫn từ chối, không tạo phiên.
+- **Tư thế mặc định — KHÔNG đặt biến môi trường nào:** `/api/auth/request` và
+  `/api/auth/verify` trả 404, `/api/auth/session` báo `magicLink: false`. Test nào cũng tự
+  đặt biến thì không test nào nói được cổng có bao giờ được lên đạn hay không.
+- `MAGIC_LINK_DEV` với giá trị lạ (`"1"`, `"yes"`, `"True"`, `"development"`) → vẫn 404.
+- `MAGIC_LINK_DEV=true` → hai endpoint mở lại, `magicLink: true`.
+- `LoginPage` ẩn form magic link **và lời dẫn của nó** khi `magicLink: false`, luôn hiện
+  nút Google.
 - `startSession` sau khi tách: magic link vẫn tạo phiên và set cookie y như trước.
 
 ## Ngoài phạm vi

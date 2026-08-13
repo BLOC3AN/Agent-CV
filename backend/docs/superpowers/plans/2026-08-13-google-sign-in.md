@@ -8,6 +8,19 @@
 
 **Tech Stack:** Go 1.22 (`net/http`, routing bằng pattern của `ServeMux`), PostgreSQL qua `database/sql` + pgx, React 19 + TypeScript, Vitest.
 
+> **ĐÍNH CHÍNH SAU CODE REVIEW (2026-08-13).** Các đoạn mã bên dưới giữ nguyên làm hồ sơ
+> thi công, nhưng bốn điểm đã bị thay thế — spec là nguồn đúng, không phải plan này:
+>
+> 1. `magicLinkEnabled()` là `os.Getenv("MAGIC_LINK_DEV") == "true"`, KHÔNG phải
+>    `os.Getenv("NODE_ENV") != "production"`. Định nghĩa cũ hỏng-MỞ và trên thực tế chưa
+>    từng được lên đạn: service `backend` nhận `NODE_ENV=development` từ `../.env`.
+>    Mọi `t.Setenv("NODE_ENV", …)` trong plan này đổi thành `MAGIC_LINK_DEV`.
+> 2. `/api/auth/google/start` từ chối bằng 503 khi `APP_BASE_URL` trống, và khi `s.db`
+>    là nil.
+> 3. Cookie `state` mang tên `__Host-hr_oauth_state` (kèm `Secure`, `Path=/`) khi
+>    `secureCookies(r)`; tên trần chỉ dùng cho http thuần.
+> 4. `LoginPage` ẩn `loginHint` cùng với form magic link.
+
 ## Global Constraints
 
 - Spec nguồn: `backend/docs/superpowers/specs/2026-08-13-google-sign-in-design.md`. Mục "Ngoài phạm vi" của spec là ràng buộc, không phải gợi ý.
