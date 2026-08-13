@@ -129,7 +129,7 @@ Hai file khác nhau, không dùng chung.
 `AUTH_SECRET` sinh ngẫu nhiên, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` lấy từ
 `credential/cvguide_client_secret_*.json`, `MODEL_HOST=http://100.68.50.41`,
 `NODE_ENV=production`, `BACKEND_BIND=100.82.195.220`, `BACKEND_PORT=18090`,
-`DATA_ROOT=/opt/hr-agent/data`, và `PG_BIND`/`REDIS_BIND`/`PDFKIT_BIND` đều
+`DATA_ROOT=/srv/hr-agent/data`, và `PG_BIND`/`REDIS_BIND`/`PDFKIT_BIND` đều
 `127.0.0.1` với cổng `15433`/`16380`/`18100`.
 
 **Tuyệt đối không đặt `MAGIC_LINK_DEV`.** Cổng này hỏng-đóng (chỉ chuỗi `"true"`
