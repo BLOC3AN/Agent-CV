@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { CVDesign } from '../types'
-import { lineHeightForSpacing } from './a4-settings'
+import { A4_HEIGHT_MM, MM_TO_PX, lineHeightForSpacing } from './a4-settings'
 
 export const CV_FONT_FAMILIES: Record<CVDesign['font'], string> = {
   Auto: 'Calibri, Arial, sans-serif',
@@ -48,6 +48,19 @@ export function resolveCVTypography(design: CVTypographyDesign): CVTypography {
     pageMargin: design.pageMargin ?? 20,
     textAlign: design.textAlign ?? 'left',
   }
+}
+
+/**
+ * Chiều cao vùng nội dung của MỘT tờ A4, tính bằng px.
+ *
+ * Đây là sức chứa mà preview dùng để cắt trang, và nó phải trùng đúng hộp nội
+ * dung mà `printCSSForDesign` khai qua `@page{margin:…}` — cùng lấy từ bốn
+ * padding, KHÔNG cộng `pageMargin` (khe giữa hai tờ giấy trên màn hình thôi).
+ * Hai nửa lệch nhau là preview cắt trang một kiểu, PDF một kiểu.
+ */
+export function pageContentHeightPx(design: Parameters<typeof resolveCVTypography>[0]): number {
+  const typography = resolveCVTypography(design)
+  return (A4_HEIGHT_MM - typography.paddingTop - typography.paddingBottom) * MM_TO_PX
 }
 
 export function cvTypographyStyle(design: Parameters<typeof resolveCVTypography>[0]) {

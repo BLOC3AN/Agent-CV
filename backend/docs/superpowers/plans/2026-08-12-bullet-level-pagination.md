@@ -4,7 +4,7 @@
 
 **Goal:** Preview CV cắt trang giữa một item theo từng gạch đầu dòng thay vì đẩy nguyên khối, và `pageMargin` chỉ còn nghĩa "khe giữa trang trong preview" với default 20mm.
 
-**Architecture:** Giữ nguyên kiến trúc đo-rồi-xếp của `CVPageComposer`. Hạ đơn vị nhồi từ "một item" xuống "head của item" + "từng bullet", bằng cách thêm bậc thứ ba vào khoá segment (`nodeId::itemId::head` và `nodeId::itemId::h<i>`). `pageGroupsForNodes` không đổi một dòng — nó chỉ nhận danh sách dài hơn với phần tử nhỏ hơn. Khi render, các sub-segment của một trang được gom thành prop mới `itemSlices` của `CVBlockRenderer`, cho biết trang này có render head của item hay không và lấy những bullet index nào. Song song đó, `pageMargin` bị gỡ khỏi phép tính `@page margin` và chuyển thành `gap` của container preview.
+**Architecture:** Giữ nguyên kiến trúc đo-rồi-xếp của `CVPageComposer`. Hạ đơn vị nhồi từ "một item" xuống "head của item" + "từng bullet", bằng cách thêm bậc thứ ba vào khoá segment (`nodeId::itemId::head` và `nodeId::itemId::h<i>`). `pageGroupsForNodes` nhận danh sách dài hơn với phần tử nhỏ hơn — và, sau review (Task 4), nhận thêm tham số `chrome` để bù phần khung của mục mà các đoạn con không phủ. Khi render, các sub-segment của một trang được gom thành prop mới `itemSlices` của `CVBlockRenderer`, cho biết trang này có render head của item hay không và lấy những bullet index nào. Song song đó, `pageMargin` bị gỡ khỏi phép tính `@page margin` và chuyển thành `gap` của container preview.
 
 **Tech Stack:** React 19, TypeScript (repo **không** bật `strict`), Zod (`@hr/schema`), Vitest 2 + Testing Library + happy-dom.
 
@@ -480,7 +480,7 @@ Sinh sub-segment cho ba node tách được, đo chiều cao ở mức bullet, v
   - `parseSegment(segment: string): { nodeId: string; itemId?: string; part?: 'head' | number }`
   - `heightsForItem(item?: Element): { head: number; highlights: number[] }`
   - `pageSlices(pageSegments: string[]): { nodeIds: string[]; itemIds: Record<string, string[]>; itemSlices: Record<string, CVItemSlice> }`
-  - `pageGroupsForNodes` giữ nguyên chữ ký cũ, không sửa.
+  - `pageGroupsForNodes` giữ nguyên chữ ký cũ ở task này; Task 4 (sau review) thêm tham số thứ tư `chrome?`.
 
 - [ ] **Step 1: Viết test đỏ cho bốn hàm thuần**
 
@@ -714,7 +714,7 @@ Thay thân `renderPage` (dòng 113-127) bằng:
         }}
 ```
 
-Giữ nguyên `contentHeightPx`, `measurementKey`, khối đo ẩn và `pageGroupsForNodes`.
+Giữ nguyên `contentHeightPx`, `measurementKey`, khối đo ẩn và `pageGroupsForNodes` (Task 4 sửa lại hai chỗ đầu và cuối trong danh sách này).
 
 - [ ] **Step 6: Viết test đầu-cuối cho composer**
 
@@ -766,9 +766,69 @@ git commit -m "feat: preview cắt trang theo từng gạch đầu dòng thay v�
 
 ---
 
+## Task 4: Bù khung của mục & ghim hợp đồng preview ↔ PDF (thêm sau review)
+
+Task này KHÔNG có trong kế hoạch gốc. Nó ra đời từ review toàn nhánh và đã được
+người duyệt chấp thuận sửa spec (spec Phần C). Ghi lại ở đây để người đọc sau
+không phải suy lại.
+
+**Vì sao phải gỡ ràng buộc "`pageGroupsForNodes` giữ nguyên, không sửa một dòng":**
+bộ đo chỉ nạp vào `heights` các giá trị từ `heightsForItem`, nên không có gì tính:
+
+- `<h3>` tiêu đề mục — mà tiêu đề còn được render LẠI trên mỗi trang mục đó trải qua;
+- khe `space-y-4` / `space-y-3` / `space-y-2` giữa các entry (margin, `getBoundingClientRect` không kể);
+- khe `mb-6` giữa hai mục.
+
+Phần bỏ sót này có sẵn từ trước — bản cũ cũng không tính tiêu đề mục hay khe giữa
+các mục. Nhánh này làm nó lộ ra vì **biên an toàn biến mất**: nhồi nguyên item thì
+mỗi trang thừa cỡ nửa item (~60-120px), đủ nuốt phần khung; nhồi theo bullet thì
+chỉ thừa cỡ nửa bullet (~10px), nên khung tràn qua đáy tờ giấy.
+
+**Số đo thật** (Chromium, `initialCVs[0]`, layout header+summary+experience+projects+education+skills, padding 20mm → capacity 971px):
+
+| node | nodeHeight | Σ đoạn con | chrome | gapBefore |
+|---|---|---|---|---|
+| header | 99 | 99 | 0 | — |
+| summary | 117 | 117 | 0 | 24 |
+| experience | 544 | 483 | 61 | 24 |
+| projects | 165 | 113 | 52 | 24 |
+| education | 84 | 48 | 36 | 24 |
+| skills | 145 | 145 | 0 | 24 |
+
+Trước: `Σ đoạn con = 1005px` → 2 trang, nhưng dồn 17 đoạn vào trang 1 mà 17 đoạn ấy
+dựng ra 1106px trên một trang chứa 971px — **tràn 134px ≈ 36mm**. Sau:
+`1005 + 151 + 5×24 = 1276px` → 2 trang, trang 1 cao thật 965px và trang 2 cao 362px,
+không trang nào tràn. Chiều cao dựng thật của cả CV là 1299px; 23px chênh là lề
+`mb-6` sau mục cuối, nằm ngoài dòng chảy nên không tính.
+
+Bản ghi đầu của phần này chép nhầm "trước = 957px → 1 trang": probe hỏng, nó coi
+`skills` là mục tách được (nhóm skill CÓ mang `data-cv-item-id`) nên cộng theo item
+ra 97px thay vì 145px. `segmentsForLayout` không tách `skills`. Con số đúng ở trên.
+
+**Files:**
+- Modify: `frontend/apps/web-spa/src/components/CVPageComposer.tsx`, `frontend/apps/web-spa/src/lib/cv-typography.ts`, `frontend/apps/web-spa/src/lib/a4-settings.ts`
+- Test: `frontend/apps/web-spa/test/cv-page-segments.ui.test.tsx`, `frontend/apps/web-spa/test/print.test.ts`
+
+**Interfaces:**
+- `interface NodeChrome { repeated: number; gapBefore: number }`
+- `measureNodeChrome(root, nodeIds, segments, heights): Map<string, NodeChrome>` — phần chạm DOM, đo từ khối đo ẩn.
+- `pageGroupsForNodes(segments, heights, capacity, chrome?)` — vẫn THUẦN, `chrome` khuyết thì hành vi y như cũ.
+- `pageContentHeightPx(design)` (trong `cv-typography.ts`) — sức chứa một trang preview, dùng chung với `@page{margin}` của `print-css.ts`.
+
+- [x] **Step 1: Test đỏ cho `measureNodeChrome` và `pageGroupsForNodes` có chrome** — DOM stub rect cho phép đo; chiều cao giả cho phép xếp trang.
+- [x] **Step 2: Test đỏ ghim hợp đồng preview ↔ PDF** — suy `@page{margin}` từ `printCSSForDesign` rồi đối chiếu với `pageContentHeightPx`.
+- [x] **Step 3: Cài đặt** — `boxOf` / `measureNodeChrome` / tham số `chrome`; `contentHeightPx` chuyển sang `pageContentHeightPx`.
+- [x] **Step 4: `npm run test` + `npm run typecheck`** — xanh.
+
+**Cố ý chấp nhận:** `repeated` gồm cả khe giữa các entry nên khi một mục chỉ còn
+một entry trên trang thì tính dư vài px. Dư là an toàn (cắt sớm hơn); trừ chính xác
+theo từng trang sẽ phải đo lại toàn bộ mỗi lần thử nhồi.
+
+---
+
 ## Kiểm chứng cuối
 
-Sau khi cả ba task xong:
+Sau khi cả bốn task xong:
 
 ```bash
 cd frontend

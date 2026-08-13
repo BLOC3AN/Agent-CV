@@ -5,6 +5,8 @@ import { CVSchema, DEFAULT_CV_LAYOUT } from '@hr/schema'
 import { createApp } from '../src/server/app.js'
 import type { CVEnvelope } from '../src/lib/api.js'
 import { printCSSForDesign } from '../src/lib/print-css.js'
+import { pageContentHeightPx } from '../src/lib/cv-typography.js'
+import { A4_HEIGHT_MM, MM_TO_PX } from '../src/lib/a4-settings.js'
 
 const cv = CVSchema.parse({
   schemaVersion: 2,
@@ -56,6 +58,28 @@ it('builds print page margins from the editable padding settings alone', () => {
     spacing: 'normal', paddingTop: 12, paddingBottom: 14, paddingLeft: 16, paddingRight: 18, pageMargin: 2, lineHeight: 1.4, textAlign: 'justify',
   })
   expect(css).toContain('@page{size:A4;margin:12mm 18mm 14mm 16mm}')
+})
+
+// Hai nửa của việc tách `pageMargin` nằm ở hai file khác nhau: `@page{margin}`
+// trong print-css.ts quyết định hộp nội dung của PDF, còn sức chứa một trang
+// preview do `pageContentHeightPx` quyết định. Nếu ai đó cộng lại `pageMargin`
+// vào một trong hai nửa — hoặc "sửa" sức chứa preview — thì preview lại cắt
+// trang ở chỗ khác PDF. Test này ghim hai nửa là CÙNG MỘT hộp.
+it('preview page capacity is the same content box as the PDF @page margins', () => {
+  const design = {
+    font: 'Auto' as const, fontSize: 10.5, bodyFontSize: 10.5, sectionTitleFontSize: 13, headerFontSize: 20,
+    spacing: 'normal' as const, paddingTop: 12, paddingBottom: 14, paddingLeft: 16, paddingRight: 18,
+    // Khác 0 và khác mọi padding: nếu nửa nào cộng nhầm `pageMargin` vào thì lệch thấy ngay.
+    pageMargin: 7, lineHeight: 1.4, textAlign: 'justify' as const,
+  }
+  const printed = /@page\{size:A4;margin:([\d.]+)mm ([\d.]+)mm ([\d.]+)mm ([\d.]+)mm\}/.exec(printCSSForDesign(design))
+  expect(printed).not.toBeNull()
+  const [top, right, bottom, left] = printed!.slice(1).map(Number) as [number, number, number, number]
+
+  // Lề giấy thật = đúng bốn padding, không cộng thêm gì.
+  expect([top, right, bottom, left]).toEqual([design.paddingTop, design.paddingRight, design.paddingBottom, design.paddingLeft])
+  // Và sức chứa preview = đúng chiều cao còn lại của tờ A4 sau hai lề đó.
+  expect(pageContentHeightPx(design)).toBeCloseTo((A4_HEIGHT_MM - top - bottom) * MM_TO_PX, 9)
 })
 
 it('SSR /print render cùng template và đổi được presentation/ats/thumbnail', async () => {
