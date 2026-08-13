@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { errorMessageKey, jobErrorCode, stepText } from '../src/lib/error-messages'
 import { en } from '../src/lib/i18n/messages.en'
+import { vi } from '../src/lib/i18n/messages.vi'
+import { errorMessages } from '../src/lib/i18n/messages.errors'
 import type { MessageKey } from '../src/lib/i18n'
 import { ApiError } from '../src/lib/api'
 
 describe('mã lỗi của máy chủ', () => {
   /*
-   * Câu chữ của máy chủ là tiếng Việt cố định (worker Go dựng nó), nên giao
-   * diện KHÔNG dịch được nó. Thứ dịch được là MÃ — hợp đồng ổn định giữa hai
-   * phía. Đây là lý do `ApiError` phải giữ lại `code` thay vì nuốt mất.
+   * Máy chủ trả câu chữ tiếng Anh cố định, nên giao diện KHÔNG dịch nó. Thứ
+   * tra được là MÃ — hợp đồng ổn định giữa hai phía. Đây là lý do `ApiError`
+   * phải giữ lại `code` thay vì nuốt mất.
    */
   it('lấy khoá message từ mã lỗi đã biết', () => {
     expect(errorMessageKey('V2_NOT_BACKFILLED')).toBe('errorV2NotBackfilled')
@@ -82,5 +84,32 @@ describe('lỗi của trợ lý AI', () => {
     expect(errorMessageKey('MODEL_OUTPUT_UNPARSABLE')).toBe('errorModelOutputUnparsable')
     expect(errorMessageKey('MODEL_UNAVAILABLE')).toBe('errorModelUnavailable')
     expect(t(errorMessageKey('MODEL_OUTPUT_UNPARSABLE')!)).toContain('cut off')
+  })
+})
+
+/*
+ * Lỗi là tín hiệu chẩn đoán, không phải nội dung sản phẩm: người dùng dán nó
+ * vào ô tìm kiếm, gửi cho đồng nghiệp, đính vào phiếu hỗ trợ. Nó luôn là tiếng
+ * Anh, kể cả khi giao diện đang tiếng Việt.
+ */
+describe('thông báo lỗi không dịch theo ngôn ngữ giao diện', () => {
+  const keys = Object.keys(errorMessages) as (keyof typeof errorMessages)[]
+
+  it('có ít nhất một khoá để kiểm — nếu không, ba bài dưới đây rỗng ruột', () => {
+    expect(keys.length).toBeGreaterThan(40)
+  })
+
+  it('cùng một chuỗi ở cả hai ngôn ngữ', () => {
+    for (const key of keys) {
+      expect(vi[key], `khoá ${key} lệch giữa hai ngôn ngữ`).toBe(errorMessages[key])
+      expect(en[key], `khoá ${key} lệch giữa hai ngôn ngữ`).toBe(errorMessages[key])
+    }
+  })
+
+  it('không có chữ tiếng Việt lọt vào', () => {
+    const vietnamese = /[àáâãèéêìíòóôõùúăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i
+    for (const key of keys) {
+      expect(vietnamese.test(errorMessages[key]), `khoá ${key} còn tiếng Việt: ${errorMessages[key]}`).toBe(false)
+    }
   })
 })
