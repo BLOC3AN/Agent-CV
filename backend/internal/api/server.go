@@ -80,6 +80,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/auth/verify", s.authVerify)
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
 	mux.HandleFunc("GET /api/auth/session", s.authSession)
+	mux.HandleFunc("GET /api/auth/google/start", s.googleStart)
+	mux.HandleFunc("GET /api/auth/google/callback", s.googleCallback)
 	mux.HandleFunc("PATCH /api/profiles/", s.patchProfile)
 	mux.HandleFunc("GET /api/profiles/", s.profileSubresource)
 	mux.HandleFunc("POST /api/profiles/", s.profileMutation)
