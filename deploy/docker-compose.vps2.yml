@@ -1,0 +1,30 @@
+# Frontend HR-Agent trên VPS2 (116.118.3.113).
+#
+# Máy này chỉ chạy giao diện. Nó KHÔNG có Postgres, Redis, không giữ file
+# upload, và không biết một secret nào — web-spa chỉ đọc PORT, BACKEND_URL,
+# NODE_ENV. Đó là chủ ý: máy hứng internet là máy biết ít nhất. Đừng thêm
+# DATABASE_URL hay AUTH_SECRET vào đây, chúng không được dùng tới.
+#
+# Không có `build:`. Image dựng trên Server AI (56 core) rồi chuyển sang bằng
+# `docker save | gzip | ssh | docker load` qua NetBird — xem scripts/deploy-vps2.sh.
+#
+#   docker compose -f deploy/docker-compose.vps2.yml --env-file deploy/.env.vps2 up -d
+
+name: hr-agent-frontend
+
+services:
+  web-spa:
+    image: ${WEB_SPA_IMAGE:-hr-agent-web-spa:latest}
+    container_name: hr-web-spa
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Đi qua NetBird tới backend trên Server AI. Cổng 18090 là do
+      # BACKEND_PORT bên backend/docker-compose.yml quyết định — sửa một bên
+      # phải sửa cả bên kia.
+      BACKEND_URL: ${BACKEND_URL:?BACKEND_URL bắt buộc}
+    # Chỉ nghe trên loopback: nginx là đường vào duy nhất, container không
+    # được lộ thẳng ra IP public của VPS.
+    ports:
+      - '127.0.0.1:3000:3000'

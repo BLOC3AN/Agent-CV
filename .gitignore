@@ -3,6 +3,10 @@ dist/
 *.tsbuildinfo
 .env
 .env.local
+# .env production của từng máy deploy — chứa PG_PASSWORD, AUTH_SECRET và
+# Google client secret. Bản mẫu `deploy/env.*.example` thì được commit.
+deploy/.env*
+!deploy/env.*.example
 coverage/
 .vitest-cache/
 
@@ -64,3 +68,6 @@ __pycache__/
 # CV tải về từ nút "Tải PDF" rơi vào thư mục repo — dữ liệu cá nhân của người
 # dùng, không phải mã nguồn. Tài liệu PDF cần theo dõi thì thêm bằng `git add -f`.
 *.pdf
+
+
+credential/

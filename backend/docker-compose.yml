@@ -1,10 +1,22 @@
-# HR-Agent — hạ tầng cục bộ (TDD §12.1)
+# HR-Agent — hạ tầng backend (TDD §12.1)
 #
-# Cổng đã tránh xung đột với dịch vụ sẵn có trên máy dev:
-#   mqtt_broker :1883 · dozzle :5555
-# → Postgres ra 5433, Redis ra 6380.
+# File này chạy ở HAI nơi:
+#
+#   dev        `... --profile full up`   → cả stack, gồm cả web-spa
+#   Server AI  `... up`                  → 5 service backend, KHÔNG có web-spa
+#
+# Khác biệt nằm ở `profiles: [full]` của web-spa: trên Server AI frontend chạy
+# ở máy khác (VPS2) nên không được bật. Lệnh trong README vốn đã truyền
+# `--profile full`, nên workflow dev không đổi.
+#
+# Mặc định cổng chọn để tránh xung đột TRÊN MÁY DEV (mqtt_broker :1883,
+# dozzle :5555) nên Postgres ra 5433 và Redis ra 6380. Trên Server AI thì
+# CHÍNH hai cổng đó lại đang bận (neura-settings-db giữ 5433, neura-mcp-server
+# giữ 8100) — vì vậy mọi publish đều tham số hoá cả IP lẫn cổng. Đừng viết
+# cứng lại: giá trị đúng khác nhau tuỳ máy.
 #
 # Model server (100.68.50.41) KHÔNG nằm ở đây — là dependency ngoài, chỉ đọc.
+# Trên Server AI thì địa chỉ đó chính là máy đang chạy compose này.
 
 name: hr-agent
 
@@ -42,10 +54,13 @@ services:
       STORAGE_ROOT: /app/var/storage
       PDFKIT_URL: http://pdfkit:8000
       HR_CONFIG_PATH: /app/config.yml
+    # Trên Server AI đặt BACKEND_BIND=100.82.195.220 (IP NetBird) — backend chỉ
+    # nhìn thấy được từ trong mạng NetBird, không từ LAN 192.168.1.0/24 lẫn
+    # internet. Cổng 8080 ở đó đã bận nên BACKEND_PORT=18090.
     ports:
-      - '8080:8080'
+      - '${BACKEND_BIND:-0.0.0.0}:${BACKEND_PORT:-8080}:8080'
     volumes:
-      - /home/hailt/Desktop/HR-agent/data-deploy/uploads:/app/var/storage
+      - ${DATA_ROOT:-../data-deploy}/uploads:/app/var/storage
       - ../config.yml:/app/config.yml:ro
     depends_on:
       postgres: { condition: service_healthy }
@@ -59,10 +74,13 @@ services:
       POSTGRES_DB: hragent
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${PG_PASSWORD:-hragent_dev}
+    # Publish để dev chạy `go run ./cmd/api` trên host nối vào được (README).
+    # Production đặt PG_BIND=127.0.0.1: backend và worker gọi qua compose
+    # network, không ai bên ngoài máy cần chạm tới Postgres.
     ports:
-      - '5433:5432'
+      - '${PG_BIND:-0.0.0.0}:${PG_PORT:-5433}:5432'
     volumes:
-      - /home/hailt/Desktop/HR-agent/data-deploy/postgres:/var/lib/postgresql/data
+      - ${DATA_ROOT:-../data-deploy}/postgres:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres -d hragent']
@@ -83,9 +101,9 @@ services:
     # trạng thái job bền vững nằm trong PostgreSQL.
     command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '512mb', '--maxmemory-policy', 'noeviction']
     ports:
-      - '6380:6379'
+      - '${REDIS_BIND:-0.0.0.0}:${REDIS_PORT:-6380}:6379'
     volumes:
-      - /home/hailt/Desktop/HR-agent/data-deploy/redis:/data
+      - ${DATA_ROOT:-../data-deploy}/redis:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -104,7 +122,7 @@ services:
     container_name: hr-pdfkit
     restart: unless-stopped
     ports:
-      - '8100:8000'
+      - '${PDFKIT_BIND:-0.0.0.0}:${PDFKIT_PORT:-8100}:8000'
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -115,23 +133,27 @@ services:
         limits:
           memory: 1G
 
+  # CHỈ chạy ở dev. Production frontend nằm trên VPS2 —
+  # xem deploy/docker-compose.vps2.yml.
   web-spa:
+    profiles: ['full']
     build:
       context: ..
       dockerfile: frontend/apps/web-spa/Dockerfile
     container_name: hr-web-spa
     restart: unless-stopped
+    # Ba biến này là TẤT CẢ những gì web-spa đọc — `grep process.env.` trên
+    # server.ts và src/ chỉ ra PORT, BACKEND_URL, NODE_ENV. Trước đây service
+    # này còn nhận DATABASE_URL, REDIS_URL, AUTH_SECRET, MODEL_HOST,
+    # HR_CONFIG_PATH, STORAGE_ROOT — tất cả đều là cấu hình chết sót lại từ
+    # thời Node còn phục vụ API. Đã bỏ: truyền secret cho một tiến trình không
+    # dùng đến chúng chỉ làm rộng bề mặt rò rỉ.
     environment:
-      <<: *env
       NODE_ENV: production
-      # Dev default giúp `docker compose` quản lý từng service; production
-      # phải ghi đè bằng AUTH_SECRET thật trong .env/secret manager.
-      AUTH_SECRET: ${AUTH_SECRET:-dev-only-change-me}
+      PORT: 3000
       BACKEND_URL: http://backend:8080
     ports:
       - '3000:3000'
-    volumes:
-      - /home/hailt/Desktop/HR-agent/data-deploy/uploads:/app/var/storage
     depends_on:
       backend: { condition: service_started }
       postgres: { condition: service_healthy }
@@ -149,7 +171,7 @@ services:
       DATABASE_URL: postgres://postgres:${PG_PASSWORD:-hragent_dev}@postgres:5432/hragent
       PDFKIT_URL: http://pdfkit:8000
     volumes:
-      - /home/hailt/Desktop/HR-agent/data-deploy/uploads:/app/var/storage
+      - ${DATA_ROOT:-../data-deploy}/uploads:/app/var/storage
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
