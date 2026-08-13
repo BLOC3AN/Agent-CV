@@ -228,6 +228,7 @@ export const vi = {
 
   // Đăng nhập
   signIn: 'Đăng nhập',
+  signInWithGoogle: 'Đăng nhập bằng Google',
   loginHint: 'Nhập email, chúng tôi gửi cho bạn một đường dẫn đăng nhập. Không cần mật khẩu.',
   sendLoginLink: 'Gửi link đăng nhập',
 

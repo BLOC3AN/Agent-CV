@@ -6,7 +6,7 @@ import { useSession } from '../lib/session';
 
 export function LoginPage() {
   const { t } = useLocale()
-  const { status } = useSession();
+  const { status, magicLink } = useSession();
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
@@ -41,9 +41,27 @@ export function LoginPage() {
       <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-5">
         <div className="space-y-1">
           <h1 className="text-xl font-bold text-slate-900">{t('signIn')}</h1>
-          <p className="text-xs text-slate-500">{t('loginHint')}</p>
+          {/*
+            Lời dẫn nói về CÁI FORM ("nhập email, chúng tôi gửi đường dẫn"), nên
+            nó phải biến mất cùng form. Giữ lại là bảo người dùng gõ vào một ô
+            không tồn tại.
+          */}
+          {magicLink && <p className="text-xs text-slate-500">{t('loginHint')}</p>}
         </div>
 
+        {/*
+          Thẻ <a> thật chứ không phải fetch: luồng OAuth là một chuỗi redirect
+          của trình duyệt, và cookie `state` phải được đặt trên chính điều
+          hướng đó.
+        */}
+        <a
+          href="/api/auth/google/start"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          {t('signInWithGoogle')}
+        </a>
+
+        {magicLink && (
         <form onSubmit={submit} className="space-y-3">
           <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700">
             Email
@@ -64,6 +82,7 @@ export function LoginPage() {
             {sending ? t('sending') : t('sendLoginLink')}
           </button>
         </form>
+        )}
 
         {error && <p className="text-xs font-medium text-rose-600">{error}</p>}
 

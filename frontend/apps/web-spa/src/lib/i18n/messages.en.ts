@@ -203,6 +203,7 @@ export const en: Record<MessageKey, string> = {
   noKBSources: 'No knowledge sources yet.',
 
   signIn: 'Sign in',
+  signInWithGoogle: 'Sign in with Google',
   loginHint: 'Enter your email and we will send you a sign-in link. No password needed.',
   sendLoginLink: 'Send sign-in link',
 

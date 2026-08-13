@@ -65,7 +65,7 @@ describe('chặn route khi chưa đăng nhập', () => {
 
 describe('màn hình đăng nhập', () => {
   it('gửi email và báo đã gửi link', async () => {
-    vi.spyOn(api, 'getSession').mockResolvedValue({ authenticated: false })
+    vi.spyOn(api, 'getSession').mockResolvedValue({ authenticated: false, magicLink: true })
     const send = vi.spyOn(api, 'requestLogin').mockResolvedValue({ ok: true })
 
     renderAt('/login')
@@ -77,7 +77,7 @@ describe('màn hình đăng nhập', () => {
   })
 
   it('backend trả devLink thì hiện link bấm được để chạy thử', async () => {
-    vi.spyOn(api, 'getSession').mockResolvedValue({ authenticated: false })
+    vi.spyOn(api, 'getSession').mockResolvedValue({ authenticated: false, magicLink: true })
     vi.spyOn(api, 'requestLogin').mockResolvedValue({
       ok: true,
       devLink: 'http://localhost:3002/api/auth/verify?token=abc',
@@ -94,7 +94,7 @@ describe('màn hình đăng nhập', () => {
   })
 
   it('gửi hỏng thì hiện lỗi và giữ nguyên email đã nhập', async () => {
-    vi.spyOn(api, 'getSession').mockResolvedValue({ authenticated: false })
+    vi.spyOn(api, 'getSession').mockResolvedValue({ authenticated: false, magicLink: true })
     // Email đúng cú pháp — mock reject bất kể nội dung. Input `type="email"`
     // vẫn giữ nguyên xác thực HTML5 của trình duyệt cho người dùng thật, nên
     // test không được gõ một chuỗi sai định dạng (trình duyệt/happy-dom sẽ

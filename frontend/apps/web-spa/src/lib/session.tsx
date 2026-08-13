@@ -15,18 +15,21 @@ type Status = 'loading' | 'authenticated' | 'anonymous';
 
 interface SessionValue {
   status: Status;
+  magicLink: boolean;
   email?: string;
   signOut: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue>({
   status: 'loading',
+  magicLink: false,
   signOut: async () => {},
 });
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
   const [email, setEmail] = useState<string | undefined>();
+  const [magicLink, setMagicLink] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -34,6 +37,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (!alive) return;
       setStatus(s.authenticated ? 'authenticated' : 'anonymous');
       setEmail(s.email);
+      setMagicLink(s.magicLink === true);
     });
     return () => {
       alive = false;
@@ -58,7 +62,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SessionContext.Provider value={{ status, email, signOut }}>{children}</SessionContext.Provider>
+    <SessionContext.Provider value={{ status, email, magicLink, signOut }}>{children}</SessionContext.Provider>
   );
 }
 
