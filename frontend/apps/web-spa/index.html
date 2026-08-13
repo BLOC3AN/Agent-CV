@@ -3,7 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HR-Agent — Dựng CV và đối chiếu tin tuyển dụng</title>
+    <title>CVGuide — Build your CV, match the job</title>
+
+    <!--
+      Logo là nét navy #00001e trên nền TRONG SUỐT. Dùng thẳng bản đó làm
+      favicon thì nó tàng hình trên tab của trình duyệt nền tối — nên các file
+      dưới đây đã được dựng lại trên nền trắng bo góc, hiện rõ ở cả hai theme.
+
+      favicon.ico phải tồn tại thật: trình duyệt vẫn xin /favicon.ico theo thói
+      quen, và SPA fallback trong src/server/app.ts sẽ trả index.html kèm mã
+      200 cho mọi đường dẫn không khớp — tức là một trang HTML nằm ở chỗ đáng
+      lẽ là ảnh.
+    -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
     <div id="root"></div>
