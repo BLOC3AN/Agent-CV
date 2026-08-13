@@ -1,3 +1,5 @@
+import { errorMessages } from './messages.errors'
+
 /**
  * Chữ tiếng Anh trên giao diện.
  *
@@ -8,6 +10,8 @@
 import type { MessageKey } from './messages.vi'
 
 export const en: Record<MessageKey, string> = {
+  // Lỗi luôn là tiếng Anh — xem `messages.errors.ts`.
+  ...errorMessages,
   home: 'Home',
   cvs: 'My CVs',
   analyze: 'Job matching',
@@ -26,7 +30,6 @@ export const en: Record<MessageKey, string> = {
   statusDirty: 'Unsaved',
   statusSaving: 'Saving…',
   statusSaved: 'Saved',
-  statusSaveFailed: 'Save failed',
   loadingCV: 'Loading CV…',
   cvNotFound: 'CV not found',
   invalidCVId: 'Invalid CV id',
@@ -46,7 +49,6 @@ export const en: Record<MessageKey, string> = {
   downloadDialogLabel: 'Export PDF with unsaved changes',
   discardAndDownload: 'Discard and download',
   saveAndDownload: 'Save and download',
-  downloadFailed: 'Could not download the PDF',
 
   openAssistant: 'Open AI assistant',
 
@@ -54,7 +56,6 @@ export const en: Record<MessageKey, string> = {
   previewClose: 'Close preview',
   print: 'Print',
   preparingPDF: 'Preparing PDF…',
-  previewExportFailed: 'Could not prepare the PDF. The draft was not exported.',
 
   cvLayout: 'CV layout',
   draftUnsaved: 'Unsaved draft',
@@ -105,9 +106,6 @@ export const en: Record<MessageKey, string> = {
   afterChange: 'After',
   noPreviousRevision: 'There is no earlier version to compare with.',
   noContentChange: 'No content changed compared with the previous version.',
-  historyLoadFailed: 'Could not load the version history',
-  previewLoadFailed: 'Could not load the preview',
-  restoreFailed: 'Could not restore this version',
   changeAdded: 'Added',
   changeEdited: 'Edited',
   changeRemoved: 'Removed',
@@ -321,23 +319,11 @@ export const en: Record<MessageKey, string> = {
   guidedOrganization: 'Company or organisation',
   guidedWhatDidYouDo: 'What did you do?',
   guidedFullName: 'Full name',
-  guidedCreateFailed: 'Could not create a CV from the guided flow',
   untitledCV: 'Untitled CV',
-  errorV2NotBackfilled: 'This CV has no v2 record yet. Run the backfill and try again.',
-  errorSchemaV2Invalid: 'The CV data is not in the expected format. Reload the page and try again.',
-  errorNoCVSections: 'We could not find CV sections such as education, experience or skills.',
-  errorFileMissing: 'The uploaded file is missing. Try uploading it again.',
-  errorPDFExtractFailed: 'We could not read the contents of this PDF.',
-  errorProfileCreateFailed: 'We could not build a profile from this file.',
-  errorUnknownJobKind: 'This job type is not supported.',
   justNow: 'Just now',
-  sendFailed: 'Could not send the message',
-  jobFailed: 'Processing this CV failed. Please try again.',
-  dashboardLoadFailed: 'Could not load the dashboard',
   aiSuggestion: 'AI SUGGESTION',
   appliedToDraft: 'Applied {n} change(s) to the draft. Save the CV to keep them.',
   proposalSkipped: 'Proposal skipped.',
-  applyFailed: 'Could not apply the proposal',
   aiAnalysing: 'AI is analysing',
   draftChangedDuringSettle: 'The draft changed while waiting. The proposal is kept so you can retry.',
   applyToCV: 'Apply to CV',
@@ -355,55 +341,34 @@ export const en: Record<MessageKey, string> = {
   notProvided: 'Not provided',
   hasAttachment: 'Has an attached image',
   oneItemPerLine: 'One item per line — fill this in',
-  reviewLoadFailed: 'Could not load the data to review.',
-  reviewConfirmFailed: 'Could not save the confirmation for this item. Please try again.',
-  reviewFinishFailed: 'Could not finish. Please try again.',
-  reviewProgressReloadFailed: 'The confirmation was saved but the latest progress could not be reloaded.',
 
   matchResult: 'JD match result',
+  degradedMode: 'Analysis is running in degraded mode: {reason}.',
   overallMatch: 'Overall match score',
   gaps: 'Gaps',
-  someModelsUnavailable: 'some models are unavailable',
   matching: 'Matching the CV against the JD…',
-  analyzeStartFailed: 'Could not start the analysis',
-  cvListLoadFailed: 'Could not load the CV list',
-  analyzeProgressFailed: 'Could not read the analysis progress',
 
   uploading: 'Uploading…',
   queued: 'Queued for processing…',
   processing: 'Processing…',
   extracting: 'Extracting data from the CV…',
-  uploadFailed: 'Could not upload the file.',
-  jobTrackFailed: 'Could not track the processing job.',
 
   creating: 'Creating…',
   openingNewCV: 'Opening the new CV…',
-  createCVFailed: 'Could not create the CV',
   createCVIncomplete: 'CV creation failed part-way through. Please try again.',
 
-  storeLoadFailed: 'Could not load the CV',
-  storeSaveFailed: 'Could not save the CV',
-  storeRestoreFailed: 'Could not restore this version',
   restoreBlockedDirty: 'The draft is unsaved. Save or discard it before restoring.',
   restoreBlockedSaving: 'A save is in progress; the version cannot be restored yet',
 
-  errorNetworkUnreachable: 'Could not reach the server',
-  errorServer: 'The server returned an error',
-  errorStreamOpen: 'The server could not open the response stream',
-  errorStreamClosed: 'The server closed the connection early',
 
   deleting: 'Deleting…',
-  deleteAccountFailed: 'Could not delete the account',
   confirmEmailMismatch: 'The confirmation email must match your account email exactly.',
 
   sending: 'Sending…',
   loginLinkSent: 'Sign-in link sent. Open your inbox and follow the link in the email.',
   openLoginLinkDev: 'Open sign-in link (development only)',
-  loginLinkFailed: 'Could not send the sign-in link',
 
   noCurator: 'No curator yet',
-  kbUpdateFailed: 'Could not update the source',
-  kbLoadFailed: 'Could not load the knowledge base',
   kbNeedsCurator: 'A source needs a curator before it can be activated',
   addField: 'Add field',
   addRegisteredField: 'Add a registered field',
@@ -416,19 +381,12 @@ export const en: Record<MessageKey, string> = {
   guidedBodyPlaceholder: 'A course, club, or something you built yourself',
   guidedCreateCV: 'Create CV',
   guidedCreating: 'Creating the CV…',
-  deleteCVFailed: 'Could not delete the CV',
-  cvListReadFailed: 'Could not read the CV list',
   loadingCVList: 'Loading the CV list…',
   pageNotFound: 'Page not found',
   pageNotFoundHint: 'The address you opened does not exist, or it was renamed.',
   backToDashboard: 'Back to the dashboard',
-  errorAIPatchInvalidCV: 'The AI proposal produced an invalid CV.',
-  errorAIPatchInvalidLayout: 'The AI proposal produced an invalid layout.',
-  errorAIPatchLayoutReplace: 'The whole layout cannot be replaced from an AI proposal.',
   stepThinking: 'Thinking',
   stepUnderstanding: 'Understanding your request',
   stepReviewingProfile: 'Reviewing your profile to answer',
   stepCheckingProposal: 'Checking the proposal',
-  errorModelUnavailable: 'The AI assistant is unavailable. Please try again later.',
-  errorModelOutputUnparsable: 'The AI assistant returned data we could not read — usually because the answer grew too long and was cut off. Try a narrower request, for example one section at a time.',
 }

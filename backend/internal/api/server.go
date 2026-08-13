@@ -118,7 +118,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV endpoints require PostgreSQL"})
 		return
 	}
 	var body struct {
@@ -130,12 +130,12 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 		UserID   string `json:"userId"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || strings.TrimSpace(body.Name) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Bạn cần điền họ tên"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Full name is required"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	if body.Language != "en" {
@@ -169,21 +169,21 @@ func (s *Server) createCV(w http.ResponseWriter, r *http.Request) {
 	profileJSON := jsonString(profile)
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not open a transaction"})
 		return
 	}
 	defer tx.Rollback()
 	var profileID, cvID string
 	if err = tx.QueryRowContext(r.Context(), `INSERT INTO profiles (user_id, data, language) VALUES ($1,$2::jsonb,$3) RETURNING id`, userID, profileJSON, body.Language).Scan(&profileID); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không tạo được profile"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Could not create the profile"})
 		return
 	}
 	if err = tx.QueryRowContext(r.Context(), `INSERT INTO cv_documents (user_id, profile_id, profile_snapshot, title, language) VALUES ($1,$2,$3::jsonb,$4,$5) RETURNING id`, userID, profileID, profileJSON, strings.TrimSpace(body.Name), body.Language).Scan(&cvID); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không tạo được CV"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Could not create the CV"})
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not commit the CV"})
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"cvId": cvID, "profileId": profileID})
@@ -204,12 +204,12 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 		// trong file (2MB): thiếu nó, chốt chặn rẻ đặt sớm để từ chối input
 		// xấu lại trở thành chỗ đọc nhiều nhất vào bộ nhớ trước khi từ chối.
 		if json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body) != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 			return
 		}
 		if err := validateCVV2(body.CV); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "cv phải là schemaVersion 2",
+				"error": "cv must be schemaVersion 2",
 				"code":  "SCHEMA_V2_INVALID",
 			})
 			return
@@ -218,11 +218,11 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV endpoints require PostgreSQL"})
 		return
 	}
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid CV id"})
 		return
 	}
 	if len(parts) == 2 && parts[1] == "export" {
@@ -246,7 +246,7 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) != 1 {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Route not found"})
 		return
 	}
 	switch r.Method {
@@ -261,14 +261,14 @@ func (s *Server) cvRoute(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		s.deleteCV(w, r, id)
 	default:
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method không hỗ trợ"})
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
 	}
 }
 
 func (s *Server) exportCV(w http.ResponseWriter, r *http.Request, id string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	variant := r.URL.Query().Get("variant")
@@ -280,10 +280,10 @@ func (s *Server) exportCV(w http.ResponseWriter, r *http.Request, id string) {
 	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(c.title,'CV'), COALESCE(c.language, p.language, 'en'), c.profile_snapshot
 		FROM cv_documents c JOIN profiles p ON p.id=c.profile_id
 		WHERE c.id=$1 AND c.user_id=$2 AND p.user_id=$2`, id, userID).Scan(&title, &language, &snapshot); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "CV not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid CV id"})
 		return
 	}
 	pdf := gofpdf.New("P", "mm", "A4", "")
@@ -304,7 +304,7 @@ func (s *Server) exportCV(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	var out bytes.Buffer
 	if err := pdf.Output(&out); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được PDF"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not generate the PDF"})
 		return
 	}
 	safe := strings.NewReplacer("/", "-", " ", "-").Replace(title)
@@ -317,29 +317,29 @@ func (s *Server) exportCV(w http.ResponseWriter, r *http.Request, id string) {
 func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	cv, err := s.loadCVEnvelope(r.Context(), userID, id)
 	if errors.Is(err, errCVNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Not found"})
 		return
 	}
 	if err != nil {
 		if isInvalidCVIdentifier(err) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid CV id"})
 			return
 		}
 		if errors.Is(err, errV2NotBackfilled) {
 			// Không im lặng trả dữ liệu khác schema: client chỉ đọc CV v2.
 			writeJSON(w, http.StatusConflict, map[string]string{
-				"error": "CV này chưa có bản v2. Chạy `npm run db:backfill-v2` rồi thử lại.",
+				"error": "This CV has no v2 revision yet. Run `npm run db:backfill-v2` and try again.",
 				"code":  "V2_NOT_BACKFILLED",
 			})
 			return
 		}
 		// Dữ liệu hoặc layout có mặt nhưng hỏng JSON: không trả response nửa vời.
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được dữ liệu CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the CV data"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"cv": cv})
@@ -348,7 +348,7 @@ func (s *Server) getCV(w http.ResponseWriter, r *http.Request, id string) {
 func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var body struct {
@@ -358,11 +358,11 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 		Layout     json.RawMessage `json:"layout"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 512<<10)).Decode(&body) != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 	if len(body.Layout) > 0 {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Thay đổi layout phải dùng Save để tạo revision", "code": "CV_REVISION_REQUIRED"})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Layout changes must go through Save so a revision is created", "code": "CV_REVISION_REQUIRED"})
 		return
 	}
 	sets, args := []string{}, []any{}
@@ -383,7 +383,7 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 		n++
 	}
 	if len(sets) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không có gì để đổi"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Nothing to change"})
 		return
 	}
 	args = append(args, id)
@@ -391,11 +391,11 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 	args = append(args, userID)
 	err := s.db.QueryRowContext(r.Context(), "UPDATE cv_documents SET "+strings.Join(sets, ", ")+fmt.Sprintf(" WHERE id = $%d AND user_id = $%d RETURNING id", n, n+1), args...).Scan(&cvID)
 	if err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Not found"})
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không cập nhật được CV"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Could not update the CV"})
 		return
 	}
 	s.getCV(w, r, cvID)
@@ -407,12 +407,12 @@ func (s *Server) patchCV(w http.ResponseWriter, r *http.Request, id string) {
 func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, cvV2 json.RawMessage) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not open a transaction"})
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
@@ -428,16 +428,16 @@ func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, 
 	if err := tx.QueryRowContext(r.Context(),
 		`SELECT c.profile_id,c.layout,(SELECT COUNT(*) FROM cv_revisions r WHERE r.cv_id=c.id) FROM cv_documents c JOIN profiles p ON p.id = c.profile_id
 			 WHERE c.id = $1 AND c.user_id = $2 AND p.user_id = $2 FOR UPDATE OF c`, id, userID).Scan(&profileID, &layoutRaw, &revisionCount); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "CV not found"})
 		return
 	}
 	if revisionCount > 0 {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "CV đã có lịch sử. Hãy dùng Save để tạo revision.", "code": "CV_REVISION_REQUIRED"})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "This CV already has history. Use Save so a revision is created.", "code": "CV_REVISION_REQUIRED"})
 		return
 	}
 	legacyLayout, err := normalizeCVLayout(layoutRaw)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "layout không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid layout"})
 		return
 	}
 	normalizedCV, normalizedLayout, err := normalizeCommittedCVPair(cvV2, legacyLayout)
@@ -448,17 +448,17 @@ func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, 
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE profiles SET data=$2::jsonb, updated_at=now() WHERE id=$1 AND user_id=$3`,
 		profileID, string(normalizedCV), userID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không ghi được hồ sơ"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not write the profile"})
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE cv_documents SET profile_snapshot=$2::jsonb,layout=$3::jsonb,updated_at=now() WHERE id=$1 AND user_id=$4`,
 		id, string(normalizedCV), string(normalizedLayout), userID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không ghi được CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not write the CV"})
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not commit"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -467,30 +467,30 @@ func (s *Server) patchCVPair(w http.ResponseWriter, r *http.Request, id string, 
 func (s *Server) deleteCV(w http.ResponseWriter, r *http.Request, id string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not open a transaction"})
 		return
 	}
 	defer tx.Rollback()
 	var profileID string
 	if err = tx.QueryRowContext(r.Context(), `DELETE FROM cv_documents WHERE id = $1 AND user_id=$2 RETURNING profile_id`, id, userID).Scan(&profileID); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "CV not found"})
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid CV id"})
 		return
 	}
 	if _, err = tx.ExecContext(r.Context(), `DELETE FROM profiles WHERE id = $1 AND user_id=$2`, profileID, userID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không xóa được profile"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not delete the profile"})
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được xóa CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not commit the CV deletion"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
@@ -498,27 +498,27 @@ func (s *Server) deleteCV(w http.ResponseWriter, r *http.Request, id string) {
 
 func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/profiles/")
 	id = strings.TrimSuffix(id, "/")
 	var raw []byte
 	if err := s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id = $1 AND user_id=$2`, id, userID).Scan(&raw); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile id"})
 		return
 	}
 	var profile any
 	if json.Unmarshal(raw, &profile) != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Profile bị hỏng"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Profile is corrupt"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profile": profile})
@@ -527,16 +527,16 @@ func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
 func (s *Server) patchProfile(w http.ResponseWriter, r *http.Request) {
 	id, suffix := profilePath(r.URL.Path)
 	if suffix != "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Route not found"})
 		return
 	}
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var body struct {
@@ -545,38 +545,38 @@ func (s *Server) patchProfile(w http.ResponseWriter, r *http.Request) {
 		MessageID string          `json:"messageId"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body) != nil || len(body.Ops) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 	var ops []any
 	if json.Unmarshal(body.Ops, &ops) != nil || len(ops) == 0 || len(ops) > 50 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ops không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ops"})
 		return
 	}
 	if body.Author == "" {
 		body.Author = "user"
 	}
 	if body.Author != "user" && body.Author != "ai" && body.Author != "import" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "author không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid author"})
 		return
 	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not open a transaction"})
 		return
 	}
 	defer tx.Rollback()
 	var old []byte
 	if err = tx.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id = $1 AND user_id=$2 FOR UPDATE`, id, userID).Scan(&old); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile id"})
 		return
 	}
 	updated, err := applyJSONPatch(old, body.Ops)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Patch không áp dụng được: " + err.Error()})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Patch could not be applied: " + err.Error()})
 		return
 	}
 	var revisionID int64
@@ -586,16 +586,16 @@ func (s *Server) patchProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	err = tx.QueryRowContext(r.Context(), `UPDATE profiles SET data = $2::jsonb WHERE id = $1 AND user_id=$3 RETURNING id`, id, string(updated), userID).Scan(new(string))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được profile"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save the profile"})
 		return
 	}
 	err = tx.QueryRowContext(r.Context(), `INSERT INTO profile_revisions (profile_id, patch, inverse, author, message_id) VALUES ($1,$2::jsonb,$3::jsonb,$4,$5) RETURNING id`, id, string(body.Ops), jsonString(map[string]any{"snapshot": json.RawMessage(old)}), body.Author, messageArg).Scan(&revisionID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được revision"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save the revision"})
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được profile"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not commit the profile"})
 		return
 	}
 	var profile any
@@ -606,7 +606,7 @@ func (s *Server) patchProfile(w http.ResponseWriter, r *http.Request) {
 func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/profiles/"), "/"), "/")
@@ -620,16 +620,16 @@ func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if suffix != "revisions" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Route not found"})
 		return
 	}
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile endpoints require PostgreSQL"})
 		return
 	}
 	rows, err := s.db.QueryContext(r.Context(), `SELECT pr.id, pr.author, pr.patch, pr.created_at FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id = $1 AND p.user_id=$2 ORDER BY pr.id DESC LIMIT 50`, id, userID)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile id"})
 		return
 	}
 	defer rows.Close()
@@ -655,39 +655,39 @@ func (s *Server) profileSubresource(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) revisionPreview(w http.ResponseWriter, r *http.Request, profileID, revisionID string) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Revision cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Revision endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var patchRaw, inverseRaw []byte
 	var author string
 	var created time.Time
 	if err := s.db.QueryRowContext(r.Context(), `SELECT pr.patch, pr.inverse, pr.author, pr.created_at FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id=$1 AND pr.id=$2 AND p.user_id=$3`, profileID, revisionID, userID).Scan(&patchRaw, &inverseRaw, &author, &created); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không có mốc lịch sử này"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "No such history entry"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Revision không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid revision"})
 		return
 	}
 	var inverse struct {
 		Snapshot json.RawMessage `json:"snapshot"`
 	}
 	if json.Unmarshal(inverseRaw, &inverse) != nil || len(inverse.Snapshot) == 0 {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Revision không hợp lệ"})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Invalid revision"})
 		return
 	}
 	afterRaw, err := applyJSONPatch(inverse.Snapshot, patchRaw)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Không dựng được bản CV của revision"})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Could not rebuild the CV for this revision"})
 		return
 	}
 	var before, after any
 	if json.Unmarshal(inverse.Snapshot, &before) != nil || json.Unmarshal(afterRaw, &after) != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Revision bị hỏng"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Revision is corrupt"})
 		return
 	}
 	var ops any
@@ -696,7 +696,7 @@ func (s *Server) revisionPreview(w http.ResponseWriter, r *http.Request, profile
 	}
 	var newerCount int
 	if err := s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id=$1 AND pr.id>$2 AND p.user_id=$3`, profileID, revisionID, userID).Scan(&newerCount); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không đọc được lịch sử"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Could not read the history"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"revisionId": fmt.Sprint(revisionID), "author": author, "createdAt": created, "ops": ops, "after": after, "before": before, "newerCount": newerCount})
@@ -705,7 +705,7 @@ func (s *Server) revisionPreview(w http.ResponseWriter, r *http.Request, profile
 func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	id, suffix := profilePath(r.URL.Path)
@@ -718,16 +718,16 @@ func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if suffix != "undo" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy route"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Route not found"})
 		return
 	}
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile endpoints require PostgreSQL"})
 		return
 	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not open a transaction"})
 		return
 	}
 	defer tx.Rollback()
@@ -735,30 +735,30 @@ func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {
 	var inverse []byte
 	err = tx.QueryRowContext(r.Context(), `SELECT pr.id, pr.inverse FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id = $1 AND p.user_id=$2 ORDER BY pr.id DESC LIMIT 1 FOR UPDATE`, id, userID).Scan(&revisionID, &inverse)
 	if err == sql.ErrNoRows {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Không có gì để hoàn tác"})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Nothing to undo"})
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile id"})
 		return
 	}
 	var snapshot struct {
 		Snapshot json.RawMessage `json:"snapshot"`
 	}
 	if json.Unmarshal(inverse, &snapshot) != nil || len(snapshot.Snapshot) == 0 {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Revision không hợp lệ"})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Invalid revision"})
 		return
 	}
 	if _, err = tx.ExecContext(r.Context(), `UPDATE profiles SET data = $2::jsonb WHERE id = $1 AND user_id=$3`, id, string(snapshot.Snapshot), userID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không undo được profile"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not undo the profile"})
 		return
 	}
 	if _, err = tx.ExecContext(r.Context(), `DELETE FROM profile_revisions WHERE id = $1 AND profile_id=$2`, revisionID, id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không cập nhật lịch sử"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not update the history"})
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được undo"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not commit the undo"})
 		return
 	}
 	var profile any
@@ -768,7 +768,7 @@ func (s *Server) profileMutation(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) verifyProfile(w http.ResponseWriter, r *http.Request, id string) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile endpoints require PostgreSQL"})
 		return
 	}
 	var body struct {
@@ -776,7 +776,7 @@ func (s *Server) verifyProfile(w http.ResponseWriter, r *http.Request, id string
 		Verified *bool    `json:"verified"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || len(body.Paths) == 0 || len(body.Paths) > 200 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 	verified := true
@@ -785,20 +785,20 @@ func (s *Server) verifyProfile(w http.ResponseWriter, r *http.Request, id string
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var raw []byte
 	if err := s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id = $1 AND user_id=$2`, id, userID).Scan(&raw); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Profile not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã profile không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile id"})
 		return
 	}
 	var profile map[string]any
 	if json.Unmarshal(raw, &profile) != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Profile bị hỏng"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Profile is corrupt"})
 		return
 	}
 	meta, _ := profile["_meta"].(map[string]any)
@@ -811,7 +811,7 @@ func (s *Server) verifyProfile(w http.ResponseWriter, r *http.Request, id string
 	}
 	for _, path := range body.Paths {
 		if !strings.HasPrefix(path, "/") {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Path không hợp lệ"})
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Invalid path"})
 			return
 		}
 		marks[path] = verified
@@ -820,7 +820,7 @@ func (s *Server) verifyProfile(w http.ResponseWriter, r *http.Request, id string
 	profile["_meta"] = meta
 	updated := jsonString(profile)
 	if _, err := s.db.ExecContext(r.Context(), `UPDATE profiles SET data = $2::jsonb WHERE id = $1 AND user_id=$3`, id, updated, userID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được xác nhận"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save the confirmation"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profile": profile, "progress": map[string]any{"complete": verified}})
@@ -828,31 +828,31 @@ func (s *Server) verifyProfile(w http.ResponseWriter, r *http.Request, id string
 
 func (s *Server) revertProfile(w http.ResponseWriter, r *http.Request, id string) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Profile endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var body struct {
 		RevisionID string `json:"revisionId"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || body.RevisionID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Thiếu revisionId"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing revisionId"})
 		return
 	}
 	var snapshot []byte
 	if err := s.db.QueryRowContext(r.Context(), `SELECT pr.inverse->'snapshot' FROM profile_revisions pr JOIN profiles p ON p.id=pr.profile_id WHERE pr.profile_id = $1 AND pr.id = $2 AND p.user_id=$3`, id, body.RevisionID, userID).Scan(&snapshot); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không có mốc lịch sử này"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "No such history entry"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Revision không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid revision"})
 		return
 	}
 	if _, err := s.db.ExecContext(r.Context(), `UPDATE profiles SET data = $2::jsonb WHERE id = $1 AND user_id=$3`, id, string(snapshot), userID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không khôi phục được profile"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not restore the profile"})
 		return
 	}
 	var profile any
@@ -882,30 +882,30 @@ func applyJSONPatch(document, rawOps []byte) ([]byte, error) {
 
 func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(12 << 20); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "multipart form không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid multipart form"})
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Thiếu file"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing file"})
 		return
 	}
 	defer file.Close()
 	bytes, err := io.ReadAll(io.LimitReader(file, 12<<20+1))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không đọc được file"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Could not read the file"})
 		return
 	}
 	if len(bytes) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "File rỗng"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "File is empty"})
 		return
 	}
 	if len(bytes) > 12<<20 {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "File vượt 12MB"})
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "File exceeds 12MB"})
 		return
 	}
 	if len(bytes) < 4 || string(bytes[:4]) != "%PDF" {
-		writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "File không phải PDF"})
+		writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "File is not a PDF"})
 		return
 	}
 
@@ -916,17 +916,17 @@ func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {
 	// A multipart field must never be able to impersonate another account.
 	userID := s.currentUserID(r)
 	if s.db != nil && userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	key := contentKey(bytes)
 	if s.storageRoot != "" {
 		if err := os.MkdirAll(s.storageRoot, 0o755); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được storage"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create storage"})
 			return
 		}
 		if err := os.WriteFile(filepath.Join(s.storageRoot, key), bytes, 0o644); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được file"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save the file"})
 			return
 		}
 	}
@@ -949,7 +949,7 @@ func (s *Server) uploadCV(w http.ResponseWriter, r *http.Request) {
 			userID, "parse_cv:"+userID+":"+id,
 			jsonString(map[string]any{"storageKey": key, "filename": header.Filename, "uploadId": id})).Scan(&jobID, &status)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được job"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create the job"})
 			return
 		}
 		writeJSON(w, http.StatusAccepted, map[string]any{"jobId": jobID, "queued": status == "queued", "uploadId": id})
@@ -976,7 +976,7 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 	if s.db != nil {
 		userID := s.currentUserID(r)
 		if userID == "" {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 			return
 		}
 		var job Job
@@ -984,11 +984,11 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 		err := s.db.QueryRowContext(r.Context(), `SELECT id, kind, status, created_at, COALESCE(result::text, ''), COALESCE(error, '') FROM jobs WHERE id = $1 AND user_id=$2`, id, userID).
 			Scan(&job.ID, &job.Kind, &job.Status, &job.CreatedAt, &result, &errorText)
 		if err == sql.ErrNoRows {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy job"})
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job not found"})
 			return
 		}
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được job"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the job"})
 			return
 		}
 		if result.Valid && result.String != "" {
@@ -1004,7 +1004,7 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 	job := s.jobs[id]
 	s.mu.RUnlock()
 	if job == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy job"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job not found"})
 		return
 	}
 	writeJSON(w, http.StatusOK, job)
@@ -1014,17 +1014,17 @@ func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request, id string) {
 	if s.db != nil {
 		userID := s.currentUserID(r)
 		if userID == "" {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 			return
 		}
 		result, err := s.db.ExecContext(r.Context(), `UPDATE jobs SET status = 'cancelled', finished_at = now() WHERE id = $1 AND user_id=$2 AND status IN ('queued','running')`, id, userID)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid job id"})
 			return
 		}
 		n, _ := result.RowsAffected()
 		if n == 0 {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "Job không thể huỷ"})
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "Job cannot be cancelled"})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"id": id, "status": "cancelled"})
@@ -1037,13 +1037,13 @@ func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request, id string) {
 		writeJSON(w, http.StatusOK, map[string]any{"id": id, "status": "cancelled"})
 		return
 	}
-	writeJSON(w, http.StatusConflict, map[string]string{"error": "Job không thể huỷ"})
+	writeJSON(w, http.StatusConflict, map[string]string{"error": "Job cannot be cancelled"})
 }
 
 func (s *Server) streamJob(w http.ResponseWriter, r *http.Request, id string) {
 	userID := s.currentUserID(r)
 	if s.db != nil && userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
@@ -1051,7 +1051,7 @@ func (s *Server) streamJob(w http.ResponseWriter, r *http.Request, id string) {
 	w.Header().Set("Connection", "keep-alive")
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Streaming không được hỗ trợ"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Streaming is not supported"})
 		return
 	}
 	for {
@@ -1060,7 +1060,7 @@ func (s *Server) streamJob(w http.ResponseWriter, r *http.Request, id string) {
 		if s.db != nil {
 			err := s.db.QueryRowContext(r.Context(), `SELECT status, COALESCE(result::text,''), COALESCE(error,'') FROM jobs WHERE id = $1 AND user_id=$2`, id, userID).Scan(&status, &result, &errText)
 			if err == sql.ErrNoRows {
-				fmt.Fprintf(w, "event: error\ndata: {\"error\":\"Không tìm thấy job\"}\n\n")
+				fmt.Fprintf(w, "event: error\ndata: {\"error\":\"Job not found\"}\n\n")
 				flusher.Flush()
 				return
 			}
@@ -1069,7 +1069,7 @@ func (s *Server) streamJob(w http.ResponseWriter, r *http.Request, id string) {
 			job := s.jobs[id]
 			if job == nil {
 				s.mu.RUnlock()
-				fmt.Fprint(w, "event: error\ndata: {\"error\":\"Không tìm thấy job\"}\n\n")
+				fmt.Fprint(w, "event: error\ndata: {\"error\":\"Job not found\"}\n\n")
 				flusher.Flush()
 				return
 			}
@@ -1118,7 +1118,7 @@ func (s *Server) streamJob(w http.ResponseWriter, r *http.Request, id string) {
 func (s *Server) importRoute(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/imports/"), "/")
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid job id"})
 		return
 	}
 	if strings.HasSuffix(id, "/pages") {
@@ -1137,21 +1137,21 @@ func (s *Server) importRoute(w http.ResponseWriter, r *http.Request) {
 // know that a completed import is backed by a job plus a profile row.
 func (s *Server) importStatus(w http.ResponseWriter, r *http.Request, id string) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var status string
 	var resultRaw, errorRaw []byte
 	if err := s.db.QueryRowContext(r.Context(), `SELECT status, COALESCE(result,'{}'), COALESCE(error,'') FROM jobs WHERE id=$1 AND user_id=$2`, id, userID).Scan(&status, &resultRaw, &errorRaw); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy job"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được job"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the job"})
 		return
 	}
 	if status != "done" {
@@ -1166,20 +1166,20 @@ func (s *Server) importStatus(w http.ResponseWriter, r *http.Request, id string)
 	_ = json.Unmarshal(resultRaw, &result)
 	profileID, _ := result["profileId"].(string)
 	if profileID == "" {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Job không trả về profileId"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Job did not return a profileId"})
 		return
 	}
 	var profileRaw []byte
 	if err := s.db.QueryRowContext(r.Context(), `SELECT data FROM profiles WHERE id=$1`, profileID).Scan(&profileRaw); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Profile not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được hồ sơ"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the profile"})
 		return
 	}
 	var profile map[string]any
 	if json.Unmarshal(profileRaw, &profile) != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Hồ sơ không hợp lệ"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Invalid profile"})
 		return
 	}
 	items, progress := reviewContract(profile)
@@ -1257,17 +1257,17 @@ func stringSlice(v any) []string {
 
 func (s *Server) importPages(w http.ResponseWriter, r *http.Request, jobID string) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var payload []byte
 	if err := s.db.QueryRowContext(r.Context(), `SELECT payload FROM jobs WHERE id=$1 AND user_id=$2`, jobID, userID).Scan(&payload); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy job"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job not found"})
 		return
 	}
 	var p struct {
@@ -1275,7 +1275,7 @@ func (s *Server) importPages(w http.ResponseWriter, r *http.Request, jobID strin
 		Filename   string `json:"filename"`
 	}
 	if json.Unmarshal(payload, &p) != nil || p.StorageKey == "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job không có file gốc"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job has no source file"})
 		return
 	}
 	data, err := os.ReadFile(filepath.Join(s.storageRoot, p.StorageKey))
@@ -1294,19 +1294,19 @@ func (s *Server) importPages(w http.ResponseWriter, r *http.Request, jobID strin
 	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, strings.TrimRight(base, "/")+"/render?dpi=150&maxPages=20", &buf)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không gọi được PDFKit"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not reach PDFKit"})
 		return
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "PDFKit không khả dụng"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "PDFKit is unavailable"})
 		return
 	}
 	defer res.Body.Close()
 	out, _ := io.ReadAll(io.LimitReader(res.Body, 32<<20))
 	if res.StatusCode >= 300 {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Không render được PDF"})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Could not render the PDF"})
 		return
 	}
 	var rendered struct {
@@ -1319,36 +1319,36 @@ func (s *Server) importPages(w http.ResponseWriter, r *http.Request, jobID strin
 func (s *Server) importComplete(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/imports/"), "/complete"), "/")
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid job id"})
 		return
 	}
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Import endpoints require PostgreSQL"})
 		return
 	}
 	requestUserID := s.currentUserID(r)
 	if requestUserID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var userID, status string
 	var resultRaw []byte
 	if err := s.db.QueryRowContext(r.Context(), `SELECT user_id, status, COALESCE(result,'{}') FROM jobs WHERE id = $1 AND user_id=$2`, id, requestUserID).Scan(&userID, &status, &resultRaw); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy job"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Job not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã job không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid job id"})
 		return
 	}
 	if status != "done" {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Job đang ở trạng thái " + status})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Job is in state " + status})
 		return
 	}
 	var result map[string]any
 	_ = json.Unmarshal(resultRaw, &result)
 	profileID, _ := result["profileId"].(string)
 	if profileID == "" {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Job không có hồ sơ"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Job has no profile"})
 		return
 	}
 	var existing string
@@ -1359,22 +1359,22 @@ func (s *Server) importComplete(w http.ResponseWriter, r *http.Request) {
 	var profileRaw []byte
 	var language, title string
 	if err := s.db.QueryRowContext(r.Context(), `SELECT data, language, COALESCE(data->'sections'->'intro'->>'fullName','CV của tôi') FROM profiles WHERE id = $1`, profileID).Scan(&profileRaw, &language, &title); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Profile not found"})
 		return
 	}
 	var profile map[string]any
 	if json.Unmarshal(profileRaw, &profile) != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Hồ sơ không hợp lệ"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Invalid profile"})
 		return
 	}
 	_, progress := reviewContract(profile)
 	if progress["complete"] != true {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "Còn mục chưa rà soát", "pending": progress["pending"], "progress": progress})
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "Some sections are still unreviewed", "pending": progress["pending"], "progress": progress})
 		return
 	}
 	var cvID string
 	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO cv_documents (user_id, profile_id, profile_snapshot, title, language) VALUES ($1,$2,$3::jsonb,$4,$5) RETURNING id`, userID, profileID, string(profileRaw), title, language).Scan(&cvID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create the CV"})
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"cvId": cvID, "created": true})
@@ -1382,28 +1382,28 @@ func (s *Server) importComplete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Account cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Account endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var body struct {
 		ConfirmEmail string `json:"confirmEmail"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || strings.TrimSpace(body.ConfirmEmail) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Thiếu xác nhận"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing confirmation"})
 		return
 	}
 	var email string
 	if err := s.db.QueryRowContext(r.Context(), `SELECT email FROM users WHERE id = $1`, userID).Scan(&email); err != nil || !strings.EqualFold(strings.TrimSpace(body.ConfirmEmail), email) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Email xác nhận không khớp với tài khoản đang đăng nhập."})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "The confirmation email does not match the signed-in account."})
 		return
 	}
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM users WHERE id = $1`, userID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không xoá được tài khoản"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not delete the account"})
 		return
 	}
 	s.authLogout(w, r)
@@ -1411,12 +1411,12 @@ func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) kbRoute(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "KB cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "KB endpoints require PostgreSQL"})
 		return
 	}
 	if r.Method == http.MethodPatch {
 		if s.currentUserID(r) == "" {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 			return
 		}
 		s.patchKB(w, r)
@@ -1424,7 +1424,7 @@ func (s *Server) kbRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.db.QueryContext(r.Context(), `SELECT s.id, s.title, s.author_name, s.author_title, s.language, s.status, s.version, (SELECT count(*) FROM kb_chunks c WHERE c.source_id=s.id) FROM kb_sources s ORDER BY s.created_at DESC`)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được KB"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the KB"})
 		return
 	}
 	defer rows.Close()
@@ -1449,25 +1449,25 @@ func (s *Server) patchKB(w http.ResponseWriter, r *http.Request) {
 		AuthorTitle *string `json:"authorTitle"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || body.SourceID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 	if body.Status != nil && *body.Status == "active" && (body.AuthorName == nil || strings.TrimSpace(*body.AuthorName) == "" || *body.AuthorName == "Chưa có người duyệt") {
 		var author string
 		_ = s.db.QueryRowContext(r.Context(), `SELECT author_name FROM kb_sources WHERE id=$1`, body.SourceID).Scan(&author)
 		if strings.TrimSpace(author) == "" || author == "Chưa có người duyệt" {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Chưa thể kích hoạt khi thiếu người chịu trách nhiệm"})
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Cannot activate without an accountable reviewer"})
 			return
 		}
 	}
 	result, err := s.db.ExecContext(r.Context(), `UPDATE kb_sources SET status=COALESCE($2,status), author_name=COALESCE($3,author_name), author_title=COALESCE($4,author_title) WHERE id=$1`, body.SourceID, body.Status, body.AuthorName, body.AuthorTitle)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Không cập nhật được nguồn"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Could not update the source"})
 		return
 	}
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy nguồn"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Source not found"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -1475,7 +1475,7 @@ func (s *Server) patchKB(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) kbCitations(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "KB cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "KB endpoints require PostgreSQL"})
 		return
 	}
 	var body struct {
@@ -1483,7 +1483,7 @@ func (s *Server) kbCitations(w http.ResponseWriter, r *http.Request) {
 		Language string   `json:"language"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || len(body.ChunkIDs) > 50 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 	if body.Language != "en" {
@@ -1502,7 +1502,7 @@ func (s *Server) kbCitations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) startAnalyze(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Analyze cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Analyze endpoints require PostgreSQL"})
 		return
 	}
 	var body struct {
@@ -1513,12 +1513,12 @@ func (s *Server) startAnalyze(w http.ResponseWriter, r *http.Request) {
 		CreateVariant bool   `json:"createVariant"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body) != nil || body.CVID == "" || len(strings.TrimSpace(body.JDText)) < 50 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mô tả công việc quá ngắn hoặc body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "The job description is too short, or the request body is invalid"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	if body.Language != "en" {
@@ -1526,23 +1526,23 @@ func (s *Server) startAnalyze(w http.ResponseWriter, r *http.Request) {
 	}
 	var owns string
 	if err := s.db.QueryRowContext(r.Context(), `SELECT id FROM cv_documents WHERE id=$1 AND user_id=$2`, body.CVID, userID).Scan(&owns); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "CV not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid CV id"})
 		return
 	}
 	var jdID, jobID string
 	err := s.db.QueryRowContext(r.Context(), `INSERT INTO job_descriptions (user_id, raw_text, source_url, language) VALUES ($1,$2,NULLIF($3,''),$4) RETURNING id`, userID, body.JDText, body.SourceURL, body.Language).Scan(&jdID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được JD"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save the job description"})
 		return
 	}
 	payload := jsonString(map[string]any{"cvId": body.CVID, "jdId": jdID, "createVariant": body.CreateVariant})
 	key := "match_analysis:" + body.CVID + ":" + jdID
 	err = s.db.QueryRowContext(r.Context(), `INSERT INTO jobs (user_id, kind, idempotency_key, payload) VALUES ($1,'match_analysis',$2,$3::jsonb) ON CONFLICT (idempotency_key) DO UPDATE SET status=jobs.status RETURNING id`, userID, key, payload).Scan(&jobID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được job phân tích"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create the analysis job"})
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": jobID, "cvId": body.CVID, "jdId": jdID, "variantCreated": false, "queued": true})
@@ -1550,7 +1550,7 @@ func (s *Server) startAnalyze(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getAnalyze(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Analyze cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Analyze endpoints require PostgreSQL"})
 		return
 	}
 	cvID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/analyze/"), "/")
@@ -1559,12 +1559,12 @@ func (s *Server) getAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if cvID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid CV id"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var id, jdID string
@@ -1578,7 +1578,7 @@ func (s *Server) getAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Mã CV không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid CV id"})
 		return
 	}
 	var score map[string]any
@@ -1592,7 +1592,7 @@ func (s *Server) getAnalyze(w http.ResponseWriter, r *http.Request) {
 func (s *Server) streamAnalyze(w http.ResponseWriter, r *http.Request, cvID string) {
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
@@ -1652,7 +1652,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-ID", requestID)
 	log.Printf("chat start requestId=%s", requestID)
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Chat cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Chat endpoints require PostgreSQL"})
 		return
 	}
 	var body struct {
@@ -1669,28 +1669,28 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		Hint       string              `json:"hint"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || body.ProfileID == "" || body.CVID == "" || body.DraftToken == "" || len(body.Draft) == 0 || len(body.Layout) == 0 || len(strings.TrimSpace(body.Message)) < 2 || len(body.Message) > 2000 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body chat không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid chat request body"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	var cvProfileID string
 	if err := s.db.QueryRowContext(r.Context(), `SELECT profile_id FROM cv_documents WHERE id=$1 AND profile_id=$2 AND user_id=$3`, body.CVID, body.ProfileID, userID).Scan(&cvProfileID); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy CV"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "CV not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the CV"})
 		return
 	}
 	if cvProfileID != body.ProfileID {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "CV không thuộc hồ sơ này"})
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "This CV does not belong to this profile"})
 		return
 	}
 	if _, err := normalizeCommittedCV(body.Draft, body.Layout); err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Bản nháp không hợp lệ: " + err.Error()})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Invalid draft: " + err.Error()})
 		return
 	}
 	var sessionID string
@@ -1699,12 +1699,12 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		err = s.db.QueryRowContext(r.Context(), `INSERT INTO chat_sessions(user_id,profile_id) SELECT $1,p.id FROM profiles p WHERE p.id=$2 AND p.user_id=$1 RETURNING id`, userID, body.ProfileID).Scan(&sessionID)
 	}
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy hồ sơ"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Profile not found"})
 		return
 	}
 	var userMessageID string
 	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'user',$2) RETURNING id`, sessionID, body.Message).Scan(&userMessageID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được tin nhắn"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save the message"})
 		return
 	}
 	history := []map[string]string{}
@@ -1750,8 +1750,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	answer, modelErr := callChatModel(r.Context(), prompt, body.ModelRef)
 	if modelErr != nil {
 		log.Printf("chat model unavailable requestId=%s modelRef=%q session=%s err=%v", requestID, body.ModelRef, sessionID, modelErr)
-		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "Model chưa khả dụng: "+modelErr.Error())
-		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_UNAVAILABLE", "message": "Model chưa khả dụng", "detail": modelErr.Error(), "requestId": requestID, "sessionId": sessionID})
+		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "The model is unavailable: "+modelErr.Error())
+		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_UNAVAILABLE", "message": "The model is unavailable", "detail": modelErr.Error(), "requestId": requestID, "sessionId": sessionID})
 		fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
 		if flusher != nil {
 			flusher.Flush()
@@ -1771,7 +1771,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("chat model output unparsable requestId=%s modelRef=%q session=%s len=%d tail=%q", requestID, body.ModelRef, sessionID, len(answer), tail)
 		_, _ = s.db.ExecContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2)`, sessionID, "MODEL_OUTPUT_UNPARSABLE")
-		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_OUTPUT_UNPARSABLE", "message": "Mô hình trả về dữ liệu không đọc được", "requestId": requestID, "sessionId": sessionID})
+		payload, _ := json.Marshal(map[string]any{"kind": "error", "code": "MODEL_OUTPUT_UNPARSABLE", "message": "The model returned data we could not read", "requestId": requestID, "sessionId": sessionID})
 		fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
 		if flusher != nil {
 			flusher.Flush()
@@ -1792,7 +1792,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			// Ghi lại op bị chặn: người dùng chỉ thấy câu từ chối, còn muốn biết
 			// mô hình thật sự đã đề xuất gì thì không còn dấu vết nào khác.
 			log.Printf("chat proposal rejected requestId=%s modelRef=%q session=%s err=%v ops=%s", requestID, body.ModelRef, sessionID, err, jsonRawArray(modelOutput.Ops))
-			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa thể tạo đề xuất an toàn từ yêu cầu này: " + err.Error()}
+			modelOutput = chatModelOutput{Kind: "reply", Text: "I could not build a safe proposal from this request: " + err.Error()}
 			assistantContent = modelOutput.Text
 		} else {
 			assistantContent = modelOutput.Summary
@@ -1800,7 +1800,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	var assistantID string
 	if err := s.db.QueryRowContext(r.Context(), `INSERT INTO chat_messages(session_id,role,content) VALUES($1,'assistant',$2) RETURNING id`, sessionID, assistantContent).Scan(&assistantID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không lưu được câu trả lời"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not save the reply"})
 		return
 	}
 	_, _ = s.db.ExecContext(r.Context(), `UPDATE chat_sessions SET updated_at=now() WHERE id=$1`, sessionID)
@@ -1810,7 +1810,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		sendStep("CHECKING_PROPOSAL")
 		var proposalID string
 		if err := s.db.QueryRowContext(r.Context(), `INSERT INTO proposed_patches(message_id,cv_id,draft_token,profile_snapshot,layout_snapshot,ops) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb) RETURNING id`, assistantID, body.CVID, body.DraftToken, string(body.Draft), string(body.Layout), jsonRawArray(modelOutput.Ops)).Scan(&proposalID); err != nil {
-			modelOutput = chatModelOutput{Kind: "reply", Text: "Mình chưa lưu được đề xuất để bạn duyệt. Hồ sơ chưa thay đổi."}
+			modelOutput = chatModelOutput{Kind: "reply", Text: "I could not save the proposal for your review. Your profile is unchanged."}
 			assistantContent = modelOutput.Text
 			_, _ = s.db.ExecContext(r.Context(), `UPDATE chat_messages SET content=$2 WHERE id=$1`, assistantID, assistantContent)
 		} else {
@@ -1924,7 +1924,7 @@ func parseChatModelOutput(raw string) chatModelOutput {
 
 func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 	if len(ops) == 0 || len(ops) > 20 {
-		return fmt.Errorf("số lượng thay đổi không hợp lệ")
+		return fmt.Errorf("invalid number of changes")
 	}
 	seen := map[string]bool{}
 	for _, raw := range ops {
@@ -1939,20 +1939,20 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 			} `json:"grounding"`
 		}
 		if json.Unmarshal(raw, &op) != nil || op.Op == "" || op.Path == "" {
-			return fmt.Errorf("op không hợp lệ")
+			return fmt.Errorf("invalid op")
 		}
 		if op.Op != "add" && op.Op != "replace" && op.Op != "remove" {
-			return fmt.Errorf("op %q không được hỗ trợ", op.Op)
+			return fmt.Errorf("op %q is not supported", op.Op)
 		}
 		if !strings.HasPrefix(op.Path, "/") || strings.Contains(op.Path, "[") || seen[op.Op+" "+op.Path] {
-			return fmt.Errorf("path không hợp lệ hoặc bị trùng: %s", op.Path)
+			return fmt.Errorf("invalid or duplicate path: %s", op.Path)
 		}
 		seen[op.Op+" "+op.Path] = true
 		if op.Op != "remove" && len(op.Value) == 0 {
-			return fmt.Errorf("op %s thiếu value", op.Path)
+			return fmt.Errorf("op %s is missing value", op.Path)
 		}
 		if len(op.Rationale) < 3 || op.Grounding.Type == "" || op.Grounding.Ref == "" {
-			return fmt.Errorf("op %s thiếu rationale hoặc grounding", op.Path)
+			return fmt.Errorf("op %s is missing rationale or grounding", op.Path)
 		}
 		// Skills are grouped in CV v2: sections.skills[i] = {category, skills:[string]}.
 		if strings.HasPrefix(op.Path, "/sections/skills/") {
@@ -1962,13 +1962,13 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 				(len(parts) == 2 && (parts[1] == "category" || parts[1] == "skills")) ||
 				(len(parts) == 3 && parts[1] == "skills")
 			if !okTail {
-				return fmt.Errorf("sections/skills chỉ được sửa category hoặc skills: %s", op.Path)
+				return fmt.Errorf("sections/skills only allows editing category or skills: %s", op.Path)
 			}
 		}
 	}
 	updated, err := applyJSONPatch(profileRaw, jsonRawArray(ops))
 	if err != nil {
-		return fmt.Errorf("patch không áp dụng được: %v", err)
+		return fmt.Errorf("patch could not be applied: %v", err)
 	}
 	var profile struct {
 		Sections struct {
@@ -1976,28 +1976,28 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 		} `json:"sections"`
 	}
 	if json.Unmarshal(updated, &profile) != nil {
-		return fmt.Errorf("hồ sơ sau patch không hợp lệ")
+		return fmt.Errorf("the profile is invalid after the patch")
 	}
 	for _, group := range profile.Sections.Skills {
 		if category, ok := group["category"]; ok {
 			if _, ok := category.(string); !ok {
-				return fmt.Errorf("category của sections.skills phải là chuỗi")
+				return fmt.Errorf("category in sections.skills must be a string")
 			}
 		}
 		if rawSkills, ok := group["skills"]; ok {
 			list, ok := rawSkills.([]any)
 			if !ok {
-				return fmt.Errorf("skills của sections.skills phải là mảng chuỗi")
+				return fmt.Errorf("skills in sections.skills must be an array of strings")
 			}
 			for _, item := range list {
 				if _, ok := item.(string); !ok {
-					return fmt.Errorf("mỗi kỹ năng trong sections.skills phải là chuỗi")
+					return fmt.Errorf("every skill in sections.skills must be a string")
 				}
 			}
 		}
 		for key := range group {
 			if key != "id" && key != "category" && key != "skills" {
-				return fmt.Errorf("field nhóm kỹ năng không được hỗ trợ: %s", key)
+				return fmt.Errorf("unsupported skill group field: %s", key)
 			}
 		}
 	}
@@ -2017,7 +2017,7 @@ func validateChatProposalDocuments(profileRaw, layoutRaw []byte, ops []json.RawM
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(raw, &op) != nil || op.Path == "" {
-			return fmt.Errorf("op không hợp lệ")
+			return fmt.Errorf("invalid op")
 		}
 		if !allowedChatPatchPath(op.Op, op.Path) {
 			// Path có thể đúng mà chỉ sai op: token "-" của JSON Pointer nghĩa là
@@ -2025,29 +2025,29 @@ func validateChatProposalDocuments(profileRaw, layoutRaw []byte, ops []json.RawM
 			// hỗ trợ" trong trường hợp đó là sai sự thật, và nó đẩy cả người dùng
 			// lẫn người sửa lỗi đi tìm nhầm chỗ.
 			if allowed := allowedChatPatchOps(op.Path); len(allowed) > 0 {
-				return fmt.Errorf("op %q không dùng được với path %s, path này chỉ nhận: %s", op.Op, op.Path, strings.Join(allowed, ", "))
+				return fmt.Errorf("op %q cannot be used with path %s; this path only accepts: %s", op.Op, op.Path, strings.Join(allowed, ", "))
 			}
-			return fmt.Errorf("path không được hỗ trợ: %s", op.Path)
+			return fmt.Errorf("unsupported path: %s", op.Path)
 		}
 		if strings.HasPrefix(op.Path, "/layout/") {
 			var value map[string]any
 			if json.Unmarshal(raw, &value) != nil {
-				return fmt.Errorf("op không hợp lệ")
+				return fmt.Errorf("invalid op")
 			}
 			value["path"] = strings.TrimPrefix(op.Path, "/layout")
 			patched, err := json.Marshal(value)
 			if err != nil {
-				return fmt.Errorf("op không hợp lệ")
+				return fmt.Errorf("invalid op")
 			}
 			layoutOps = append(layoutOps, patched)
 		} else if op.Path == "/layout" {
-			return fmt.Errorf("không thể thay thế toàn bộ bố cục")
+			return fmt.Errorf("the whole layout cannot be replaced")
 		} else {
 			profileOps = append(profileOps, raw)
 		}
 	}
 	if len(ops) == 0 || len(ops) > 20 {
-		return fmt.Errorf("số lượng thay đổi không hợp lệ")
+		return fmt.Errorf("invalid number of changes")
 	}
 	if len(profileOps) > 0 {
 		if err := validateChatProposal(profileRaw, profileOps); err != nil {
@@ -2061,17 +2061,17 @@ func validateChatProposalDocuments(profileRaw, layoutRaw []byte, ops []json.RawM
 	}
 	updatedProfile, err := applyJSONPatch(profileRaw, jsonRawArray(profileOps))
 	if err != nil {
-		return fmt.Errorf("CV sau patch không hợp lệ: %v", err)
+		return fmt.Errorf("the CV is invalid after the patch: %v", err)
 	}
 	updatedLayout, err := applyJSONPatch(layoutRaw, jsonRawArray(layoutOps))
 	if err != nil {
-		return fmt.Errorf("layout sau patch không hợp lệ: %v", err)
+		return fmt.Errorf("the layout is invalid after the patch: %v", err)
 	}
 	if _, err := normalizeCommittedCV(updatedProfile, updatedLayout); err != nil {
-		return fmt.Errorf("CV sau patch không hợp lệ: %v", err)
+		return fmt.Errorf("the CV is invalid after the patch: %v", err)
 	}
 	if _, err := validateCVLayout(updatedLayout); err != nil {
-		return fmt.Errorf("layout sau patch không hợp lệ: %v", err)
+		return fmt.Errorf("the layout is invalid after the patch: %v", err)
 	}
 	return nil
 }
@@ -2187,12 +2187,12 @@ func (s *Server) cacheChatMessages(ctx context.Context, userID, sessionID string
 
 func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Proposal cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Proposal endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	proposalID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/chat/proposals/"), "/")
@@ -2203,12 +2203,12 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 		Accept     []int  `json:"accept"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 128<<10)).Decode(&body) != nil || proposalID == "" || body.ProfileID == "" || body.CVID == "" || body.DraftToken == "" || len(body.Accept) > 20 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Body không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 		return
 	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không mở được transaction"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not open a transaction"})
 		return
 	}
 	defer tx.Rollback()
@@ -2216,49 +2216,49 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 	var opsRaw, profileRaw, layoutRaw []byte
 	var proposalCVID, proposalToken string
 	if err := tx.QueryRowContext(r.Context(), `SELECT pp.status,pp.ops,pp.cv_id,pp.draft_token,pp.profile_snapshot,pp.layout_snapshot FROM proposed_patches pp JOIN chat_messages cm ON cm.id=pp.message_id JOIN chat_sessions cs ON cs.id=cm.session_id JOIN profiles p ON p.id=cs.profile_id JOIN cv_documents c ON c.id=pp.cv_id AND c.profile_id=p.id WHERE pp.id=$1 AND p.id=$2 AND p.user_id=$3 AND c.id=$4 FOR UPDATE OF pp`, proposalID, body.ProfileID, userID, body.CVID).Scan(&status, &opsRaw, &proposalCVID, &proposalToken, &profileRaw, &layoutRaw); err == sql.ErrNoRows {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Không tìm thấy đề xuất"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Proposal not found"})
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Proposal không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid proposal"})
 		return
 	}
 	if status != "pending" {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Đề xuất này đã " + status})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "This proposal is already " + status})
 		return
 	}
 	if proposalCVID != body.CVID || proposalToken != body.DraftToken {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Bản nháp đã thay đổi. Hãy tạo lại đề xuất từ bản nháp hiện tại."})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "The draft has changed. Ask for a new proposal based on the current draft."})
 		return
 	}
 	var all []json.RawMessage
 	if json.Unmarshal(opsRaw, &all) != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Ops proposal hỏng"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Proposal ops are corrupt"})
 		return
 	}
 	selected, accepted, rejected, err := selectChatProposalOps(all, body.Accept)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Chỉ số op không hợp lệ: " + err.Error()})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Invalid op index: " + err.Error()})
 		return
 	}
 	if len(body.Accept) == 0 {
 		result, err := tx.ExecContext(r.Context(), `UPDATE proposed_patches SET status='rejected',applied_ops='[]'::jsonb,rejected_ops=$2::jsonb WHERE id=$1 AND status='pending'`, proposalID, jsonString(rejected))
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không settle được proposal"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not settle the proposal"})
 			return
 		}
 		if affected, err := result.RowsAffected(); err != nil || affected != 1 {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "Đề xuất này đã được settle"})
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "This proposal has already been settled"})
 			return
 		}
 		if err := tx.Commit(); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được proposal"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not commit the proposal"})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"applied": 0, "accepted": accepted, "rejected": rejected, "status": "rejected", "selectedOps": []any{}})
 		return
 	}
 	if err := validateChatProposalDocuments(profileRaw, layoutRaw, selected); err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Đề xuất không hợp lệ: " + err.Error()})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Invalid proposal: " + err.Error()})
 		return
 	}
 	nextStatus := "partial"
@@ -2267,15 +2267,15 @@ func (s *Server) chatProposal(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := tx.ExecContext(r.Context(), `UPDATE proposed_patches SET status=$2,applied_ops=$3::jsonb,rejected_ops=$4::jsonb WHERE id=$1 AND status='pending'`, proposalID, nextStatus, jsonString(accepted), jsonString(rejected))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không settle được proposal"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not settle the proposal"})
 		return
 	}
 	if affected, err := result.RowsAffected(); err != nil || affected != 1 {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "Đề xuất này đã được settle"})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "This proposal has already been settled"})
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không commit được proposal"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not commit the proposal"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"applied": len(selected), "accepted": accepted, "rejected": rejected, "selectedOps": selected, "status": nextStatus})
@@ -2351,7 +2351,7 @@ type chatModelConfig struct {
 // sinh ra.
 func chatMaxOutputTokens(mc chatModelConfig) (int, error) {
 	if mc.MaxOutput <= 0 {
-		return 0, fmt.Errorf("model %q thiếu max_output trong config.yml", mc.ModelID)
+		return 0, fmt.Errorf("model %q is missing max_output in config.yml", mc.ModelID)
 	}
 	return mc.MaxOutput, nil
 }
@@ -2386,7 +2386,7 @@ func splitModelRef(modelRef string) (string, string, error) {
 	}
 	parts := strings.SplitN(modelRef, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("modelRef không hợp lệ: %q", modelRef)
+		return "", "", fmt.Errorf("invalid modelRef: %q", modelRef)
 	}
 	return parts[0], parts[1], nil
 }
@@ -2409,14 +2409,14 @@ func callChatModel(ctx context.Context, messages []map[string]string, modelRef s
 	case "deepseek":
 		pc = cfg.Providers.DeepSeek
 	default:
-		return "", fmt.Errorf("provider không được cấu hình: %s", provider)
+		return "", fmt.Errorf("provider is not configured: %s", provider)
 	}
 	if !pc.Enabled {
-		return "", fmt.Errorf("provider đã tắt: %s", provider)
+		return "", fmt.Errorf("provider is disabled: %s", provider)
 	}
 	mc, ok := pc.Models[alias]
 	if !ok || mc.ModelID == "" {
-		return "", fmt.Errorf("modelRef không được cấu hình: %s.%s", provider, alias)
+		return "", fmt.Errorf("modelRef is not configured: %s.%s", provider, alias)
 	}
 	if provider == "local" {
 		return postLocalChat(ctx, messages, pc, mc)
@@ -2430,7 +2430,7 @@ func postLocalChat(ctx context.Context, messages []map[string]string, pc chatPro
 		base = pc.BaseURL
 	}
 	if base == "" || mc.Port == 0 {
-		return "", fmt.Errorf("local model thiếu base_url hoặc port")
+		return "", fmt.Errorf("local model is missing base_url or port")
 	}
 	maxOutput, err := chatMaxOutputTokens(mc)
 	if err != nil {
@@ -2443,11 +2443,11 @@ func postLocalChat(ctx context.Context, messages []map[string]string, pc chatPro
 
 func postCloudChat(ctx context.Context, messages []map[string]string, provider string, pc chatProviderConfig, mc chatModelConfig) (string, error) {
 	if pc.BaseURL == "" {
-		return "", fmt.Errorf("provider %s thiếu base_url", provider)
+		return "", fmt.Errorf("provider %s is missing base_url", provider)
 	}
 	key := strings.TrimSpace(os.Getenv(pc.APIKeyEnv))
 	if key == "" {
-		return "", fmt.Errorf("thiếu secret %s cho %s", pc.APIKeyEnv, provider)
+		return "", fmt.Errorf("missing secret %s for %s", pc.APIKeyEnv, provider)
 	}
 	maxOutput, err := chatMaxOutputTokens(mc)
 	if err != nil {
@@ -2572,14 +2572,14 @@ func chatResponseSchema() map[string]any {
 
 func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Auth cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Auth endpoints require PostgreSQL"})
 		return
 	}
 	var body struct {
 		Email string `json:"email"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body) != nil || !strings.Contains(body.Email, "@") {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Email không hợp lệ"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid email"})
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
@@ -2588,7 +2588,7 @@ func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO login_tokens (token_hash, email, expires_at)
 		VALUES ($1, $2, now() + interval '15 minutes')`, tokenHash(token), email)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không tạo được link đăng nhập"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create the sign-in link"})
 		return
 	}
 	base := os.Getenv("APP_BASE_URL")
@@ -2604,7 +2604,7 @@ func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) authVerify(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		http.Error(w, "Auth cần PostgreSQL", http.StatusServiceUnavailable)
+		http.Error(w, "Auth endpoints require PostgreSQL", http.StatusServiceUnavailable)
 		return
 	}
 	token := r.URL.Query().Get("token")
@@ -2622,7 +2622,7 @@ func (s *Server) authVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		http.Error(w, "Không xác thực được", http.StatusInternalServerError)
+		http.Error(w, "Could not authenticate", http.StatusInternalServerError)
 		return
 	}
 	err = s.db.QueryRowContext(r.Context(), `
@@ -2630,7 +2630,7 @@ func (s *Server) authVerify(w http.ResponseWriter, r *http.Request) {
 		ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
 		RETURNING id`, email).Scan(&userID)
 	if err != nil {
-		http.Error(w, "Không tạo được tài khoản", http.StatusInternalServerError)
+		http.Error(w, "Could not create the account", http.StatusInternalServerError)
 		return
 	}
 	session := newID() + newID()
@@ -2638,7 +2638,7 @@ func (s *Server) authVerify(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO sessions (token_hash, user_id, expires_at, user_agent)
 		VALUES ($1, $2, now() + interval '30 days', $3)`, tokenHash(session), userID, r.UserAgent())
 	if err != nil {
-		http.Error(w, "Không tạo được phiên", http.StatusInternalServerError)
+		http.Error(w, "Could not create the session", http.StatusInternalServerError)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "hr_session", Value: session, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 3600, Secure: r.TLS != nil})
@@ -2724,12 +2724,12 @@ func cvListItem(id, title string, updated time.Time, jdTitle string) map[string]
 
 func (s *Server) listCV(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV cần PostgreSQL"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "CV endpoints require PostgreSQL"})
 		return
 	}
 	userID := s.currentUserID(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Chưa đăng nhập"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not signed in"})
 		return
 	}
 	// Tên tin tuyển dụng nằm trong `requirements`, không phải cột riêng —
@@ -2742,7 +2742,7 @@ func (s *Server) listCV(w http.ResponseWriter, r *http.Request) {
 		 WHERE c.user_id = $1
 		 ORDER BY c.updated_at DESC`, userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được danh sách CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the CV list"})
 		return
 	}
 	defer rows.Close()
@@ -2754,13 +2754,13 @@ func (s *Server) listCV(w http.ResponseWriter, r *http.Request) {
 		var id, title, jdTitle string
 		var updated time.Time
 		if err := rows.Scan(&id, &title, &updated, &jdTitle); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được danh sách CV"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the CV list"})
 			return
 		}
 		items = append(items, cvListItem(id, title, updated, jdTitle))
 	}
 	if rows.Err() != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Không đọc được danh sách CV"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read the CV list"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})

@@ -6,7 +6,7 @@ import (
 )
 
 // errSchemaV2Invalid marks a document that is not CV schema v2.
-var errSchemaV2Invalid = errors.New("CV không đúng schemaVersion 2")
+var errSchemaV2Invalid = errors.New("CV is not schemaVersion 2")
 
 // validateCVV2 checks the only CV document shape accepted in production.
 func validateCVV2(cvRaw json.RawMessage) error {

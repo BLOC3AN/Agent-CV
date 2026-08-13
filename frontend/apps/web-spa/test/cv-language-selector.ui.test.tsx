@@ -83,12 +83,12 @@ describe('bộ chọn ngôn ngữ CV', () => {
         </BuilderLocaleProvider>
       </LocaleProvider>,
     )
-    expect(screen.getByRole('link', { name: 'Trang chủ' })).toBeTruthy()
-
-    fireEvent.change(selector(), { target: { value: 'en' } })
-
     expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
-    expect(localStorage.getItem('hr-locale')).toBe('en')
+
+    fireEvent.change(selector(), { target: { value: 'vi' } })
+
+    expect(screen.getByRole('link', { name: 'Trang chủ' })).toBeTruthy()
+    expect(localStorage.getItem('hr-locale')).toBe('vi')
   })
 
   /*
@@ -117,25 +117,26 @@ describe('bộ chọn ngôn ngữ CV', () => {
     expect(within(editor).getByText('KINH NGHIỆM LÀM VIỆC')).toBeTruthy()
   })
 
-  it('đổi selector thì tiêu đề mục trong trang giấy sang tiếng Anh', async () => {
+  it('đổi selector thì tiêu đề mục trong trang giấy đổi theo', async () => {
     renderBuilder()
     const paper = await screen.findByTestId('cv-editor')
-    expect(within(paper).getByText('KINH NGHIỆM LÀM VIỆC')).toBeTruthy()
+    expect(within(paper).getByText('WORK EXPERIENCE')).toBeTruthy()
 
-    fireEvent.change(selector(), { target: { value: 'en' } })
+    fireEvent.change(selector(), { target: { value: 'vi' } })
 
-    await waitFor(() => expect(within(paper).getByText('WORK EXPERIENCE')).toBeTruthy())
-    expect(within(paper).queryByText('KINH NGHIỆM LÀM VIỆC')).toBeNull()
+    await waitFor(() => expect(within(paper).getByText('KINH NGHIỆM LÀM VIỆC')).toBeTruthy())
+    expect(within(paper).queryByText('WORK EXPERIENCE')).toBeNull()
   })
 
-  it('đổi selector thì chữ trên giao diện cũng sang tiếng Anh', async () => {
+  it('đổi selector thì chữ trên giao diện cũng đổi theo', async () => {
     renderBuilder()
     await screen.findByTestId('cv-editor')
+    expect(screen.getByRole('button', { name: /^preview$/i })).toBeTruthy()
 
-    fireEvent.change(selector(), { target: { value: 'en' } })
+    fireEvent.change(selector(), { target: { value: 'vi' } })
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /^preview$/i })).toBeTruthy())
-    expect(screen.getByRole('button', { name: /download pdf/i })).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: /^xem trước$/i })).toBeTruthy())
+    expect(screen.getByRole('button', { name: /tải pdf/i })).toBeTruthy()
   })
 
   /* Ngôn ngữ nằm trong CV nên đổi nó là sửa tài liệu — phải lưu mới vào PDF. */

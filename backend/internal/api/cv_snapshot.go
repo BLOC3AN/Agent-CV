@@ -9,7 +9,7 @@ import (
 // errV2NotBackfilled is retained as a defensive response for databases that
 // were not migrated yet. A production database after the cutover stores only
 // v2, so callers never fall back to an older document shape.
-var errV2NotBackfilled = errors.New("CV này chưa có bản v2")
+var errV2NotBackfilled = errors.New("This CV has no v2 revision yet")
 
 func cvSnapshotForResponse(v2Raw []byte) (snapshot any, schemaVersion int, err error) {
 	if len(v2Raw) == 0 {

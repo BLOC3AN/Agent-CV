@@ -1,3 +1,5 @@
+import { errorMessages } from './messages.errors'
+
 /**
  * Chữ tiếng Việt trên giao diện.
  *
@@ -10,6 +12,8 @@
  * tuỳ chọn của người dùng, và còn phải chạy được ở SSR nơi không có context.
  */
 export const vi = {
+  // Lỗi luôn là tiếng Anh — xem `messages.errors.ts`.
+  ...errorMessages,
   // Điều hướng chung
   home: 'Trang chủ',
   cvs: 'CV của tôi',
@@ -31,7 +35,6 @@ export const vi = {
   statusDirty: 'Chưa lưu',
   statusSaving: 'Đang lưu…',
   statusSaved: 'Đã lưu',
-  statusSaveFailed: 'Lưu thất bại',
   loadingCV: 'Đang tải CV…',
   cvNotFound: 'Không tìm thấy CV',
   invalidCVId: 'Mã CV không hợp lệ',
@@ -54,7 +57,6 @@ export const vi = {
   downloadDialogLabel: 'Xuất PDF với thay đổi chưa lưu',
   discardAndDownload: 'Bỏ thay đổi và tải',
   saveAndDownload: 'Lưu và tải',
-  downloadFailed: 'Không tải được PDF',
 
   // Trợ lý AI
   openAssistant: 'Mở Trợ lý AI',
@@ -64,7 +66,6 @@ export const vi = {
   previewClose: 'Đóng xem trước',
   print: 'In / Print',
   preparingPDF: 'Đang chuẩn bị PDF…',
-  previewExportFailed: 'Không thể chuẩn bị PDF. Bản nháp chưa được xuất.',
 
   // Panel thiết kế
   cvLayout: 'Bố cục CV',
@@ -119,9 +120,6 @@ export const vi = {
   afterChange: 'Sau thay đổi',
   noPreviousRevision: 'Không có bản trước đó cho phiên bản này.',
   noContentChange: 'Không có thay đổi nội dung so với bản trước đó.',
-  historyLoadFailed: 'Không tải được lịch sử phiên bản',
-  previewLoadFailed: 'Không tải được bản xem trước',
-  restoreFailed: 'Không thể khôi phục phiên bản',
   changeAdded: 'Thêm mới',
   changeEdited: 'Đã sửa',
   changeRemoved: 'Đã xóa',
@@ -353,25 +351,13 @@ export const vi = {
   guidedOrganization: 'Công ty / tổ chức',
   guidedWhatDidYouDo: 'Bạn đã làm gì?',
   guidedFullName: 'Họ và tên',
-  guidedCreateFailed: 'Không tạo được CV từ luồng hướng dẫn',
   untitledCV: 'CV chưa đặt tên',
   // Thông báo lỗi từ máy chủ, tra theo mã
-  errorV2NotBackfilled: 'CV này chưa có bản v2. Vui lòng chạy backfill rồi thử lại.',
-  errorSchemaV2Invalid: 'Dữ liệu CV không đúng định dạng. Vui lòng tải lại trang và thử lại.',
-  errorNoCVSections: 'Không nhận ra mục CV như học vấn, kinh nghiệm hoặc kỹ năng.',
-  errorFileMissing: 'Không tìm thấy file đã tải lên. Hãy thử tải lại.',
-  errorPDFExtractFailed: 'Không đọc được nội dung file PDF này.',
-  errorProfileCreateFailed: 'Không tạo được hồ sơ từ file này.',
-  errorUnknownJobKind: 'Loại tác vụ không được hỗ trợ.',
   // Trợ lý AI — trạng thái lúc chạy
   justNow: 'Vừa xong',
-  sendFailed: 'Không gửi được tin nhắn',
-  jobFailed: 'CV xử lý thất bại. Vui lòng thử lại.',
-  dashboardLoadFailed: 'Không tải được trang tổng quan',
   aiSuggestion: 'AI GỢI Ý',
   appliedToDraft: 'Đã đưa {n} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.',
   proposalSkipped: 'Đã bỏ qua đề xuất.',
-  applyFailed: 'Không áp dụng được đề xuất',
   aiAnalysing: 'AI đang phân tích',
   draftChangedDuringSettle: 'Bản nháp đã thay đổi trong lúc chờ. Đề xuất được giữ lại để bạn thử lại.',
   applyToCV: 'Áp dụng vào CV',
@@ -390,55 +376,34 @@ export const vi = {
   notProvided: 'Chưa có',
   hasAttachment: 'Có ảnh đính kèm',
   oneItemPerLine: 'Mỗi dòng một mục — điền vào đây',
-  reviewLoadFailed: 'Không tải được dữ liệu để rà soát.',
-  reviewConfirmFailed: 'Không lưu được xác nhận cho mục này. Vui lòng thử lại.',
-  reviewFinishFailed: 'Không hoàn tất được. Vui lòng thử lại.',
-  reviewProgressReloadFailed: 'Đã lưu xác nhận nhưng không tải lại được tiến độ mới nhất.',
 
   matchResult: 'Kết quả đối chiếu JD',
+  degradedMode: 'Phân tích đang ở chế độ suy giảm: {reason}.',
   overallMatch: 'Điểm tương thích tổng thể',
   gaps: 'Khoảng thiếu',
-  someModelsUnavailable: 'một số model không khả dụng',
   matching: 'Đang đối chiếu CV với JD…',
-  analyzeStartFailed: 'Không tạo được phiên phân tích',
-  cvListLoadFailed: 'Không tải được danh sách CV',
-  analyzeProgressFailed: 'Không đọc được tiến độ phân tích',
 
   uploading: 'Đang tải lên…',
   queued: 'Đang xếp hàng chờ xử lý…',
   processing: 'Đang xử lý…',
   extracting: 'Đang trích xuất dữ liệu từ CV…',
-  uploadFailed: 'Không tải file lên được.',
-  jobTrackFailed: 'Không theo dõi được tiến trình xử lý.',
 
   creating: 'Đang tạo…',
   openingNewCV: 'Đang mở CV vừa tạo…',
-  createCVFailed: 'Không tạo được CV',
   createCVIncomplete: 'Tạo CV thất bại giữa chừng. Vui lòng thử lại.',
 
-  storeLoadFailed: 'Không tải được CV',
-  storeSaveFailed: 'Không lưu được CV',
-  storeRestoreFailed: 'Không thể khôi phục phiên bản',
   restoreBlockedDirty: 'Bản nháp chưa lưu. Hãy lưu hoặc bỏ thay đổi trước khi khôi phục.',
   restoreBlockedSaving: 'Đang lưu thay đổi, chưa thể khôi phục phiên bản',
 
-  errorNetworkUnreachable: 'Không kết nối được máy chủ',
-  errorServer: 'Máy chủ trả về lỗi',
-  errorStreamOpen: 'Máy chủ không mở được luồng trả lời',
-  errorStreamClosed: 'Máy chủ đóng kết nối giữa chừng',
 
   deleting: 'Đang xoá…',
-  deleteAccountFailed: 'Không xoá được tài khoản',
   confirmEmailMismatch: 'Email xác nhận phải trùng chính xác với email tài khoản.',
 
   sending: 'Đang gửi…',
   loginLinkSent: 'Đã gửi link đăng nhập. Mở hộp thư của bạn và bấm vào đường dẫn trong email.',
   openLoginLinkDev: 'Mở link đăng nhập (chỉ có ở môi trường chạy thử)',
-  loginLinkFailed: 'Không gửi được link đăng nhập',
 
   noCurator: 'Chưa có curator',
-  kbUpdateFailed: 'Không cập nhật được nguồn',
-  kbLoadFailed: 'Không tải được KB',
   kbNeedsCurator: 'Nguồn phải có curator trước khi kích hoạt',
   addField: 'Thêm trường',
   addRegisteredField: 'Thêm trường đã đăng ký',
@@ -451,21 +416,14 @@ export const vi = {
   guidedBodyPlaceholder: 'Môn học, CLB hoặc nơi tự làm',
   guidedCreateCV: 'Tạo CV',
   guidedCreating: 'Đang tạo CV…',
-  deleteCVFailed: 'Không xoá được CV',
-  cvListReadFailed: 'Không đọc được danh sách CV',
   loadingCVList: 'Đang tải danh sách CV…',
   pageNotFound: 'Không tìm thấy trang',
   pageNotFoundHint: 'Đường dẫn bạn mở không tồn tại hoặc đã được đổi tên.',
   backToDashboard: 'Về trang tổng quan',
-  errorAIPatchInvalidCV: 'Đề xuất AI tạo ra một CV không hợp lệ.',
-  errorAIPatchInvalidLayout: 'Đề xuất AI tạo ra một bố cục không hợp lệ.',
-  errorAIPatchLayoutReplace: 'Không thể thay thế toàn bộ bố cục từ đề xuất AI.',
   stepThinking: 'Đang suy nghĩ',
   stepUnderstanding: 'Đang hiểu yêu cầu của bạn',
   stepReviewingProfile: 'Đang xem lại hồ sơ để trả lời',
   stepCheckingProposal: 'Đang kiểm tra đề xuất',
-  errorModelUnavailable: 'Trợ lý AI đang không sẵn sàng. Vui lòng thử lại sau.',
-  errorModelOutputUnparsable: 'Trợ lý AI trả về dữ liệu không đọc được — thường vì câu trả lời quá dài và bị cắt. Hãy thử yêu cầu hẹp hơn, ví dụ chỉ một mục.',
 } as const
 
 export type MessageKey = keyof typeof vi

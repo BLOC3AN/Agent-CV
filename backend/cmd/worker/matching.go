@@ -527,7 +527,7 @@ func richMatchScore(ctx context.Context, profile, rawJD string) (map[string]any,
 	rubric, rubricGaps := scoreProfileRubric(view, jd)
 	gaps = append(gaps, rubricGaps...)
 	breakdown := map[string]any{"skills": int(keyword), "experience": int(experience), "education": int(education), "keywords": int(atsScoreFloat(atsScore)), "rubric": int(rubric)}
-	score := map[string]any{"overall": int(combineMatchBreakdown(breakdown, atsScore != nil)), "breakdown": breakdown, "missingAtsKeywords": atsMissing, "degradedReason": "Semantic/model layer chưa bật trong Go worker"}
+	score := map[string]any{"overall": int(combineMatchBreakdown(breakdown, atsScore != nil)), "breakdown": breakdown, "missingAtsKeywords": atsMissing, "degradedReason": "Semantic/model layer is not enabled in the Go worker"}
 	return score, matched, gaps
 }
 

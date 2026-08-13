@@ -177,7 +177,7 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 		return fmt.Errorf("PDF_EXTRACT_FAILED: %w", err)
 	}
 	if !looksLikeCV(seg.Merged) {
-		return fmt.Errorf("NO_CV_SECTIONS: Không nhận ra mục CV như học vấn, kinh nghiệm hoặc kỹ năng")
+		return fmt.Errorf("NO_CV_SECTIONS: Could not find CV sections such as education, experience or skills")
 	}
 	lang := detectLanguage(seg.Text)
 	name := firstLine(seg.Text)
@@ -843,7 +843,7 @@ func keywordScore(profile, jd string) (map[string]any, []map[string]any, []map[s
 	if len(jt) > 0 {
 		overall = len(matched) * 100 / len(jt)
 	}
-	return map[string]any{"overall": overall, "breakdown": map[string]any{"keyword": overall, "semantic": 0, "rubric": 0}, "missingAtsKeywords": mapKeys(gaps), "degradedReason": "Semantic/model layer chưa bật trong Go worker"}, matched, gaps
+	return map[string]any{"overall": overall, "breakdown": map[string]any{"keyword": overall, "semantic": 0, "rubric": 0}, "missingAtsKeywords": mapKeys(gaps), "degradedReason": "Semantic/model layer is not enabled in the Go worker"}, matched, gaps
 }
 func tokens(s string) map[string]bool {
 	m := map[string]bool{}
