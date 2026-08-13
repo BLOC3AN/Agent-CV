@@ -2629,7 +2629,7 @@ func (s *Server) authRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := map[string]any{"ok": true, "sent": false}
-	if os.Getenv("NODE_ENV") != "production" {
+	if magicLinkEnabled() {
 		result["devLink"] = appBaseURL() + "/api/auth/verify?token=" + url.QueryEscape(token)
 	}
 	writeJSON(w, http.StatusOK, result)
