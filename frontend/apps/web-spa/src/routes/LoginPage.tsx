@@ -6,7 +6,7 @@ import { useSession } from '../lib/session';
 
 export function LoginPage() {
   const { t } = useLocale()
-  const { status } = useSession();
+  const { status, magicLink } = useSession();
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
@@ -44,6 +44,19 @@ export function LoginPage() {
           <p className="text-xs text-slate-500">{t('loginHint')}</p>
         </div>
 
+        {/*
+          Thẻ <a> thật chứ không phải fetch: luồng OAuth là một chuỗi redirect
+          của trình duyệt, và cookie `state` phải được đặt trên chính điều
+          hướng đó.
+        */}
+        <a
+          href="/api/auth/google/start"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          {t('signInWithGoogle')}
+        </a>
+
+        {magicLink && (
         <form onSubmit={submit} className="space-y-3">
           <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700">
             Email
@@ -64,6 +77,7 @@ export function LoginPage() {
             {sending ? t('sending') : t('sendLoginLink')}
           </button>
         </form>
+        )}
 
         {error && <p className="text-xs font-medium text-rose-600">{error}</p>}
 

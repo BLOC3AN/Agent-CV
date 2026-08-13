@@ -60,6 +60,12 @@ export interface CVSummary {
 export interface Session {
   authenticated: boolean
   email?: string
+  /**
+   * Magic link chỉ còn dùng được ngoài production — máy chủ là nơi duy nhất
+   * biết điều đó, nên nó phải báo xuống. Vắng mặt (máy chủ cũ) coi như tắt:
+   * thà giấu một form còn dùng được hơn là mời người dùng vào một form hỏng.
+   */
+  magicLink?: boolean
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
