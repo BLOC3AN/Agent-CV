@@ -173,6 +173,33 @@ Phương án thay thế khi số lần deploy tăng: đẩy lên Docker Hub (tà
 có versioning, đổi lại artifact nằm trên hạ tầng bên thứ ba. Ghi lại đây như
 bước nâng cấp, không làm trong lần này.
 
+## Migration — BẮT BUỘC sau khi Postgres lên lần đầu
+
+`backend/db/init/001_extensions.sql` được Postgres tự chạy khi khởi tạo thư mục
+dữ liệu rỗng, nhưng nó **chỉ cài extension**. Toàn bộ lược đồ nằm ở 16 file
+trong `backend/db/migrations/` và phải chạy bằng `backend/db/migrate.ts` — một
+bước riêng, không service nào tự làm.
+
+Bỏ qua bước này thì app vẫn lên và `/api/health` vẫn trả 200 — chỉ hỏng lúc
+đăng nhập, với thông báo `Could not create the account`. Đã xảy ra đúng như vậy
+ở lần deploy đầu.
+
+Runner bọc mỗi migration trong một transaction và ghi `schema_migrations`, nên
+đừng chạy tay bằng `psql`: làm vậy là bỏ mất sổ theo dõi phiên bản. Chạy bằng
+container Node nối vào compose network, mật khẩu không rời khỏi Server AI:
+
+```bash
+cd /opt/hr-agent && set -a && . ./.env && set +a
+docker run --rm --network hr-agent_default \
+  -v /opt/hr-agent/backend/db:/src:ro \
+  -e DATABASE_URL="postgres://postgres:${PG_PASSWORD}@postgres:5432/hragent" \
+  node:22-bookworm-slim \
+  sh -c "cp -r /src /work && cd /work && npm i --silent pg tsx && npx tsx migrate.ts"
+```
+
+Idempotent — chạy lại lần nữa chỉ in `(đã chạy)`. Mỗi lần deploy có migration
+mới đều phải chạy lại.
+
 ## Rủi ro đã biết
 
 **Tunnel NetBird là SPOF của cả trang.** Tunnel đứt thì nginx trả 502 cho mọi
@@ -214,6 +241,9 @@ có kế hoạch riêng.
 1. `https://cvguide.site` trả 200 và render được SPA.
 2. `GET /api/health` qua domain trả 200 — chứng tỏ chuỗi nginx → container →
    NetBird → Go backend thông suốt.
+2b. `SELECT count(*) FROM schema_migrations` bằng đúng số file trong
+   `backend/db/migrations/`. **`/api/health` trả 200 KHÔNG chứng minh được điều
+   này** — nó không chạm tới bảng nào, nên một database rỗng vẫn qua được.
 3. Đăng nhập Google thành công, cookie phiên có cờ `Secure`.
 4. Upload một CV PDF, job chạy xong, kết quả parse hiện ra.
 5. Chat trả lời theo kiểu streaming — chứng tỏ SSE không bị nginx buffer.
