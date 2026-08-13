@@ -147,11 +147,14 @@ logic xếp trang, còn phép đo thì kiểm bằng DOM có stub rect.
 - Bản cũ cộng được `Σ đoạn con = 1005px` → **2 trang**. Số trang KHÔNG sai.
   Cái sai nằm ở chỗ khác: nó dồn 17 đoạn vào trang 1, mà 17 đoạn ấy dựng ra
   **1106px** trên một trang chứa được 971px — **tràn 134px ≈ 36mm** qua đáy tờ giấy.
-- Bản mới: `Σ đoạn con (1005) + Σ chrome (151) + 5 × gap (120) = 1276px` → 2 trang,
+- Bản mới: `Σ đoạn con (1005) + Σ chrome (149) + 5 × gap (120) = 1274px` → 2 trang,
   trang 1 cao thật 965px (vừa), trang 2 cao 362px. Không trang nào tràn.
   Lưu ý `Σ đoạn con + Σ chrome = Σ nodeHeight = 1154` theo đúng định nghĩa.
-- Chiều cao dựng thật của cả CV là 1299px; chênh 23px so với 1276 là lề `mb-6`
+- Chiều cao dựng thật của cả CV là 1299px; chênh 25px so với 1274 là lề `mb-6`
   của mục CUỐI, nằm ngoài dòng chảy nên không tính vào trang nào.
+
+Mọi con số trong bảng là đã làm tròn; giá trị thô là 61.66 / 52.88 / 36.09, nên
+tuỳ chỗ làm tròn mà tổng chrome đọc ra 149 hay 151. Không ảnh hưởng kết luận.
 
 > **Đính chính (2026-08-12):** bản spec đầu tiên của phần này ghi "bản cũ = 957px
 > → 1 trang — sai". Con số đó đến từ một probe hỏng: probe coi `skills` là mục

@@ -797,9 +797,10 @@ chỉ thừa cỡ nửa bullet (~10px), nên khung tràn qua đáy tờ giấy.
 
 Trước: `Σ đoạn con = 1005px` → 2 trang, nhưng dồn 17 đoạn vào trang 1 mà 17 đoạn ấy
 dựng ra 1106px trên một trang chứa 971px — **tràn 134px ≈ 36mm**. Sau:
-`1005 + 151 + 5×24 = 1276px` → 2 trang, trang 1 cao thật 965px và trang 2 cao 362px,
-không trang nào tràn. Chiều cao dựng thật của cả CV là 1299px; 23px chênh là lề
-`mb-6` sau mục cuối, nằm ngoài dòng chảy nên không tính.
+`1005 + 149 + 5×24 = 1274px` → 2 trang, trang 1 cao thật 965px và trang 2 cao 362px,
+không trang nào tràn. Chiều cao dựng thật của cả CV là 1299px; 25px chênh là lề
+`mb-6` sau mục cuối, nằm ngoài dòng chảy nên không tính. Số trong bảng là đã làm
+tròn (thô: 61.66 / 52.88 / 36.09), nên tổng chrome đọc ra 149 hay 151 tuỳ chỗ.
 
 Bản ghi đầu của phần này chép nhầm "trước = 957px → 1 trang": probe hỏng, nó coi
 `skills` là mục tách được (nhóm skill CÓ mang `data-cv-item-id`) nên cộng theo item
