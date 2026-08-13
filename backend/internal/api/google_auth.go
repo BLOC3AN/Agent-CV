@@ -9,12 +9,19 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 // Cookie giữ `state` của một vòng redirect. Dùng cookie chứ không phải bảng
 // DB: nó chỉ sống giữa `/start` và `/callback`, không cần bền vững, và không
 // cần migration.
 const googleStateCookie = "hr_oauth_state"
+
+// googleHTTPClient: http.DefaultClient không có timeout riêng — đường huỷ
+// duy nhất là r.Context(), chỉ kích hoạt khi TRÌNH DUYỆT ngắt kết nối. Một
+// endpoint token/userinfo của Google bị treo sẽ ghim goroutine vô thời hạn,
+// một đòn bẩy cạn tài nguyên rẻ tiền trên endpoint không cần đăng nhập.
+var googleHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // googleEndpoints trả ba URL của Google. `GOOGLE_OAUTH_BASE` CHỈ để test tiêm
 // được — không có nó thì mọi test đều phải gọi mạng thật.
@@ -42,7 +49,7 @@ func (s *Server) googleStart(w http.ResponseWriter, r *http.Request) {
 	state := newID() + newID()
 	http.SetCookie(w, &http.Cookie{
 		Name: googleStateCookie, Value: state, Path: "/api/auth/google",
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600, Secure: r.TLS != nil,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600, Secure: secureCookies(r),
 	})
 	authURL, _, _ := googleEndpoints()
 	query := url.Values{
@@ -126,7 +133,7 @@ func googleEmailForCode(ctx context.Context, code string) (string, bool, error) 
 		return "", false, err
 	}
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	tokenRes, err := http.DefaultClient.Do(tokenReq)
+	tokenRes, err := googleHTTPClient.Do(tokenReq)
 	if err != nil {
 		return "", false, err
 	}
@@ -146,7 +153,7 @@ func googleEmailForCode(ctx context.Context, code string) (string, bool, error) 
 		return "", false, err
 	}
 	infoReq.Header.Set("Authorization", "Bearer "+token.AccessToken)
-	infoRes, err := http.DefaultClient.Do(infoReq)
+	infoRes, err := googleHTTPClient.Do(infoReq)
 	if err != nil {
 		return "", false, err
 	}

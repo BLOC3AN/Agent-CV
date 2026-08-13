@@ -2572,6 +2572,19 @@ func chatResponseSchema() map[string]any {
 	}
 }
 
+// secureCookies quyết định cookie có nên mang cờ Secure hay không.
+//
+// TLS thường kết thúc ở reverse proxy (VPS sau nginx/Caddy/load balancer),
+// nên `r.TLS` là nil ở backend dù trình duyệt đang ở HTTPS. Cookie mất cờ
+// Secure trong trường hợp đó mở đường cho kẻ trên đường truyền ghi đè nó qua
+// một request plaintext cùng host — dùng chung cho cookie state OAuth và
+// cookie phiên, không được chép đôi logic này.
+func secureCookies(r *http.Request) bool {
+	return r.TLS != nil ||
+		r.Header.Get("X-Forwarded-Proto") == "https" ||
+		strings.HasPrefix(appBaseURL(), "https://")
+}
+
 // appBaseURL là gốc của ứng dụng phía người dùng. Ba chỗ đang tự đọc biến môi
 // trường này rồi tự cắt dấu `/` cuối; gom lại một chỗ để redirect và
 // `redirect_uri` của OAuth không thể lệch nhau.
@@ -2601,7 +2614,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID str
 		VALUES ($1, $2, now() + interval '30 days', $3)`, tokenHash(session), userID, r.UserAgent()); err != nil {
 		return err
 	}
-	http.SetCookie(w, &http.Cookie{Name: "hr_session", Value: session, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 3600, Secure: r.TLS != nil})
+	http.SetCookie(w, &http.Cookie{Name: "hr_session", Value: session, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 3600, Secure: secureCookies(r)})
 	return nil
 }
 

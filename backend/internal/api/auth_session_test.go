@@ -35,6 +35,34 @@ func TestMagicLinkIsDevOnly(t *testing.T) {
 	})
 }
 
+// TLS thường kết thúc ở reverse proxy (VPS sau nginx/Caddy), nên `r.TLS` là
+// nil ở backend dù trình duyệt đang ở HTTPS. Cookie state/phiên phải vẫn được
+// đánh dấu Secure trong trường hợp đó — thiếu nó, kẻ trên đường truyền ghi đè
+// được cookie qua một request plaintext cùng host.
+func TestSecureCookiesHonorsForwardedProtoAndAppBaseURL(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		forwardedProto string
+		appBaseURL     string
+		want           bool
+	}{
+		{"X-Forwarded-Proto https", "https", "http://localhost:3000", true},
+		{"thuần http, APP_BASE_URL http", "", "http://localhost:3000", false},
+		{"thuần http, APP_BASE_URL https", "", "https://example.com", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("APP_BASE_URL", tc.appBaseURL)
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tc.forwardedProto != "" {
+				r.Header.Set("X-Forwarded-Proto", tc.forwardedProto)
+			}
+			if got := secureCookies(r); got != tc.want {
+				t.Errorf("secureCookies() = %v, muốn %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // SPA không đọc được NODE_ENV của máy chủ nên nó phải được BÁO. Thiếu trường
 // này thì trang đăng nhập hiện một form vô dụng ở production.
 func TestAuthSessionReportsWhetherMagicLinkIsAvailable(t *testing.T) {

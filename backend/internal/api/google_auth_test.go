@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeGoogle đóng vai cả ba endpoint của Google. Không có nó thì mọi test đều
@@ -215,6 +216,16 @@ func TestGoogleCallbackRejectsBadCode(t *testing.T) {
 
 	if !strings.Contains(w.Header().Get("Location"), "error=google_failed") {
 		t.Fatalf("Location = %q, muốn lỗi google_failed", w.Header().Get("Location"))
+	}
+}
+
+// http.DefaultClient không có timeout riêng — đường huỷ duy nhất là
+// r.Context(), chỉ kích hoạt khi trình duyệt ngắt kết nối. Một endpoint Google
+// bị treo sẽ ghim goroutine vô thời hạn, một đòn bẩy cạn tài nguyên rẻ tiền
+// trên endpoint không cần đăng nhập.
+func TestGoogleHTTPClientHasTimeout(t *testing.T) {
+	if googleHTTPClient.Timeout != 10*time.Second {
+		t.Fatalf("googleHTTPClient.Timeout = %v, muốn 10s", googleHTTPClient.Timeout)
 	}
 }
 
