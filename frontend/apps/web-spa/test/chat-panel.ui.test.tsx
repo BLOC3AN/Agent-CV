@@ -141,4 +141,34 @@ describe('ngôn ngữ trả lời của AI', () => {
     expect(sendChat.mock.calls.at(-1)!.at(-1)).toBe('en')
     localStorage.clear()
   })
+
+  /**
+   * Máy chủ tự suy ra `grounding.type`; `inference` nghĩa là nội dung đó không có
+   * trong CV lẫn lời người dùng. Đo thật trên Qwen3.5-4B cho 21/27 op rơi vào
+   * loại này, với những con số model tự nghĩ ra như "giảm 30% số cuộc gọi".
+   *
+   * Bỏ tick sẵn thôi thì chưa đủ: người dùng chỉ thấy một đề xuất "bị lỗi" và
+   * tick lại. Phải nói ra lý do thì việc bỏ tick mới có tác dụng.
+   */
+  it('cảnh báo và bỏ tick sẵn đề xuất mà CV không có căn cứ', async () => {
+    sendChat.mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất viết lại',
+      ops: [
+        { op: 'replace', path: '/sections/intro/fullName', value: 'Có căn cứ', rationale: 'r', grounding: { type: 'existing_field', ref: 'cv-1' } },
+        { op: 'replace', path: '/sections/intro/title', value: 'Giảm 30% thời gian xử lý', rationale: 'r', grounding: { type: 'inference', ref: 'cv-1' } },
+      ],
+      rejected: [],
+    } as never)
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('Đề xuất viết lại')
+
+    expect(screen.getAllByTestId('unverified-change')).toHaveLength(1)
+    expect(screen.getByText(/chưa có trong cv/i)).toBeInTheDocument()
+
+    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+    expect(boxes[0]!.checked).toBe(true)
+    expect(boxes[1]!.checked).toBe(false)
+  })
 })

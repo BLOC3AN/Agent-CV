@@ -357,6 +357,10 @@ export const vi = {
   // Trợ lý AI — trạng thái lúc chạy
   justNow: 'Vừa xong',
   aiSuggestion: 'AI GỢI Ý',
+  // Máy chủ tự suy ra nguồn của từng đề xuất; `inference` nghĩa là nội dung đó
+  // không có trong CV lẫn lời bạn vừa nhắn. Đo thật cho thấy model bịa số liệu
+  // ở phần lớn lần viết lại, nên câu này phải nói thẳng chứ không nói vòng.
+  unverifiedChange: 'Chưa có trong CV — tự kiểm trước khi dùng',
   appliedToDraft: 'Đã đưa {n} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.',
   proposalSkipped: 'Đã bỏ qua đề xuất.',
   aiAnalysing: 'AI đang phân tích',

@@ -323,6 +323,7 @@ export const en: Record<MessageKey, string> = {
   untitledCV: 'Untitled CV',
   justNow: 'Just now',
   aiSuggestion: 'AI SUGGESTION',
+  unverifiedChange: 'Not found in your CV — check before using',
   appliedToDraft: 'Applied {n} change(s) to the draft. Save the CV to keep them.',
   proposalSkipped: 'Proposal skipped.',
   aiAnalysing: 'AI is analysing',

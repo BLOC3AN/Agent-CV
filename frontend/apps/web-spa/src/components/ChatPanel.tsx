@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocale } from '../lib/i18n'
 import { errorMessageKey, stepText } from '../lib/error-messages'
-import { Bot, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronDown, Mic, Send, Sparkles, X, Zap } from 'lucide-react'
 import type { CV, CVLayout } from '../types'
 import { applyChatOpsToDraft } from '../lib/cv-patch'
 import { sendChat, settleChatProposal, type ChatOp, type ClarifyRequest } from '../lib/api'
@@ -173,7 +173,17 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
       {proposal.ops.map((op, i) => (
         <label key={`${op.path}-${i}`} className="flex gap-2">
           <input type="checkbox" checked={checked.includes(i)} onChange={() => setChecked((c) => c.includes(i) ? c.filter((x) => x !== i) : [...c, i])} />
-          <span><code>{op.path}</code>{op.op !== 'add' && <><br /><del>{display(readAt(cv, op.path))}</del> → </>}{display(op.value)}</span>
+          <span>
+            <code>{op.path}</code>{op.op !== 'add' && <><br /><del>{display(readAt(cv, op.path))}</del> → </>}{display(op.value)}
+            {/* Ô này đã bị bỏ tick sẵn từ trước, nhưng bỏ tick trong im lặng thì
+                người dùng chỉ thấy một đề xuất "bị lỗi" và tự tick lại. Phải nói
+                ra lý do thì việc bỏ tick mới có tác dụng. */}
+            {op.grounding.type === 'inference' && (
+              <span data-testid="unverified-change" className="mt-1 flex w-fit items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                <AlertTriangle className="h-3 w-3" />{t('unverifiedChange')}
+              </span>
+            )}
+          </span>
         </label>
       ))}
       <div className="mt-3 border-t border-slate-100 pt-2">
