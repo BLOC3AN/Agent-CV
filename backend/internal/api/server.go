@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/hr-agent/backend/internal/pii"
+	"github.com/hr-agent/backend/prompts"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/phpdave11/gofpdf"
@@ -1667,8 +1668,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		Answers    []map[string]string `json:"answers"`
 		ModelRef   string              `json:"modelRef"`
 		// Ngôn ngữ giao diện của người dùng — quyết định mô hình trả lời tiếng gì.
-		Language   string              `json:"language"`
-		Hint       string              `json:"hint"`
+		Language string `json:"language"`
+		Hint     string `json:"hint"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body) != nil || body.ProfileID == "" || body.CVID == "" || body.DraftToken == "" || len(body.Draft) == 0 || len(body.Layout) == 0 || len(strings.TrimSpace(body.Message)) < 2 || len(body.Message) > 2000 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid chat request body"})
@@ -1852,11 +1853,17 @@ func redactProfileForModel(raw []byte) []byte {
 func chatUserPrompt(profileRaw []byte, history []map[string]string, answers []map[string]string, hint, message string) string {
 	hintBlock := ""
 	if hint != "" {
-		hintBlock = "\n\nGỢI Ý BIẾN ĐỔI TỪ GIAO DIỆN: " + hint
+		// "\n\n" ở đây là khoảng cách giữa hai khối, không phải chữ của prompt —
+		// chữ nằm trong chat.user_hint.md.
+		hintBlock = "\n\n" + prompts.MustRender("chat.user_hint", map[string]string{"hint": hint})
 	}
-	return "PROFILE:\n" + string(redactProfileForModel(profileRaw)) +
-		"\n\nHISTORY:\n" + jsonString(history) + "\n\nANSWERS:\n" + jsonString(answers) + hintBlock +
-		"\n\nUSER:\n" + message
+	return prompts.MustRender("chat.user", map[string]string{
+		"profile":    string(redactProfileForModel(profileRaw)),
+		"history":    jsonString(history),
+		"answers":    jsonString(answers),
+		"hint_block": hintBlock,
+		"message":    message,
+	})
 }
 
 // chatSystemPrompt dựng system prompt cho một ngôn ngữ trả lời cụ thể.
@@ -1872,23 +1879,7 @@ func chatSystemPrompt(language string) string {
 	if language == "en" {
 		replyIn = "English"
 	}
-	return `Bạn là trợ lý chỉnh CV. Trả lời bằng ` + replyIn + ` và chỉ trả về DUY NHẤT một object JSON hợp lệ.
-
-Nếu người dùng chỉ hỏi hoặc muốn xem giải thích, trả:
-{"kind":"reply","text":"..."}
-
-Nếu thiếu thông tin người dùng phải cung cấp, hỏi tối đa 3 câu thay vì bịa:
-{"kind":"clarify","request":{"reason":"...","targetPath":null,"questions":[{"id":"...","question":"...","placeholder":"..."}]}}
-
-Nếu người dùng yêu cầu sửa, viết lại, nhóm, sắp xếp hoặc cập nhật hồ sơ, KHÔNG được nói đã cập nhật. Hãy trả đề xuất để người dùng duyệt:
-{"kind":"patch","summary":"...","ops":[{"op":"add|replace|remove","path":"/sections/experience/0/highlights/2","value":"...","rationale":"...","grounding":{"type":"existing_field|user_message|kb|inference","ref":"..."},"kbRefs":[]}]}
-
-Quy tắc bắt buộc: không tự ghi hồ sơ; không bịa dữ kiện; tối đa 20 ops; value bắt buộc với add/replace; mỗi op/path chỉ xuất hiện một lần.
-
-
-Đường dẫn: phần giới thiệu cá nhân luôn là /sections/intro/summary. Mỗi gạch đầu dòng của kinh nghiệm, dự án, học vấn và hoạt động là một phần tử riêng — sửa một ý thì nhắm đúng vào nó, ví dụ /sections/experience/0/highlights/2, KHÔNG ghi đè cả mảng highlights. Kỹ năng gom theo nhóm: một phần tử của /sections/skills có category và skills là mảng chuỗi; thêm một kỹ năng thì dùng /sections/skills/0/skills/- với op add.
-
-Token "-" ở cuối path nghĩa là NỐI VÀO CUỐI mảng, nên nó chỉ đi được với op add. Muốn sửa hoặc xoá một phần tử đã có thì trỏ đúng chỉ số của nó, ví dụ replace /sections/skills/0/skills/2. Dùng replace hay remove với "-" sẽ bị từ chối.`
+	return prompts.MustRender("chat.system", map[string]string{"reply_in": replyIn})
 }
 
 func parseChatModelOutput(raw string) chatModelOutput {
@@ -2357,6 +2348,7 @@ func chatMaxOutputTokens(mc chatModelConfig) (int, error) {
 	}
 	return mc.MaxOutput, nil
 }
+
 type chatRuntimeConfig struct {
 	Providers struct {
 		Local    chatProviderConfig `yaml:"local"`

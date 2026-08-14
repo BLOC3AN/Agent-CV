@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/hr-agent/backend/internal/pii"
+	"github.com/hr-agent/backend/prompts"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -888,8 +889,9 @@ type gapAdvice struct {
 
 func runGapAdvice(ctx context.Context, profile, jd string, gaps []map[string]any) ([]gapAdvice, bool) {
 	compact := compactProfile(profile)
-	prompt := "CV PROFILE (PII removed):\n" + compact + "\n\nJOB DESCRIPTION:\n" + jd + "\n\nGAPS:\n" + jsonString(gaps)
-	request := map[string]any{"messages": []map[string]string{{"role": "system", "content": "You give concise CV improvement advice. Return JSON only: {\\\"advices\\\":[{\\\"gapId\\\":\\\"existing id\\\",\\\"advice\\\":\\\"actionable advice\\\",\\\"kbRefs\\\":[]}]}. Never invent gap IDs."}, {"role": "user", "content": prompt}}, "temperature": 0.2, "max_tokens": 1200}
+	prompt := prompts.MustRender("gap_advice.user", map[string]string{"profile": compact, "jd": jd, "gaps": jsonString(gaps)})
+	system := prompts.MustRender("gap_advice.system", nil)
+	request := map[string]any{"messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": prompt}}, "temperature": 0.2, "max_tokens": 1200}
 	var response struct {
 		Advices []gapAdvice `json:"advices"`
 	}

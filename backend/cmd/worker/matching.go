@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/hr-agent/backend/prompts"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -284,9 +285,9 @@ func profileChunksV2(sections map[string]any) []profileChunk {
 
 func parseJDRequirements(ctx context.Context, raw string) jdRequirements {
 	var out jdRequirements
-	prompt := `Read this job description and return ONLY JSON with fields title, language, roleFamily, seniority, yearsRequired, hardSkills, softSkills, responsibilities, atsKeywords, education. Use arrays for skills and responsibilities. Do not invent requirements. JD:
-` + raw
-	req := map[string]any{"messages": []map[string]string{{"role": "system", "content": "You extract structured job requirements. Return valid JSON only."}, {"role": "user", "content": prompt}}, "temperature": 0.1, "max_tokens": 1400, "response_format": map[string]any{"type": "json_object"}}
+	prompt := prompts.MustRender("jd_requirements.user", map[string]string{"jd": raw})
+	system := prompts.MustRender("jd_requirements.system", nil)
+	req := map[string]any{"messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": prompt}}, "temperature": 0.1, "max_tokens": 1400, "response_format": map[string]any{"type": "json_object"}}
 	if callReasonerJSON(ctx, req, &out) {
 		return enrichJDRequirements(out, raw)
 	}
