@@ -1796,14 +1796,22 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Số op model đề xuất TRƯỚC khi cắt — payload mang nó xuống để giao diện nói
-	// rõ còn bao nhiêu chưa hiện.
+	// rõ còn bao nhiêu chưa hiện. droppedOps là những op bị bỏ vì không áp được.
 	var proposedOps int
+	var droppedOps []droppedOp
 	if modelOutput.Kind == "patch" {
 		// Vượt trần thì cắt bớt chứ không vứt cả đề xuất: các op độc lập nhau và
 		// người dùng duyệt từng cái, nên 20 cái đầu vẫn dùng được.
 		modelOutput.Ops, proposedOps = trimToProposalCap(modelOutput.Ops)
 		if proposedOps > len(modelOutput.Ops) {
 			log.Printf("chat proposal trimmed requestId=%s modelRef=%q session=%s proposed=%d shown=%d", requestID, body.ModelRef, sessionID, proposedOps, len(modelOutput.Ops))
+		}
+		// Một op không áp được không được kéo theo cả đề xuất. Nguyên nhân thường
+		// gặp nhất là lệch chỉ số: model đánh số theo mảng ban đầu, còn JSON Patch
+		// áp tuần tự nên mỗi lần remove là mọi chỉ số phía sau tụt một bậc.
+		modelOutput.Ops, droppedOps = keepApplicableOps(profileRaw, body.Layout, modelOutput.Ops)
+		if len(droppedOps) > 0 {
+			log.Printf("chat proposal dropped ops requestId=%s modelRef=%q session=%s dropped=%d kept=%d detail=%s", requestID, body.ModelRef, sessionID, len(droppedOps), len(modelOutput.Ops), jsonString(droppedOps))
 		}
 		if err := validateChatProposalDocuments(profileRaw, body.Layout, modelOutput.Ops); err != nil {
 			// Ghi lại op bị chặn: người dùng chỉ thấy câu từ chối, còn muốn biết
@@ -1855,7 +1863,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			// proposedOps là SỐ, không phải câu chữ: client tự dịch, giống cách mã
 			// bước SSE đã làm. Gửi câu tiếng Việt lên thì giao diện tiếng Anh hiện
 			// tiếng Việt.
-			payload, _ := json.Marshal(map[string]any{"kind": "patch", "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID, "proposalId": proposalID, "cvId": body.CVID, "draftToken": body.DraftToken, "summary": modelOutput.Summary, "ops": modelOutput.Ops, "proposedOps": proposedOps, "rejected": []any{}})
+			payload, _ := json.Marshal(map[string]any{"kind": "patch", "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID, "proposalId": proposalID, "cvId": body.CVID, "draftToken": body.DraftToken, "summary": modelOutput.Summary, "ops": modelOutput.Ops, "proposedOps": proposedOps, "rejected": droppedOpsPayload(droppedOps)})
 			fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
 			return
 		}
@@ -1980,7 +1988,12 @@ func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
 		if op.Op != "add" && op.Op != "replace" && op.Op != "remove" {
 			return fmt.Errorf("op %q is not supported", op.Op)
 		}
-		if !strings.HasPrefix(op.Path, "/") || strings.Contains(op.Path, "[") || seen[op.Op+" "+op.Path] {
+		// Token "-" cuối path nghĩa là NỐI VÀO CUỐI mảng, không phải một vị trí.
+		// Thêm hai gạch đầu dòng vào cùng một mục là yêu cầu bình thường và hai
+		// op đó không hề mâu thuẫn nhau — luật "mỗi path một lần" sinh ra để chặn
+		// hai chỉnh sửa đá nhau trên CÙNG một ô, nên nó không áp cho "-".
+		appendOp := strings.HasSuffix(op.Path, "/-")
+		if !strings.HasPrefix(op.Path, "/") || strings.Contains(op.Path, "[") || (!appendOp && seen[op.Op+" "+op.Path]) {
 			return fmt.Errorf("invalid or duplicate path: %s", op.Path)
 		}
 		seen[op.Op+" "+op.Path] = true

@@ -365,6 +365,9 @@ export const vi = {
   // bảng duyệt trông như đã bao trọn yêu cầu thì người dùng không biết còn phần
   // chưa được đụng tới.
   proposalTrimmed: 'AI đề xuất {proposed} thay đổi, đang hiện {shown} đầu tiên. Duyệt xong nhắn tiếp để làm phần còn lại.',
+  // Máy chủ bỏ những thay đổi không áp được vào CV thay vì vứt cả đề xuất. Phải
+  // nói ra cái nào rơi, nếu không người dùng tưởng yêu cầu đã được làm trọn.
+  proposalRejected: '{n} thay đổi bị bỏ vì không áp được vào CV:',
   appliedToDraft: 'Đã đưa {n} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.',
   proposalSkipped: 'Đã bỏ qua đề xuất.',
   aiAnalysing: 'AI đang phân tích',

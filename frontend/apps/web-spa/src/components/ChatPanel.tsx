@@ -189,6 +189,17 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
       {/* Vượt trần thì máy chủ cắt bớt chứ không vứt cả đề xuất. Nói ra con số:
           im lặng cắt thì bảng này trông như đã bao trọn yêu cầu, và người dùng
           không biết còn phần chưa được đụng tới. */}
+      {/* Op máy chủ đã bỏ vì không áp được vào CV. Trước đây một op hỏng kéo cả
+          đề xuất xuống; giờ phần còn lại vẫn dùng được, nhưng phải nói ra cái
+          nào rơi, nếu không người dùng tưởng yêu cầu đã được làm trọn. */}
+      {proposal.rejected.length > 0 && (
+        <div data-testid="proposal-rejected" className="space-y-1 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+          <p className="font-semibold">{t('proposalRejected', { n: proposal.rejected.length })}</p>
+          {proposal.rejected.map((item) => (
+            <p key={item.path} className="text-amber-700"><code>{item.path}</code> — {item.reason}</p>
+          ))}
+        </div>
+      )}
       {proposal.proposedOps !== undefined && proposal.proposedOps > proposal.ops.length && (
         <p data-testid="proposal-trimmed" className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
           {t('proposalTrimmed', { shown: proposal.ops.length, proposed: proposal.proposedOps })}

@@ -325,6 +325,7 @@ export const en: Record<MessageKey, string> = {
   aiSuggestion: 'AI SUGGESTION',
   unverifiedChange: 'Not found in your CV — check before using',
   proposalTrimmed: 'The AI proposed {proposed} changes; showing the first {shown}. Review these, then ask again for the rest.',
+  proposalRejected: '{n} change(s) were dropped because they could not be applied to your CV:',
   appliedToDraft: 'Applied {n} change(s) to the draft. Save the CV to keep them.',
   proposalSkipped: 'Proposal skipped.',
   aiAnalysing: 'AI is analysing',

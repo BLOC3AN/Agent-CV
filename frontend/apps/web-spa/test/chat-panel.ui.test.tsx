@@ -195,6 +195,31 @@ describe('ngôn ngữ trả lời của AI', () => {
     expect(notice).toHaveTextContent('1')
   })
 
+  /**
+   * Gặp thật trên production: model xoá /certifications/0 rồi vẫn trỏ tới
+   * /certifications/5 theo chỉ số của mảng BAN ĐẦU. Máy chủ nay bỏ đúng op hỏng
+   * và giữ phần còn lại — bảng duyệt phải nói ra cái nào rơi, nếu không người
+   * dùng tưởng yêu cầu đã được làm trọn.
+   */
+  it('hiện những thay đổi bị bỏ vì không áp được', async () => {
+    sendChat.mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất cập nhật',
+      ops: [{ op: 'replace', path: '/sections/intro/fullName', value: 'A', rationale: 'r', grounding: { type: 'existing_field', ref: 'cv' } }],
+      proposedOps: 1,
+      rejected: [{ path: '/sections/certifications/5/name', reason: 'mục này không còn ở vị trí đó sau các thay đổi phía trên' }],
+    } as never)
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('Đề xuất cập nhật')
+
+    const box = await screen.findByTestId('proposal-rejected')
+    expect(box).toHaveTextContent('/sections/certifications/5/name')
+    expect(box).toHaveTextContent(/không còn ở vị trí đó/)
+    // Op dùng được vẫn phải hiện và tick sẵn — bỏ một op không được chặn cả bảng.
+    expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(true)
+  })
+
   it('không nói gì khi đề xuất nằm trong trần', async () => {
     sendChat.mockResolvedValue({
       kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất cập nhật',
