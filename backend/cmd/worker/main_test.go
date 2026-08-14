@@ -303,3 +303,72 @@ func TestProfileChunksReadsV2Sections(t *testing.T) {
 		}
 	}
 }
+
+// workDate là mốc cắt từng chỗ làm trong parseWork. Bản đầu chỉ hiểu tên tháng
+// tiếng Anh và dạng "YYYY - YYYY"/"YYYY - current", nên CV Việt trượt sạch:
+// người dùng upload CV rồi thấy mục kinh nghiệm TRỐNG trên giao diện dù CV có
+// đủ bốn chỗ làm. Đo trên 6 CV thật, mục work:
+//
+//	CV-30  3/8 dòng ngày được nhận
+//	CV-32  0/7
+//	CV-33  0/3
+//	CV-35  0/1
+//
+// Danh sách "không được khớp" quan trọng ngang danh sách "phải khớp": nới quá
+// tay thì "Top 1 Marketing Research Competition 2024" thành mốc thời gian và
+// parseWork cắt nhầm giữa mục.
+func TestWorkDateNhanDangNgayVietVaSo(t *testing.T) {
+	phaiKhop := []string{
+		"VN | 2023 - Hiện tại",                                   // CV-32, tiếng Việt
+		"VN | 7.2025 - 12.2025",                                  // CV-32, tháng.năm
+		"VN | 9.2023 - 1.2025",                                   // CV-32
+		"Expert Network Consultant | 04/2025 - Present",          // CV-30, tháng/năm
+		"Branch Director - Ho Chi Minh City | 10/2023 - 04/2025", // CV-30
+		"06/2024 – Present",                                      // CV-35, en-dash
+		"12/2024 to 06/2026",                                     // CV-33, dùng "to"
+		"Sep 2024 - Feb 2025",                                    // vẫn phải chạy
+		"2022 - 2025",
+		"2019 - current",
+		"2025 – Current",
+	}
+	for _, line := range phaiKhop {
+		if !workDate.MatchString(line) {
+			t.Errorf("phải nhận là mốc thời gian: %q", line)
+		}
+	}
+
+	khongDuocKhop := []string{
+		"Nguyen 2026 Campaign",                      // CV-31, tên chiến dịch
+		"Top 1 Marketing Research Competition 2024", // CV-34, giải thưởng
+		"VN | 2022",                                 // năm lẻ, không phải khoảng
+		"International Business GPA 3.45/4.0",
+		"Hòa Sắc 2022,  VLU - Thành viên",
+		"Đại học Văn Lang",
+		"0795 281 270",
+	}
+	for _, line := range khongDuocKhop {
+		if workDate.MatchString(line) {
+			t.Errorf("KHÔNG được nhận là mốc thời gian: %q", line)
+		}
+	}
+}
+
+// parseWork phải dựng được chỗ làm từ CV dùng định dạng ngày Việt.
+func TestParseWorkVoiNgayDinhDangViet(t *testing.T) {
+	raw := "KINH NGHIỆM\n" +
+		"CT TNHH ABC\nMarketing Designer\nHCM, VN | 7.2025 - 12.2025\n" +
+		"- Thiết kế ấn phẩm\n- Dàn trang\n" +
+		"CTCP Xây Dựng XYZ\nDesigner\nHCM, VN | 9.2023 - 1.2025\n" +
+		"- Chuẩn hoá nhận diện\n"
+	got := parseWork(raw)
+	if len(got) != 2 {
+		t.Fatalf("cần 2 chỗ làm, được %d: %#v", len(got), got)
+	}
+	first, _ := got[0].(map[string]any)
+	if first["org"] != "CT TNHH ABC" {
+		t.Errorf("org sai: %v", first["org"])
+	}
+	if first["role"] != "Marketing Designer" {
+		t.Errorf("role sai: %v", first["role"])
+	}
+}

@@ -472,7 +472,27 @@ func parseEducation(raw string) []any {
 	return []any{item}
 }
 
-var workDate = regexp.MustCompile(`(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b.*\b20\d{2}\b|\b20\d{2}\s*[–-]\s*(?:20\d{2}|current)\b`)
+// workDate nhận dòng ghi KHOẢNG thời gian của một chỗ làm — parseWork dùng nó
+// làm mốc cắt giữa các chỗ làm.
+//
+// Phải là KHOẢNG, không phải một năm lẻ. Nới thành "dòng nào có năm" sẽ biến
+// "Top 1 Marketing Research Competition 2024" và "Nguyen 2026 Campaign" thành
+// mốc, và parseWork cắt nhầm giữa mục.
+//
+// Bản đầu chỉ hiểu tên tháng tiếng Anh và "YYYY - YYYY"/"YYYY - current". Đo
+// trên 6 CV thật thì CV theo lối Việt trượt sạch — người dùng upload rồi thấy
+// mục kinh nghiệm TRỐNG dù CV có đủ bốn chỗ làm (CV-30: 3/8 dòng ngày được
+// nhận, CV-32: 0/7, CV-33: 0/3, CV-35: 0/1). Nay nhận thêm:
+//
+//	tháng/năm và tháng.năm   04/2025 - Present · 7.2025 - 12.2025
+//	mốc "đang làm" tiếng Việt Hiện tại · Hiện nay · đến nay · nay
+//	"to" và "đến" thay gạch  12/2024 to 06/2026
+//
+// Không dùng lookbehind: RE2 của Go không hỗ trợ. Không cần — `\b` trước phần
+// ngày đã đủ để "GPA 3.45/4.0" không lọt.
+var workDate = regexp.MustCompile(`(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b.*\b20\d{2}\b` +
+	`|\b(?:\d{1,2}\s*[/.]\s*)?(?:19|20)\d{2}\s*(?:[–—-]|to|đ[eế]n)\s*` +
+	`(?:(?:\d{1,2}\s*[/.]\s*)?(?:19|20)\d{2}|present|current|now|ongoing|hi[eệ]n\s*t[aạ]i|hi[eệ]n\s*nay|đ[eế]n\s*nay|nay)\b`)
 
 func parseWork(raw string) []any {
 	lines := cleanLines(raw)

@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.extract import (  # noqa: E402
     _has_type3,
+    join_wrapped_date,
     join_wrapped_email,
     extract_pdf,
     render_pages,
@@ -546,6 +547,47 @@ class TestEmailNgatDong:
         assert re.search(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", r.text), (
             "không tìm được email nào trong text đã trích"
         )
+
+
+class TestNgayNgatDong:
+    """
+    HỒI QUY CV-32: khoảng thời gian của một chỗ làm bị PDF cắt làm BA dòng vì
+    khung chứa hẹp:
+
+        VN | 7.
+        2025 - 12.
+        2025
+
+    `parseWork` bên worker Go dùng dòng-có-ngày làm mốc cắt từng chỗ làm. Ngày
+    vỡ vụn thì không dòng nào là mốc, `dates` rỗng, và CV vào hệ thống với
+    experience = 0 — đúng triệu chứng người dùng thấy trên giao diện.
+
+    Luật hẹp có chủ đích: dòng kết thúc bằng 1-2 chữ số kèm `.` hoặc `/`, VÀ
+    dòng kế tiếp bắt đầu bằng chữ số. Thiếu vế thứ hai thì một câu văn kết thúc
+    bằng "...tăng 15." sẽ bị dán vào dòng sau.
+    """
+
+    def test_noi_lai_ngay_bi_cat_ba_dong(self):
+        text = "VN | 7.\n2025 - 12.\n2025\nCT TNHH ABC"
+        assert "7.2025 - 12.2025" in join_wrapped_date(text)
+
+    def test_noi_dang_gach_cheo(self):
+        assert "04/2025" in join_wrapped_date("Branch Director | 04/\n2025")
+
+    def test_khong_dan_khi_dong_sau_khong_bat_dau_bang_so(self):
+        text = "doanh thu tăng 15.\nCông ty ABC"
+        assert join_wrapped_date(text) == text
+
+    def test_khong_dan_khi_la_cuoi_cau_co_nam(self):
+        """"...từ năm 2024." — 4 chữ số nên không phải ngày bị cắt."""
+        text = "Tốt nghiệp năm 2024.\n2025 là năm bản lề"
+        assert join_wrapped_date(text) == text
+
+    def test_cv32_du_bon_moc_thoi_gian(self):
+        """CV-32 có 4 chỗ làm; sau khi nối phải thấy đủ 4 khoảng thời gian."""
+        r = extract_pdf(str(cv("CV-32")))
+        khoang = re.findall(r"\d{1,2}[./]\d{4}\s*[-–]\s*\d{1,2}[./]\d{4}", r.text)
+        assert len(khoang) >= 3, khoang
 
 
 class TestChucDanhVsMucCaNhan:

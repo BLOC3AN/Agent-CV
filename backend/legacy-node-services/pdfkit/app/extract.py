@@ -217,6 +217,41 @@ def _poppler(path: str) -> str:
 WRAPPED_EMAIL = re.compile(r"(?m)^(?P<head>[^\s@]*@[^\s@]*\.)[ \t]*\n[ \t]*(?=\S)")
 
 
+# Dòng bị ngắt GIỮA một mốc thời gian: kết thúc bằng 1-2 chữ số kèm '.' hoặc
+# '/', và dòng kế tiếp mở đầu bằng chữ số. `(?<!\d)` chặn đuôi của một năm bốn
+# chữ số ("...năm 2024." không phải ngày bị cắt).
+WRAPPED_DATE = re.compile(r"(?m)(?<!\d)(?P<head>\d{1,2}[./])[ \t]*\n[ \t]*(?=\d)")
+
+
+def join_wrapped_date(text: str) -> str:
+    """
+    Nối lại mốc thời gian bị PDF xuống dòng giữa chừng.
+
+    HỒI QUY CV-32: khung chứa hẹp nên một khoảng thời gian vỡ thành BA dòng —
+
+        VN | 7.
+        2025 - 12.
+        2025
+
+    `parseWork` bên worker Go lấy dòng-có-ngày làm mốc cắt từng chỗ làm. Ngày
+    vỡ vụn thì không dòng nào là mốc, danh sách mốc rỗng, và CV vào hệ thống
+    với experience = 0 — không hiện mục kinh nghiệm nào trên giao diện.
+
+    Điều kiện có HAI vế, và vế thứ hai mới là vế quan trọng: dòng sau phải mở
+    đầu bằng CHỮ SỐ. Thiếu nó thì một câu kết thúc bằng "...doanh thu tăng 15."
+    sẽ bị dán vào dòng dưới.
+
+    Áp dụng lặp cho tới khi không đổi: một mốc có thể bị cắt hai lần như ví dụ
+    trên, và một lượt `sub` chỉ nối được mỗi chỗ một lần.
+    """
+    for _ in range(4):
+        joined = WRAPPED_DATE.sub(lambda m: m.group("head"), text)
+        if joined == text:
+            break
+        text = joined
+    return text
+
+
 def join_wrapped_email(text: str) -> str:
     """
     Nối lại địa chỉ email bị PDF xuống dòng giữa chừng.
@@ -429,7 +464,7 @@ def extract_pdf(path: str) -> ExtractResult:
         )
         # Nối email bị ngắt dòng SAU khi bỏ header/footer lặp lại: bước đó có
         # thể xoá dòng nằm giữa hai nửa địa chỉ.
-        text = join_wrapped_email(_norm(stripped))
+        text = join_wrapped_date(join_wrapped_email(_norm(stripped)))
 
         blocks: list[PageBlock] = []
         if not use_poppler:
