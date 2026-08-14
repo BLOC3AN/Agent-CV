@@ -480,19 +480,7 @@ class TestThuTuKhoiMotCot:
     sắp lại theo cột không chạm tới. Việc sắp theo y phải áp dụng cho MỌI trang.
     """
 
-    @pytest.mark.parametrize("name", [
-        "CV-31",
-        pytest.param("CV-34", marks=pytest.mark.xfail(
-            reason=(
-                "Chưa sửa. CV-34 KHÔNG có máng phân cách đủ sạch nên "
-                "_column_split coi nó là một cột, mà thứ tự khối trong nó vẫn "
-                "xáo (7 lần y giảm; tên ứng viên ở vị trí thứ 7). Sắp theo y "
-                "cho trang một cột đã thử một lần và đo ra net âm — xem lịch "
-                "sử git của extract_pdf."
-            ),
-            strict=True,
-        )),
-    ])
+    @pytest.mark.parametrize("name", ["CV-31", "CV-34"])
     def test_muc_hoc_van_khong_rong(self, name):
         r = extract_pdf(str(cv(name)))
         merged = merge_by_kind(segment_cv(r.text))
@@ -565,6 +553,60 @@ class TestEmailNgatDong:
         assert re.search(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", r.text), (
             "không tìm được email nào trong text đã trích"
         )
+
+
+class TestTieuDeMoCoi:
+    """
+    Tiêu đề MỒ CÔI: có tiêu đề nhưng thân rỗng, vì PDF trả nó SAU nội dung của
+    chính nó. Đo trên CV-34, bốn dòng cuối:
+
+        50  Hoa Sen University
+        51  International Business GPA 3.45/4.0
+        52  EDUCATION            <- tiêu đề nằm sau nội dung
+        53  ADDITIONAL SKILLS    <- tiêu đề kế tiếp ngay, nên thân rỗng
+
+    `segment_cv` loại mục rỗng, nên mục học vấn biến mất còn nội dung của nó
+    nằm lại trong mục phía trên.
+
+    Vì sao KHÔNG dùng luật "dòng nào chứa University thì là học vấn": chính
+    CV-34 có 'Top 5 International Business Arena (IBA) in Hoa Sen University'
+    — một GIẢI THƯỞNG — và 'Leader of two major campaigns'. Cả hai sẽ bị kéo
+    nhầm. Ràng buộc vị trí (liền kề tiêu đề mồ côi) mới là thứ loại được chúng.
+    """
+
+    def test_nhan_lai_noi_dung_nam_ngay_tren_tieu_de(self):
+        text = (
+            "EXPERIENCE\nCông ty A\nNhân viên\n2020 - 2021\n"
+            "Hoa Sen University\nInternational Business GPA 3.45/4.0\n"
+            "EDUCATION\nADDITIONAL SKILLS\nWord, Excel\n"
+        )
+        merged = merge_by_kind(segment_cv(text))
+        assert "Hoa Sen University" in merged.get("education", "")
+        assert "GPA 3.45" in merged.get("education", "")
+        assert "Hoa Sen University" not in merged.get("work", "")
+
+    def test_khong_keo_dong_khong_khop_dau_hieu(self):
+        """Dòng ngay trên tiêu đề mồ côi nhưng không phải học vấn thì để yên."""
+        text = (
+            "EXPERIENCE\nCông ty A\nNhân viên\n2020 - 2021\n"
+            "Quản lý đội nhóm và báo cáo tiến độ\n"
+            "EDUCATION\nSKILLS\nWord\n"
+        )
+        merged = merge_by_kind(segment_cv(text))
+        assert "Quản lý đội nhóm" not in merged.get("education", "")
+        assert "Quản lý đội nhóm" in merged["work"]
+
+    def test_cv34_lay_lai_muc_hoc_van(self):
+        r = extract_pdf(str(cv("CV-34")))
+        merged = merge_by_kind(segment_cv(r.text))
+        assert "Hoa Sen University" in merged.get("education", "")
+
+    def test_cv34_khong_keo_giai_thuong_vao_hoc_van(self):
+        """Dòng giải thưởng cũng chứa 'University' — không được lọt vào."""
+        r = extract_pdf(str(cv("CV-34")))
+        merged = merge_by_kind(segment_cv(r.text))
+        assert "Marketing Research Competition" not in merged.get("education", "")
+        assert "IBA" not in merged.get("education", "")
 
 
 class TestTachCotTheoDong:

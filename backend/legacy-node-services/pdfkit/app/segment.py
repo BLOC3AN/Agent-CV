@@ -219,12 +219,75 @@ def segment_cv(text: str) -> list[CvSection]:
     if head:
         sections.insert(0, CvSection(kind="introduce", heading="(đầu trang)", body=head))
 
+    adopt_orphan_headings(sections)
+
     out = []
     for s in sections:
         s.body = s.body.strip()
         if s.body:
             out.append(reclassify(s))
     return out
+
+
+# Dấu hiệu NỘI DUNG của từng loại mục, dùng để cứu tiêu đề mồ côi. Chỉ khai
+# những loại đã có bằng chứng từ CV thật; thêm loại mới khi gặp ca thật, không
+# đoán trước.
+CONTENT_SIGNALS: dict[SectionKind, re.Pattern[str]] = {
+    "education": re.compile(
+        r"(?i)\b(university|college|institute|academy|school"
+        r"|gpa|bachelor|master|ph\.?d|degree|major)\b"
+        r"|đại học|cao đẳng|trung cấp|cử nhân|thạc sĩ|tiến sĩ|chuyên ngành"
+    ),
+}
+
+# Tối đa số dòng được kéo lên cho một tiêu đề mồ côi. Mục học vấn của một CV
+# thường gói trong 2-4 dòng (tên trường, ngành, khoá, điểm); nới rộng ra thì
+# một tiêu đề mồ côi sẽ hút cả phần mô tả công việc phía trên.
+MAX_ADOPTED_LINES = 4
+
+
+def adopt_orphan_headings(sections: list[CvSection]) -> None:
+    """
+    Cứu TIÊU ĐỀ MỒ CÔI: có tiêu đề nhưng thân rỗng vì PDF trả nó SAU nội dung
+    của chính nó.
+
+    Đo trên CV-34, bốn dòng cuối:
+
+        Hoa Sen University
+        International Business GPA 3.45/4.0
+        EDUCATION            ← tiêu đề nằm sau nội dung
+        ADDITIONAL SKILLS    ← tiêu đề kế tiếp ngay, nên thân rỗng
+
+    Mục rỗng bị loại ở cuối `segment_cv`, nên mục học vấn biến mất còn nội dung
+    của nó nằm lại trong mục phía trên.
+
+    ── Vì sao KHÔNG chỉ lọc theo từ khoá nội dung ──
+    Luật "dòng nào chứa university/GPA thì là học vấn" kéo nhầm ngay trên chính
+    CV-34: nó có 'Top 5 International Business Arena (IBA) in Hoa Sen
+    University' — một giải thưởng — và 'Leader of two major campaigns'. Ràng
+    buộc VỊ TRÍ mới loại được chúng: chỉ nhận dải LIỀN MẠCH nằm ngay trên tiêu
+    đề mồ côi, và dừng ngay khi gặp một dòng không khớp dấu hiệu.
+    """
+    for index, section in enumerate(sections):
+        if index == 0 or section.body.strip():
+            continue
+        signal = CONTENT_SIGNALS.get(section.kind)
+        if signal is None:
+            continue
+
+        previous = sections[index - 1]
+        lines = previous.body.split("\n")
+        while lines and not lines[-1].strip():
+            lines.pop()
+
+        adopted: list[str] = []
+        while lines and len(adopted) < MAX_ADOPTED_LINES and signal.search(lines[-1]):
+            adopted.insert(0, lines.pop())
+        if not adopted:
+            continue
+
+        previous.body = "\n".join(lines) + "\n"
+        section.body = "\n".join(adopted) + "\n"
 
 
 # ── Phân loại lại theo NỘI DUNG ────────────────────────────────────────────
