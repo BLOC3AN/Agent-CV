@@ -126,15 +126,86 @@ def _has_type3(fonts: list[str]) -> bool:
     return any("type3" in f.lower() for f in fonts)
 
 
-def _columns(page: fitz.Page) -> int:
-    """Ước lượng số cột bằng phân bố toạ độ x của các khối text."""
+def _text_lines(page: fitz.Page) -> list[tuple[float, float, float, str]]:
+    """Mọi dòng text của trang kèm (x0, x1, y0, nội dung)."""
+    out: list[tuple[float, float, float, str]] = []
+    for block in page.get_text("dict")["blocks"]:
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            text = "".join(s["text"] for s in line["spans"]).strip()
+            if text:
+                x0, y0, x1, _ = line["bbox"]
+                out.append((x0, x1, y0, text))
+    return out
+
+
+def _column_split(page: fitz.Page) -> float | None:
+    """
+    Toạ độ x của máng phân cách hai cột, hoặc None nếu trang chỉ có một cột.
+
+    ── Vì sao KHÔNG lấy giữa trang ──
+    Trên CV-35, dòng "06/2024 – Present" căn phải TRONG cột trái ở x≈338-414,
+    tức nằm bên phải đường giữa (306). Cắt ở giữa sẽ đẩy ngày của một chỗ làm
+    sang cột phải. Máng thật của trang đó ở x≈417-437.
+
+    ── Cách tìm ──
+    Máng là dải dọc mà rất ít dòng cắt qua. Quét mọi vị trí trong khoảng 25%-80%
+    khổ trang, chọn nơi ít dòng cắt nhất; hoà thì lấy nơi chia hai bên cân hơn.
+
+    Dòng TRẢI NGANG cả trang bị loại khỏi phép đo: tên, dòng liên hệ và đoạn
+    tóm tắt cắt qua MỌI vị trí, nên giữ chúng lại thì không trang nào có máng.
+
+    Ngưỡng chấp nhận không phải 0: CV-30 có đúng một dòng — địa chỉ email ở đầu
+    trang — vắt qua máng thật của nó. Đòi tuyệt đối sạch thì trang đó bị coi là
+    một cột và mục học vấn của nó lại hỏng như cũ.
+    """
+    width = page.rect.width
+    narrow = [(x0, x1) for x0, x1, _, _ in _text_lines(page) if (x1 - x0) < width * 0.6]
+    if len(narrow) < 10:
+        return None
+
+    best: tuple[tuple[int, int], float] | None = None
+    for step in range(int(width * 0.25), int(width * 0.80) + 1, 2):
+        x = float(step)
+        crossing = sum(1 for a, b in narrow if a < x < b)
+        left = sum(1 for _, b in narrow if b <= x)
+        right = sum(1 for a, _ in narrow if a >= x)
+        if left < 5 or right < 5:
+            continue
+        score = (crossing, -min(left, right))
+        if best is None or score < best[0]:
+            best = (score, x)
+    if best is None or best[0][0] > max(1, len(narrow) * 0.03):
+        return None
+    return best[1]
+
+
+def _columns_by_block(page: fitz.Page) -> bool:
+    """
+    Ước lượng hai cột bằng phân bố x của các KHỐI. Thô hơn `_column_split`
+    nhưng bắt được trang mà cách kia bó tay.
+
+    Vì sao vẫn giữ: CV-32 chia cột KHÁC NHAU ở hai vùng dọc — hộp kinh nghiệm
+    chiếm bên trái tới x≈370, còn hai hộp dưới cùng lại chia đôi ở x≈300. Không
+    một đường dọc nào cắt sạch cả trang (vị trí tốt nhất vẫn bị 18/137 dòng cắt
+    qua), nên `_column_split` trả None. Bỏ hẳn đường này thì mục học vấn của
+    CV-32 lại nuốt cả CV như trước khi sửa.
+    """
     blocks = [b for b in page.get_text("blocks") if b[6] == 0]
     if not blocks:
-        return 1
+        return False
     width = page.rect.width
     left = sum(1 for b in blocks if b[0] < width * 0.45)
     right = sum(1 for b in blocks if b[0] > width * 0.5)
-    return 2 if (left >= 3 and right >= 3) else 1
+    return left >= 3 and right >= 3
+
+
+def _columns(page: fitz.Page) -> int:
+    """Số cột của trang. Giữ tên cũ vì `ExtractResult.columns` là API công khai."""
+    if _column_split(page) is not None or _columns_by_block(page):
+        return 2
+    return 1
 
 
 def _page_text_by_column(page: fitz.Page) -> tuple[str, str]:
@@ -165,23 +236,35 @@ def _page_text_by_column(page: fitz.Page) -> tuple[str, str]:
     định "phải là phụ" vì sidebar nằm bên trái cũng phổ biến không kém.
     """
     width = page.rect.width
-    split = width * 0.5
-    blocks = [b for b in page.get_text("blocks") if b[6] == 0 and b[4].strip()]
+    split = _column_split(page)
+    if split is None:
+        # Không có máng sạch. Nếu phân bố KHỐI vẫn cho thấy hai cột thì tách ở
+        # giữa trang theo khối như bản trước — thô hơn, nhưng vẫn hơn hẳn việc
+        # để nguyên thứ tự content stream (xem _columns_by_block).
+        if not _columns_by_block(page):
+            return page.get_text(), ""
+        split = width * 0.5
+        items = [
+            (b[0], b[2], b[1], b[4].strip())
+            for b in page.get_text("blocks")
+            if b[6] == 0 and b[4].strip()
+        ]
+    else:
+        items = _text_lines(page)
 
-    full: list[tuple] = []
-    left: list[tuple] = []
-    right: list[tuple] = []
-    for b in blocks:
-        x0, x1 = b[0], b[2]
+    full: list[tuple[float, float, float, str]] = []
+    left: list[tuple[float, float, float, str]] = []
+    right: list[tuple[float, float, float, str]] = []
+    for x0, x1, y0, text in items:
         if (x1 - x0) > width * 0.6 and x0 < split < x1:
-            full.append(b)
+            full.append((x0, x1, y0, text))
         elif x0 < split:
-            left.append(b)
+            left.append((x0, x1, y0, text))
         else:
-            right.append(b)
+            right.append((x0, x1, y0, text))
 
-    def extent(bs: list[tuple]) -> float:
-        return max(b[2] for b in bs) - min(b[0] for b in bs) if bs else 0.0
+    def extent(items: list[tuple[float, float, float, str]]) -> float:
+        return max(i[1] for i in items) - min(i[0] for i in items) if items else 0.0
 
     if not left or not right:
         main, side = full + left + right, []
@@ -190,8 +273,8 @@ def _page_text_by_column(page: fitz.Page) -> tuple[str, str]:
     else:
         main, side = full + right, left
 
-    def render(bs: list[tuple]) -> str:
-        return "\n".join(b[4].strip() for b in sorted(bs, key=lambda b: (b[1], b[0])))
+    def render(items: list[tuple[float, float, float, str]]) -> str:
+        return "\n".join(i[3] for i in sorted(items, key=lambda i: (i[2], i[0])))
 
     return render(main), render(side)
 

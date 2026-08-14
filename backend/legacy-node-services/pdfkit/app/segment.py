@@ -47,7 +47,10 @@ HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
     # dạng số nhiều — `^experience\b` trượt "EXPERIENCES" và CV-33 mất hẳn mục
     # kinh nghiệm. Cùng lỗi với `^work\b` trượt "WORKING EXPERIENCE".
     ("work", re.compile(
-        r"^(work(ing)?|experiences?|employment|professional|career|internships?"
+        # `professional` PHẢI đi kèm danh từ chỉ mục. Từ khoá trần bắt luôn
+        # "Professional skills" (CV-35) vì work được duyệt trước skills.
+        r"^(work(ing)?|experiences?|employment|career|internships?"
+        r"|professional\s+(experiences?|background|history|career)"
         r"|kinh nghiệm( làm việc)?|quá trình công tác|thực tập)\b", re.I)),
     ("projects", re.compile(r"^(projects?|portfolio|dự án|sản phẩm|đồ án)\b", re.I)),
     # Từ bổ nghĩa đứng trước `skills` là chuyện thường: "KEY SKILLS",
@@ -56,7 +59,10 @@ HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
     ("skills", re.compile(
         r"^((key|soft|core|hard|main|technical|professional|other|additional)\s+)?"
         r"skills?\b"
-        r"|^(technical|technologies|competenc|expertise)\b"
+        # `technical` trần khớp cả CHỨC DANH ("Technical Sales Support" của
+        # CV-35). Chỉ nhận khi nó đứng một mình hoặc đi với "skills".
+        r"|^technical(\s+skills?)?$"
+        r"|^(technologies|competenc|expertise)\b"
         r"|^(kỹ năng|kỹ thuật|công nghệ|chuyên môn|điểm mạnh|thế mạnh)\b", re.I)),
     ("certifications", re.compile(
         r"^(certifications?|certificates?|licen[cs]es?|chứng chỉ|chứng nhận)\b", re.I)),

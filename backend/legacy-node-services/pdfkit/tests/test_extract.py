@@ -432,6 +432,23 @@ class TestBienTheTieuDe:
         """Chốt chặn: sửa cho SUMMARY không được kéo theo EXPERIENCE."""
         assert heading_kind("PROFESSIONAL EXPERIENCE") == "work"
 
+    @pytest.mark.parametrize("line,kind", [
+        # `professional` là từ khoá của mục work, mà HEADINGS duyệt work TRƯỚC
+        # skills — nên "Professional skills" của CV-35 mở một mục kinh nghiệm
+        # giả ở cuối tài liệu và nuốt nội dung cột phụ.
+        ("Professional skills", "skills"),
+        ("PROFESSIONAL EXPERIENCE", "work"),
+        # `technical` trần khớp cả chức danh. CV-35 có ba chỗ làm tên
+        # "Technical Sales Support"; hai cái sau bị hiểu thành tiêu đề mục kỹ
+        # năng và cắt mục kinh nghiệm làm ba mảnh.
+        ("Technical Sales Support", None),
+        ("Technical Account Manager", None),
+        ("TECHNICAL", "skills"),
+        ("Technical Skills", "skills"),
+    ])
+    def test_tu_khoa_rong_khong_nuot_chuc_danh(self, line, kind):
+        assert heading_kind(line) == kind
+
     @pytest.mark.parametrize("line", [
         "KEY SKILLS",
         "SOFT SKILLS",
@@ -463,18 +480,19 @@ class TestThuTuKhoiMotCot:
     sắp lại theo cột không chạm tới. Việc sắp theo y phải áp dụng cho MỌI trang.
     """
 
-    @pytest.mark.xfail(
-        reason=(
-            "Chưa sửa. Sắp theo y cho trang một cột ĐÃ THỬ và đo ra net âm: "
-            "được CV-31 education 323 + CV-34 education 79 = 402 ký tự, "
-            "mất CV-33 work 822 ký tự. Vì `_columns` chia theo đường giữa "
-            "trang nên CV-33 (hai cột ở x≈35 và x≈193) bị báo 1 cột, và sắp "
-            "theo y đặt EXPERIENCES ngay cạnh SKILLS làm mục work rỗng. "
-            "Sửa đúng cần gom cụm toạ độ x0 thay vì so với đường giữa."
-        ),
-        strict=True,
-    )
-    @pytest.mark.parametrize("name", ["CV-31", "CV-34"])
+    @pytest.mark.parametrize("name", [
+        "CV-31",
+        pytest.param("CV-34", marks=pytest.mark.xfail(
+            reason=(
+                "Chưa sửa. CV-34 KHÔNG có máng phân cách đủ sạch nên "
+                "_column_split coi nó là một cột, mà thứ tự khối trong nó vẫn "
+                "xáo (7 lần y giảm; tên ứng viên ở vị trí thứ 7). Sắp theo y "
+                "cho trang một cột đã thử một lần và đo ra net âm — xem lịch "
+                "sử git của extract_pdf."
+            ),
+            strict=True,
+        )),
+    ])
     def test_muc_hoc_van_khong_rong(self, name):
         r = extract_pdf(str(cv(name)))
         merged = merge_by_kind(segment_cv(r.text))
@@ -547,6 +565,37 @@ class TestEmailNgatDong:
         assert re.search(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", r.text), (
             "không tìm được email nào trong text đã trích"
         )
+
+
+class TestTachCotTheoDong:
+    """
+    HỒI QUY CV-35: PyMuPDF gộp text của CẢ HAI cột vào MỘT khối.
+
+        khối 6   x=41-562   1760 ký tự
+                 'ACHIEVEMENTS / WORK EXPERIENCE / Offering – Technical…'
+
+    `ACHIEVEMENTS` là tiêu đề cột phải, `WORK EXPERIENCE` là cột trái — chúng
+    nằm chung một khối nên tách theo KHỐI không thể chạm tới. Hệ quả: mục work
+    bị `Professional skills` (cột phải) cắt ngang sau chỗ làm thứ nhất, và hai
+    mốc thời gian còn lại nằm ngoài mục nên parseWork chỉ thấy 1/3 chỗ làm.
+
+    Phải tách ở mức DÒNG, và điểm cắt phải suy ra từ dữ liệu chứ không lấy
+    giữa trang: dòng "06/2024 – Present" căn phải TRONG cột trái ở x≈338-414,
+    nằm bên phải đường giữa (306) nên cắt ở giữa sẽ đẩy nó sang cột phải. Máng
+    phân cách thật của trang này ở x≈417-437.
+    """
+
+    def test_cv35_giu_du_ba_moc_thoi_gian_trong_muc_work(self):
+        r = extract_pdf(str(cv("CV-35")))
+        work = merge_by_kind(segment_cv(r.text)).get("work", "")
+        for moc in ["06/2024", "12/2023", "02/2023"]:
+            assert moc in work, f"mất mốc {moc} khỏi mục kinh nghiệm"
+
+    def test_cv35_khong_bi_cot_phu_cat_ngang(self):
+        """`Professional skills` là tiêu đề cột phải, không được nằm giữa work."""
+        r = extract_pdf(str(cv("CV-35")))
+        work = merge_by_kind(segment_cv(r.text)).get("work", "")
+        assert "Professional skills" not in work
 
 
 class TestNgayNgatDong:
