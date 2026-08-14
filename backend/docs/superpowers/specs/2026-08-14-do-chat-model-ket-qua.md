@@ -109,3 +109,54 @@ hay không:
 
 Chỉ nên tách prompt hai lượt sau khi đã thử những cái đó, vì tách lượt là đổi kiến trúc
 để mong model nghe lời hơn, còn kiểm phía máy chủ thì không cần model hợp tác.
+
+---
+
+# Vòng 2 — sau khi thêm hai chốt phía máy chủ
+
+Cùng bộ đo, cùng cỡ mẫu 18 lượt, chạy lại sau khi thêm `chat_proposal_guard.go`.
+
+| Chỉ số | Vòng 1 | Vòng 2 |
+|---|---|---|
+| Model tự nhận "Đã cập nhật…" | 12/18 | 10/18 |
+| **Lọt tới người dùng** | **12/18** | **0/18** |
+| Op bị xếp `inference` | 0/29 | **21/27** |
+| JSON hỏng | 0/18 | 0/18 |
+| Bị validator từ chối | 1/18 | 0/18 |
+| Độ trễ trung bình | 5,8s | 5,8s |
+
+## Lỗi 1 đã chặn hết
+
+`neutralizeProposalSummary` đổi tiền tố khẳng định thành dạng đề xuất trước khi câu đó
+được lưu vào `chat_messages`. Model vẫn tự nhận đã xong ở 10/18 lượt, nhưng **không lượt
+nào lọt tới người dùng**. Bảng tiền tố lấy từ output thật, không phải nghĩ ra, và bộ đo
+dùng chung bảng đó nên nó không thể "đạt" bằng cách hiểu lỏng hơn phần đang chạy.
+
+## Lỗi 2 và 3: 78% op là bịa, không phải chốt quá tay
+
+Nghi ngờ đầu tiên khi thấy 21/27 là ngưỡng đặt quá nghiêm. Soi từng op thì ngược lại —
+model bịa **số liệu cứng** ở gần như mọi lần viết lại:
+
+| Model đề xuất | Hồ sơ gốc |
+|---|---|
+| "giảm 30% số cuộc gọi hỗ trợ" | "Xây dựng chức năng đặt lịch và nhắc lịch." |
+| "onboarding giảm 50%" | "Viết tài liệu API cho nhóm." |
+| "giảm thời gian xử lý từ 5s xuống 1.5s" | "Phát triển API cho hệ thống quản lý đơn hàng." |
+| "giúp nhóm frontend nhanh hơn 2 tuần" | — không có gì tương ứng |
+
+Đây là kiểu bịa nguy hiểm nhất trong CV: nó đọc như thành tích kiểm chứng được, và người
+dùng mang nó đi phỏng vấn. Trước bản vá, **mọi op như vậy đều tới tay người dùng ở trạng
+thái đã tick sẵn**, chỉ cách một cú bấm là vào hồ sơ.
+
+Chốt phân loại đúng cả chiều ngược lại: thêm "Docker" theo yêu cầu người dùng ra
+`user_message`, và câu viết lại trung thành *"Viết tài liệu API chi tiết và chuẩn hóa, hỗ
+trợ việc phát triển và bảo trì bởi các thành viên trong nhóm"* ra `existing_field`.
+
+## Còn lại
+
+- **Nhánh `clarify` vẫn 0/18.** Năm trục hỏi vẫn chưa chạy lần nào. Model chọn bịa thay vì
+  hỏi, và giờ ta biết chính xác nó bịa cái gì.
+- **Ngôn ngữ vẫn thua ngữ cảnh** — 2/3 lượt trả lời tiếng Việt cho tin nhắn tiếng Anh.
+- **Giao diện chưa nói cho người dùng biết vì sao op bị bỏ tick.** `ChatPanel.tsx` bỏ tick
+  op `inference` nhưng không hiện lý do; giờ nhãn đó đã đáng tin thì nó nên hiện thành một
+  cảnh báo đọc được.

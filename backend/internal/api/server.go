@@ -1798,6 +1798,15 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			modelOutput = chatModelOutput{Kind: "reply", Text: "I could not build a safe proposal from this request: " + err.Error()}
 			assistantContent = modelOutput.Text
 		} else {
+			// Máy chủ tự suy ra nguồn của từng op thay vì tin lời model khai. Đo
+			// thật cho thấy model khai "user_message" ở cả 29/29 op, kể cả op bịa
+			// hẳn nội dung, nên cơ chế bỏ tick sẵn op "inference" của giao diện
+			// chưa từng chạy một lần nào.
+			modelOutput.Ops = applyDerivedGrounding(modelOutput.Ops, profileRaw, proposalGroundingSources(profileRaw, body.Answers, body.Message))
+			// Summary là phát ngôn của hệ thống về trạng thái hồ sơ, không phải
+			// của model. Nó nói "Đã cập nhật…" ở 12/18 lượt trong khi hồ sơ chưa
+			// hề đổi và người dùng còn chưa bấm duyệt.
+			modelOutput.Summary = neutralizeProposalSummary(modelOutput.Summary)
 			assistantContent = modelOutput.Summary
 		}
 	}

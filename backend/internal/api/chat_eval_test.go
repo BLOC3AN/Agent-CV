@@ -120,6 +120,24 @@ type evalRun struct {
 	ReplyLang string `json:"replyLang,omitempty"`
 	Truncated bool   `json:"truncated"`
 	Err       string `json:"err,omitempty"`
+	// ClaimedDone: model tự nhận đã cập nhật xong. ClaimLeaked: vẫn nhận như vậy
+	// SAU khi qua chốt neutralizeProposalSummary — cái thứ hai mới là lỗi lọt ra
+	// tới người dùng.
+	ClaimedDone bool     `json:"claimedDone"`
+	ClaimLeaked bool     `json:"claimLeaked"`
+	Grounding   []string `json:"grounding,omitempty"`
+}
+
+// claimsCompletion dùng chính bảng tiền tố của chốt, nên bộ đo không thể "đạt"
+// bằng cách hiểu lỏng hơn phần đang chạy thật.
+func claimsCompletion(summary string) bool {
+	trimmed := strings.TrimSpace(summary)
+	for _, p := range completionClaimPrefixes {
+		if strings.HasPrefix(trimmed, p.claim) {
+			return true
+		}
+	}
+	return false
 }
 
 var vietnameseLetters = regexp.MustCompile(`[ăâđêôơưĂÂĐÊÔƠƯáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]`)
@@ -196,9 +214,25 @@ func runEvalCase(t *testing.T, tc evalCase, rep int, modelRef string, profile, l
 		// Ngôn ngữ của summary cũng là ngôn ngữ người dùng đọc — nhánh patch
 		// chiếm phần lớn lưu lượng nên bỏ qua nó là bỏ qua chỗ dễ sai nhất.
 		run.ReplyLang = detectLanguage(out.Summary)
+		run.ClaimedDone = claimsCompletion(out.Summary)
 		if err := validateChatProposalDocuments(profile, layout, out.Ops); err != nil {
 			run.Rejected = err.Error()
+			break
 		}
+		// Chạy đúng hai chốt mà handler chạy. Bộ đo không đi đường riêng, nếu
+		// không nó đo một hệ thống không tồn tại.
+		sources := proposalGroundingSources(profile, nil, tc.message)
+		for _, op := range applyDerivedGrounding(out.Ops, profile, sources) {
+			var parsed struct {
+				Grounding struct {
+					Type string `json:"type"`
+				} `json:"grounding"`
+			}
+			if json.Unmarshal(op, &parsed) == nil {
+				run.Grounding = append(run.Grounding, parsed.Grounding.Type)
+			}
+		}
+		run.ClaimLeaked = claimsCompletion(neutralizeProposalSummary(out.Summary))
 	case "reply":
 		run.ReplyLang = detectLanguage(out.Text)
 	case "clarify":
@@ -245,12 +279,23 @@ func reportEval(t *testing.T, runs []evalRun, modelRef string, reps int) {
 	t.Helper()
 
 	byKind := map[string]int{}
+	byGrounding := map[string]int{}
+	claimed, leaked := 0, 0
 	rejected, truncated, opsOverCap := 0, 0, 0
 	var totalLatency int64
 	maxBytes := 0
 	for _, r := range runs {
 		byKind[r.Kind]++
 		totalLatency += r.LatencyMs
+		for _, g := range r.Grounding {
+			byGrounding[g]++
+		}
+		if r.ClaimedDone {
+			claimed++
+		}
+		if r.ClaimLeaked {
+			leaked++
+		}
 		if r.Rejected != "" {
 			rejected++
 		}
@@ -276,6 +321,18 @@ func reportEval(t *testing.T, runs []evalRun, modelRef string, reps int) {
 	for _, k := range kinds {
 		t.Logf("  kind %-11s %d", k, byKind[k])
 	}
+	groundings := make([]string, 0, len(byGrounding))
+	total := 0
+	for g, n := range byGrounding {
+		groundings = append(groundings, g)
+		total += n
+	}
+	sort.Strings(groundings)
+	for _, g := range groundings {
+		t.Logf("  grounding %-14s %d/%d op", g, byGrounding[g], total)
+	}
+	t.Logf("  model tự nhận đã xong  %d/%d", claimed, len(runs))
+	t.Logf("  LỌT tới người dùng     %d/%d", leaked, len(runs))
 	t.Logf("  bị validator từ chối   %d/%d", rejected, len(runs))
 	t.Logf("  output bị cắt ngắn     %d/%d", truncated, len(runs))
 	t.Logf("  vượt trần 20 ops       %d/%d", opsOverCap, len(runs))
