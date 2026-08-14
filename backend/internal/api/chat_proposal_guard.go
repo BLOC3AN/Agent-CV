@@ -19,6 +19,31 @@ import (
 	"unicode"
 )
 
+// maxChatProposalOps là trần số thay đổi trong MỘT đề xuất. Con số này cũng nằm
+// trong chat.system.md; đổi ở đây thì phải đổi cả bên đó.
+//
+// Trần tồn tại vì một bảng duyệt dài vô hạn thì không ai duyệt nổi, không phải
+// vì nhiều thay đổi là sai.
+const maxChatProposalOps = 20
+
+// trimToProposalCap cắt phần vượt trần thay vì vứt cả đề xuất.
+//
+// Gặp thật: trợ lý hỏi "muốn tôi đề xuất chỉnh sửa cho từng phần không?", người
+// dùng trả lời "có", model sinh 43 op — đúng thứ vừa được đồng ý — và máy chủ
+// ném sạch cả 43, trả về một câu tiếng Anh kèm chuỗi lỗi nội bộ. Người dùng vào
+// ngõ cụt sau khi đã nói "có".
+//
+// Cắt theo TIỀN TỐ chứ không chọn lọc: JSON Patch áp tuần tự, nên một tiền tố
+// của dãy hợp lệ vẫn áp đúng như khi nó nằm trong dãy đầy đủ. Chọn lọc giữa
+// chừng thì chỉ số mảng của các op sau lệch đi.
+func trimToProposalCap(ops []json.RawMessage) ([]json.RawMessage, int) {
+	proposed := len(ops)
+	if proposed <= maxChatProposalOps {
+		return ops, proposed
+	}
+	return ops[:maxChatProposalOps], proposed
+}
+
 // Tiền tố khẳng định ĐÃ LÀM XONG, lấy từ output thật của model chứ không phải
 // nghĩ ra. Vế phải là dạng đề xuất tương ứng; giữ nguyên phần còn lại của câu
 // để người dùng vẫn đọc được model định làm gì.

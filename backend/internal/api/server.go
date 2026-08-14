@@ -1795,7 +1795,16 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		sendClarify(json.RawMessage(modelOutput.Request))
 		return
 	}
+	// Số op model đề xuất TRƯỚC khi cắt — payload mang nó xuống để giao diện nói
+	// rõ còn bao nhiêu chưa hiện.
+	var proposedOps int
 	if modelOutput.Kind == "patch" {
+		// Vượt trần thì cắt bớt chứ không vứt cả đề xuất: các op độc lập nhau và
+		// người dùng duyệt từng cái, nên 20 cái đầu vẫn dùng được.
+		modelOutput.Ops, proposedOps = trimToProposalCap(modelOutput.Ops)
+		if proposedOps > len(modelOutput.Ops) {
+			log.Printf("chat proposal trimmed requestId=%s modelRef=%q session=%s proposed=%d shown=%d", requestID, body.ModelRef, sessionID, proposedOps, len(modelOutput.Ops))
+		}
 		if err := validateChatProposalDocuments(profileRaw, body.Layout, modelOutput.Ops); err != nil {
 			// Ghi lại op bị chặn: người dùng chỉ thấy câu từ chối, còn muốn biết
 			// mô hình thật sự đã đề xuất gì thì không còn dấu vết nào khác.
@@ -1843,7 +1852,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			assistantContent = modelOutput.Text
 			_, _ = s.db.ExecContext(r.Context(), `UPDATE chat_messages SET content=$2 WHERE id=$1`, assistantID, assistantContent)
 		} else {
-			payload, _ := json.Marshal(map[string]any{"kind": "patch", "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID, "proposalId": proposalID, "cvId": body.CVID, "draftToken": body.DraftToken, "summary": modelOutput.Summary, "ops": modelOutput.Ops, "rejected": []any{}})
+			// proposedOps là SỐ, không phải câu chữ: client tự dịch, giống cách mã
+			// bước SSE đã làm. Gửi câu tiếng Việt lên thì giao diện tiếng Anh hiện
+			// tiếng Việt.
+			payload, _ := json.Marshal(map[string]any{"kind": "patch", "sessionId": sessionID, "messageId": assistantID, "userMessageId": userMessageID, "proposalId": proposalID, "cvId": body.CVID, "draftToken": body.DraftToken, "summary": modelOutput.Summary, "ops": modelOutput.Ops, "proposedOps": proposedOps, "rejected": []any{}})
 			fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
 			return
 		}
@@ -1947,7 +1959,7 @@ func parseChatModelOutput(raw string) chatModelOutput {
 }
 
 func validateChatProposal(profileRaw []byte, ops []json.RawMessage) error {
-	if len(ops) == 0 || len(ops) > 20 {
+	if len(ops) == 0 || len(ops) > maxChatProposalOps {
 		return fmt.Errorf("invalid number of changes")
 	}
 	seen := map[string]bool{}
@@ -2070,7 +2082,7 @@ func validateChatProposalDocuments(profileRaw, layoutRaw []byte, ops []json.RawM
 			profileOps = append(profileOps, raw)
 		}
 	}
-	if len(ops) == 0 || len(ops) > 20 {
+	if len(ops) == 0 || len(ops) > maxChatProposalOps {
 		return fmt.Errorf("invalid number of changes")
 	}
 	if len(profileOps) > 0 {

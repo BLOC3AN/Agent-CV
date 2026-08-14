@@ -361,6 +361,10 @@ export const vi = {
   // không có trong CV lẫn lời bạn vừa nhắn. Đo thật cho thấy model bịa số liệu
   // ở phần lớn lần viết lại, nên câu này phải nói thẳng chứ không nói vòng.
   unverifiedChange: 'Chưa có trong CV — tự kiểm trước khi dùng',
+  // AI đề xuất nhiều hơn trần một lần duyệt. Nói ra con số thay vì im lặng cắt:
+  // bảng duyệt trông như đã bao trọn yêu cầu thì người dùng không biết còn phần
+  // chưa được đụng tới.
+  proposalTrimmed: 'AI đề xuất {proposed} thay đổi, đang hiện {shown} đầu tiên. Duyệt xong nhắn tiếp để làm phần còn lại.',
   appliedToDraft: 'Đã đưa {n} thay đổi vào bản nháp. Hãy lưu CV để lưu vĩnh viễn.',
   proposalSkipped: 'Đã bỏ qua đề xuất.',
   aiAnalysing: 'AI đang phân tích',

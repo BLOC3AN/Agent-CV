@@ -183,7 +183,7 @@ export interface ClarifyRequest {
 export type ChatResult =
   | { kind: 'reply'; text: string }
   | { kind: 'clarify'; request: ClarifyRequest }
-  | { kind: 'patch'; proposalId: string; summary: string; ops: ChatOp[]; rejected: { path: string; reason: string }[] }
+  | { kind: 'patch'; proposalId: string; summary: string; ops: ChatOp[]; proposedOps?: number; rejected: { path: string; reason: string }[] }
   | { kind: 'error'; code?: string; message: string; detail?: string; requestId?: string }
 
 export async function readSSE(

@@ -171,4 +171,42 @@ describe('ngôn ngữ trả lời của AI', () => {
     expect(boxes[0]!.checked).toBe(true)
     expect(boxes[1]!.checked).toBe(false)
   })
+
+  /**
+   * Gặp thật: trợ lý hỏi "muốn tôi đề xuất chỉnh sửa cho từng phần không?",
+   * người dùng đáp "có", model sinh 43 op và máy chủ ném sạch cả 43 kèm câu
+   * tiếng Anh "invalid number of changes". Giờ máy chủ cắt về trần 20 và gửi kèm
+   * số đã đề xuất; bảng duyệt phải nói ra con số đó.
+   */
+  it('nói rõ còn bao nhiêu thay đổi chưa hiện khi đề xuất bị cắt', async () => {
+    sendChat.mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất cập nhật',
+      ops: [{ op: 'replace', path: '/sections/intro/fullName', value: 'A', rationale: 'r', grounding: { type: 'existing_field', ref: 'cv' } }],
+      proposedOps: 43,
+      rejected: [],
+    } as never)
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('Đề xuất cập nhật')
+
+    const notice = await screen.findByTestId('proposal-trimmed')
+    expect(notice).toHaveTextContent('43')
+    expect(notice).toHaveTextContent('1')
+  })
+
+  it('không nói gì khi đề xuất nằm trong trần', async () => {
+    sendChat.mockResolvedValue({
+      kind: 'patch', proposalId: 'proposal-1', summary: 'Đề xuất cập nhật',
+      ops: [{ op: 'replace', path: '/sections/intro/fullName', value: 'A', rationale: 'r', grounding: { type: 'existing_field', ref: 'cv' } }],
+      proposedOps: 1,
+      rejected: [],
+    } as never)
+    render(<ChatPanel profileId="profile-1" cvId="cv-1" cv={initialCVs[0]!} onApplyAIProposal={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tóm tắt' }))
+    await screen.findAllByText('Đề xuất cập nhật')
+
+    expect(screen.queryByTestId('proposal-trimmed')).not.toBeInTheDocument()
+  })
 })

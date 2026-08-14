@@ -73,7 +73,7 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [clarify, setClarify] = useState<{ original: string; request: ClarifyRequest }>()
-  const [proposal, setProposal] = useState<{ id: string; summary: string; ops: ChatOp[]; rejected: { path: string; reason: string }[]; draftVersion: number; settledOps?: ChatOp[] }>()
+  const [proposal, setProposal] = useState<{ id: string; summary: string; ops: ChatOp[]; proposedOps?: number; rejected: { path: string; reason: string }[]; draftVersion: number; settledOps?: ChatOp[] }>()
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState<number[]>([])
   const controller = useRef<AbortController | undefined>(undefined)
@@ -116,7 +116,7 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
         setAnswers({})
       } else if (result.kind === 'patch') {
         setMessages((m) => [...m, { role: 'assistant', text: result.summary, proposalId: result.proposalId }])
-        setProposal({ id: result.proposalId, summary: result.summary, ops: result.ops, rejected: result.rejected, draftVersion: requestDraftVersion })
+        setProposal({ id: result.proposalId, summary: result.summary, ops: result.ops, proposedOps: result.proposedOps, rejected: result.rejected, draftVersion: requestDraftVersion })
         setChecked(result.ops.map((op, i) => op.grounding.type === 'inference' ? -1 : i).filter((i) => i >= 0))
       } else {
         // Dịch theo MÃ; `message` của máy chủ chỉ là chỗ lùi cho mã chưa biết.
@@ -186,6 +186,14 @@ export function ChatPanel({ profileId, cvId, cv, layout, draftVersion, onApplyAI
           </span>
         </label>
       ))}
+      {/* Vượt trần thì máy chủ cắt bớt chứ không vứt cả đề xuất. Nói ra con số:
+          im lặng cắt thì bảng này trông như đã bao trọn yêu cầu, và người dùng
+          không biết còn phần chưa được đụng tới. */}
+      {proposal.proposedOps !== undefined && proposal.proposedOps > proposal.ops.length && (
+        <p data-testid="proposal-trimmed" className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
+          {t('proposalTrimmed', { shown: proposal.ops.length, proposed: proposal.proposedOps })}
+        </p>
+      )}
       <div className="mt-3 border-t border-slate-100 pt-2">
         <button disabled={busy || !checked.length} onClick={() => void applyProposal(checked)} className="flex w-full items-center justify-center gap-1 rounded-lg bg-violet-600 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"><Zap className="h-3.5 w-3.5" />{t('applyToCV')}</button>
         <button disabled={busy} onClick={() => void applyProposal([])} className="mt-2 w-full text-xs text-slate-500 underline">{t('skip')}</button>
