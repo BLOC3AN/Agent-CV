@@ -160,3 +160,44 @@ trợ việc phát triển và bảo trì bởi các thành viên trong nhóm"* 
 - **Giao diện chưa nói cho người dùng biết vì sao op bị bỏ tick.** `ChatPanel.tsx` bỏ tick
   op `inference` nhưng không hiện lý do; giờ nhãn đó đã đáng tin thì nó nên hiện thành một
   cảnh báo đọc được.
+
+---
+
+# Vòng 3 — máy chủ hỏi lại thay cho model
+
+Thêm `chat_clarify_fabrication.go`: khi một đề xuất mang **số liệu** không có trong hồ sơ
+lẫn lời người dùng, máy chủ không giao đề xuất đó nữa mà dựng `clarify` hỏi con số thật.
+
+| Chỉ số | Vòng 1 | Vòng 2 | Vòng 3 |
+|---|---|---|---|
+| Lượt giao đề xuất chứa số liệu bịa | ~6/18 | ~6/18 | **0/18** |
+| Lượt chuyển sang hỏi lại | 0/18 | 0/18 | **6/18** |
+| Dùng nhánh `clarify` | 0/18 | 0/18 | **6/18** |
+| Lời khai "đã cập nhật" lọt ra | 12/18 | 0/18 | 0/18 |
+| JSON hỏng · validator từ chối | 0 · 1 | 0 · 0 | 0 · 0 |
+| Độ trễ trung bình | 5,8s | 5,8s | 5,4s |
+
+Kịch bản `nguoi-dung-go-tieng-anh` chuyển sang hỏi lại cả 3/3 lượt — nó là kịch bản model
+bịa số dày nhất ("giảm 30% số cuộc gọi", "onboarding giảm 50%", "nhanh hơn 2 tuần").
+
+## Vì sao chỉ chặn số liệu, không chặn mọi thứ bịa
+
+Sau khi lọc số liệu bịa, 7/14 op còn lại vẫn mang nhãn `inference` — đó là tô vẽ định tính
+kiểu "cải thiện hiệu suất tổng thể". Chúng **vẫn đi tiếp** dưới dạng đề xuất, chỉ bị bỏ
+tick sẵn kèm cảnh báo trong giao diện.
+
+Phân biệt này là có chủ ý. Tô vẽ định tính là chuyện phong cách, người dùng đọc và tự
+quyết được. Số liệu bịa thì khác: nó đọc như thành tích kiểm chứng được, người dùng mang
+vào phỏng vấn rồi không giải thích nổi. Chặn tới mức hỏi lại cho mọi câu văn hoa sẽ biến
+trợ lý thành cái máy tra hỏi.
+
+## Còn lại sau ba vòng
+
+- **Ngôn ngữ vẫn thua ngữ cảnh** — 2/3 lượt trả lời tiếng Việt cho tin nhắn tiếng Anh.
+  Cách chữa rẻ: máy chủ tự nhận diện ngôn ngữ tin nhắn rồi đặt `reply_in`, thay vì để model
+  tự phân giải. Đưa quyết định về chỗ tất định, giống mọi chốt ở trên.
+- **Năm trục hỏi trong prompt vẫn chưa chạy.** Nhánh `clarify` giờ có hoạt động, nhưng do
+  máy chủ dựng chứ không phải model tự chọn. Năm trục đó vẫn là token chết.
+- **Đường cloud chưa đo lượt nào** — `postCloudChat` với gpt-5 chỉ được `json_object`,
+  không có schema, nên nó là đường duy nhất format thật sự phụ thuộc prompt.
+- **Worker chưa có bộ đo** — `parseJDRequirements` và `runGapAdvice` chưa ai soi.

@@ -74,18 +74,37 @@ const maxNovelWordRatio = 0.34
 // (ChatPanel.tsx). Model không bao giờ tự khai "inference", nên nếu cứ tin nó
 // thì cơ chế an toàn đó không bao giờ chạy.
 func deriveGroundingType(value string, pathExists bool, sources string) string {
+	return deriveGrounding(value, pathExists, sources).Type
+}
+
+// groundingVerdict tách hai kiểu bịa vì chúng đáng hai phản ứng khác nhau.
+//
+// Bịa định tính ("cải thiện hiệu suất tổng thể") là tô vẽ: vẫn đưa cho người
+// dùng duyệt, kèm cảnh báo. Bịa SỐ LIỆU ("giảm 30% thời gian xử lý") thì khác —
+// nó đọc như thành tích kiểm chứng được và người dùng mang nó đi phỏng vấn.
+type groundingVerdict struct {
+	Type string
+	// InventedNumbers rỗng nghĩa là không có con số nào bị bịa.
+	InventedNumbers []string
+}
+
+func deriveGrounding(value string, pathExists bool, sources string) groundingVerdict {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "existing_field"
+		return groundingVerdict{Type: "existing_field"}
 	}
 	haystack := strings.ToLower(sources)
 
 	// Một con số không có trong hồ sơ lẫn lời người dùng là con số model tự nghĩ
 	// ra. Không có ngoại lệ nào đáng cho qua ở đây.
+	var invented []string
 	for _, number := range digitRun.FindAllString(value, -1) {
 		if !strings.Contains(haystack, strings.ToLower(number)) {
-			return "inference"
+			invented = append(invented, number)
 		}
+	}
+	if len(invented) > 0 {
+		return groundingVerdict{Type: "inference", InventedNumbers: invented}
 	}
 
 	words := significantWords(value)
@@ -97,13 +116,13 @@ func deriveGroundingType(value string, pathExists bool, sources string) string {
 			}
 		}
 		if float64(novel)/float64(len(words)) > maxNovelWordRatio {
-			return "inference"
+			return groundingVerdict{Type: "inference"}
 		}
 	}
 	if pathExists {
-		return "existing_field"
+		return groundingVerdict{Type: "existing_field"}
 	}
-	return "user_message"
+	return groundingVerdict{Type: "user_message"}
 }
 
 // significantWords cắt chuỗi thành các từ đủ dài để mang nội dung. Ngưỡng 4 ký

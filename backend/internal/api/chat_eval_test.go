@@ -126,6 +126,9 @@ type evalRun struct {
 	ClaimedDone bool     `json:"claimedDone"`
 	ClaimLeaked bool     `json:"claimLeaked"`
 	Grounding   []string `json:"grounding,omitempty"`
+	// Fabricated: số op mang số liệu model tự nghĩ ra. Khác 0 nghĩa là lượt đó bị
+	// chuyển sang clarify thay vì giao đề xuất cho người dùng.
+	Fabricated int `json:"fabricated,omitempty"`
 }
 
 // claimsCompletion dùng chính bảng tiền tố của chốt, nên bộ đo không thể "đạt"
@@ -219,9 +222,16 @@ func runEvalCase(t *testing.T, tc evalCase, rep int, modelRef string, profile, l
 			run.Rejected = err.Error()
 			break
 		}
-		// Chạy đúng hai chốt mà handler chạy. Bộ đo không đi đường riêng, nếu
+		// Chạy đúng các chốt mà handler chạy. Bộ đo không đi đường riêng, nếu
 		// không nó đo một hệ thống không tồn tại.
 		sources := proposalGroundingSources(profile, nil, tc.message)
+		if invented := inventedNumbersInOps(out.Ops, profile, sources); len(invented) > 0 {
+			// Handler chuyển hẳn sang clarify ở đây, nên lượt này KHÔNG tới tay
+			// người dùng dưới dạng đề xuất.
+			run.Kind = "patch→clarify"
+			run.Fabricated = len(invented)
+			break
+		}
 		for _, op := range applyDerivedGrounding(out.Ops, profile, sources) {
 			var parsed struct {
 				Grounding struct {

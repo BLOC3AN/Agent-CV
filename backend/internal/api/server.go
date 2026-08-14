@@ -1782,12 +1782,17 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var assistantContent = modelOutput.Text
-	if modelOutput.Kind == "clarify" && len(modelOutput.Request) > 0 {
-		payload, _ := json.Marshal(map[string]any{"kind": "clarify", "request": json.RawMessage(modelOutput.Request), "sessionId": sessionID, "userMessageId": userMessageID})
+	// Cả model lẫn máy chủ đều có thể quyết định phải hỏi lại, nên chỗ phát ra
+	// clarify chỉ được có một.
+	sendClarify := func(request json.RawMessage) {
+		payload, _ := json.Marshal(map[string]any{"kind": "clarify", "request": request, "sessionId": sessionID, "userMessageId": userMessageID})
 		fmt.Fprintf(w, "event: result\ndata: %s\n\n", payload)
 		if flusher != nil {
 			flusher.Flush()
 		}
+	}
+	if modelOutput.Kind == "clarify" && len(modelOutput.Request) > 0 {
+		sendClarify(json.RawMessage(modelOutput.Request))
 		return
 	}
 	if modelOutput.Kind == "patch" {
@@ -1798,11 +1803,23 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			modelOutput = chatModelOutput{Kind: "reply", Text: "I could not build a safe proposal from this request: " + err.Error()}
 			assistantContent = modelOutput.Text
 		} else {
+			sources := proposalGroundingSources(profileRaw, body.Answers, body.Message)
+			// Số liệu model tự nghĩ ra không được đi tiếp dưới dạng đề xuất, kể cả
+			// đã bỏ tick sẵn: nó đọc như thành tích kiểm chứng được và người dùng
+			// mang nó đi phỏng vấn. Máy chủ hỏi lại thay cho model — đo thật cho
+			// thấy model chọn bịa thay vì hỏi ở 0/18 lượt dùng nhánh clarify.
+			if invented := inventedNumbersInOps(modelOutput.Ops, profileRaw, sources); len(invented) > 0 {
+				log.Printf("chat proposal fabricated figures requestId=%s modelRef=%q session=%s findings=%d ops=%s", requestID, body.ModelRef, sessionID, len(invented), jsonRawArray(modelOutput.Ops))
+				if request := clarifyRequestForInventedNumbers(invented, body.Language); len(request) > 0 {
+					sendClarify(request)
+					return
+				}
+			}
 			// Máy chủ tự suy ra nguồn của từng op thay vì tin lời model khai. Đo
 			// thật cho thấy model khai "user_message" ở cả 29/29 op, kể cả op bịa
 			// hẳn nội dung, nên cơ chế bỏ tick sẵn op "inference" của giao diện
 			// chưa từng chạy một lần nào.
-			modelOutput.Ops = applyDerivedGrounding(modelOutput.Ops, profileRaw, proposalGroundingSources(profileRaw, body.Answers, body.Message))
+			modelOutput.Ops = applyDerivedGrounding(modelOutput.Ops, profileRaw, sources)
 			// Summary là phát ngôn của hệ thống về trạng thái hồ sơ, không phải
 			// của model. Nó nói "Đã cập nhật…" ở 12/18 lượt trong khi hồ sơ chưa
 			// hề đổi và người dùng còn chưa bấm duyệt.
