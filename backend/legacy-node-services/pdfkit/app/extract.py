@@ -324,13 +324,21 @@ def extract_pdf(path: str) -> ExtractResult:
         fonts = _fonts(doc)
         pages = doc.page_count
         columns = max((_columns(p) for p in doc), default=1)
-        # Trang một cột giữ nguyên `get_text()`: thứ tự content stream trùng
-        # thứ tự đọc, và đường cũ đã được các CV hiện có kiểm chứng. Chỉ trang
-        # hai cột mới cần sắp lại — xem _page_text_by_column().
+        # Trang `_columns` báo 1 cột giữ nguyên `get_text()`.
         #
-        # Cột phụ của MỌI trang gom lại rồi nối vào cuối, thành một "trang" ảo.
-        # Nhờ vậy mạch chính chạy liền từ trang 1 tới trang cuối và mục kinh
-        # nghiệm không bị sidebar cắt ngang.
+        # ĐÃ THỬ sắp lại theo y cho cả trang một cột và ĐO RA LÀ CÓ HẠI:
+        #   được  CV-31 education 323 + CV-34 education 79 = 402 ký tự
+        #   mất   CV-33 work 822 ký tự
+        # Lý do: `_columns` chia trái/phải theo đường giữa trang, nên CV-33
+        # (hai cột ở x≈35 và x≈193, CẢ HAI bên trái đường giữa) bị báo 1 cột.
+        # Sắp theo y khi đó đặt hai tiêu đề cạnh nhau ở cùng độ cao sát nhau —
+        # `EXPERIENCES` rồi ngay `SKILLS` — nên mục work rỗng và bị loại.
+        # Muốn sửa phải gom cụm toạ độ x0 thay vì so với đường giữa; xem
+        # test TestThuTuKhoiMotCot (đang xfail).
+        #
+        # Cột phụ của các trang hai cột gom lại rồi nối vào cuối, thành một
+        # "trang" ảo. Nhờ vậy mạch chính chạy liền từ trang 1 tới trang cuối và
+        # mục kinh nghiệm không bị sidebar cắt ngang.
         mu_pages = []
         sidebars: list[str] = []
         for p in doc:

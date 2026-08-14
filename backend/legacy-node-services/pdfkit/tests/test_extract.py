@@ -443,6 +443,118 @@ class TestBienTheTieuDe:
         assert heading_kind(line) == "skills"
 
 
+class TestThuTuKhoiMotCot:
+    """
+    Trang MỘT cột cũng bị PyMuPDF trả khối sai thứ tự, không riêng trang hai cột.
+
+    `get_text()` trả theo thứ tự content stream chứ không theo vị trí. Đo:
+
+        CV-31  40 khối, 8 lần y giảm; 'Education' (y=342) đứng SAU nội dung
+               học vấn ở y=417-494
+        CV-34  20 khối, 7 lần y giảm; tên ứng viên (y=39) nằm ở vị trí thứ 7
+
+    Hệ quả giống hệt CV-30: tiêu đề mở mục sau nội dung của chính nó, thân mục
+    rỗng, và `segment_cv` loại bỏ mục rỗng — mục học vấn biến mất.
+
+    Cả hai CV này `_columns` báo 1 cột (CV-31 có 0 khối bên phải), nên nhánh
+    sắp lại theo cột không chạm tới. Việc sắp theo y phải áp dụng cho MỌI trang.
+    """
+
+    @pytest.mark.xfail(
+        reason=(
+            "Chưa sửa. Sắp theo y cho trang một cột ĐÃ THỬ và đo ra net âm: "
+            "được CV-31 education 323 + CV-34 education 79 = 402 ký tự, "
+            "mất CV-33 work 822 ký tự. Vì `_columns` chia theo đường giữa "
+            "trang nên CV-33 (hai cột ở x≈35 và x≈193) bị báo 1 cột, và sắp "
+            "theo y đặt EXPERIENCES ngay cạnh SKILLS làm mục work rỗng. "
+            "Sửa đúng cần gom cụm toạ độ x0 thay vì so với đường giữa."
+        ),
+        strict=True,
+    )
+    @pytest.mark.parametrize("name", ["CV-31", "CV-34"])
+    def test_muc_hoc_van_khong_rong(self, name):
+        r = extract_pdf(str(cv(name)))
+        merged = merge_by_kind(segment_cv(r.text))
+        assert merged.get("education", "").strip(), {
+            k: len(v) for k, v in merged.items()
+        }
+
+
+class TestChucDanhVsMucCaNhan:
+    """
+    `OTHER_SECTION` có từ khoá TRẦN `personal`, nên mọi chức danh bắt đầu bằng
+    "Personal" đều bị coi là tiêu đề mục lạ.
+
+    HỒI QUY CV-34: dòng `PERSONAL ASSISTANT` là CHỨC DANH của ứng viên, nằm
+    ngay dưới tên. Nó mở một mục `unknown` nuốt 459 ký tự gồm dòng liên hệ và
+    cả đoạn giới thiệu. Mục `unknown` không có task parse nên bị bỏ hẳn —
+    đúng kiểu mất dữ liệu mà docstring heading_kind cảnh báo từ CV-06.
+    """
+
+    @pytest.mark.parametrize("line", [
+        "PERSONAL ASSISTANT",
+        "Personal Trainer",
+        "PERSONAL BANKER",
+    ])
+    def test_chuc_danh_khong_phai_tieu_de(self, line):
+        assert heading_kind(line) is None
+
+    @pytest.mark.parametrize("line", [
+        "PERSONAL INFORMATION",
+        "PERSONAL DETAILS",
+        "THÔNG TIN CÁ NHÂN",
+    ])
+    def test_muc_thong_tin_ca_nhan_that_van_tach_duoc(self, line):
+        assert heading_kind(line) == "unknown"
+
+
+class TestSoItSoNhieu:
+    """
+    Mỗi từ khoá trong HEADINGS phải nhận CẢ dạng số ít lẫn số nhiều.
+
+    Bảng viết mỗi từ theo đúng một dạng, nên CV dùng dạng còn lại trượt sạch.
+    Đo trên 7 CV thật:
+
+        EXPERIENCES        → None   (CV-33 mất hẳn mục kinh nghiệm)
+        CAREER OBJECTIVES  → work   (CV-33, lẽ ra là introduce)
+        ACTIVITY           → None
+
+    Danh sách dưới đây cố ý liệt kê cả những cặp ĐANG ĐÚNG: nó là lưới chặn
+    hồi quy khi ai đó sửa regex sau này, chứ không chỉ là test cho ba ca hỏng.
+    """
+
+    @pytest.mark.parametrize("line,kind", [
+        ("EXPERIENCE", "work"),
+        ("EXPERIENCES", "work"),
+        ("INTERNSHIP", "work"),
+        ("INTERNSHIPS", "work"),
+        ("EMPLOYMENT", "work"),
+        ("CAREER OBJECTIVE", "introduce"),
+        ("CAREER OBJECTIVES", "introduce"),
+        ("QUALIFICATION", "education"),
+        ("QUALIFICATIONS", "education"),
+        ("ACADEMIC", "education"),
+        ("ACTIVITY", "activities"),
+        ("ACTIVITIES", "activities"),
+        ("VOLUNTEER", "activities"),
+        ("CLUB", "activities"),
+        ("CLUBS", "activities"),
+        ("PROJECT", "projects"),
+        ("PROJECTS", "projects"),
+        ("PORTFOLIO", "projects"),
+        ("CERTIFICATE", "certifications"),
+        ("CERTIFICATES", "certifications"),
+        ("LICENSE", "certifications"),
+        ("LICENSES", "certifications"),
+        ("LANGUAGE", "languages"),
+        ("LANGUAGES", "languages"),
+        ("HONOR", "awards"),
+        ("HONORS", "awards"),
+    ])
+    def test_ca_hai_dang_so_deu_nhan_ra(self, line, kind):
+        assert heading_kind(line) == kind
+
+
 # ── Render ──────────────────────────────────────────────────────────────────
 
 

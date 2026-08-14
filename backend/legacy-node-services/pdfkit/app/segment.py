@@ -36,16 +36,16 @@ HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
     # (không có "summary") nên vẫn rơi đúng về work.
     ("introduce", re.compile(
         r"^((professional|career|personal|executive)\s+)?"
-        r"(summary|profile|objective|about( me)?|introduction)\b"
+        r"(summary|profile|objectives?|about( me)?|introduction)\b"
         r"|^(giới thiệu|mục tiêu( nghề nghiệp)?|tóm tắt|sơ lược|bản thân)\b", re.I)),
     ("education", re.compile(
         r"^(education|academic|qualifications?"
         r"|học vấn|trình độ( học vấn)?|quá trình học tập|bằng cấp)\b", re.I)),
-    # `work(ing)?`: "WORKING EXPERIENCE" trượt `^work\b` vì sau "work" là chữ
-    # cái, không phải ranh giới từ — tiêu đề kinh nghiệm của CV kiểu này chưa
-    # bao giờ được nhận diện.
+    # Mọi từ khoá phải nhận CẢ hai dạng số. `\b` sau một từ số ít không khớp
+    # dạng số nhiều — `^experience\b` trượt "EXPERIENCES" và CV-33 mất hẳn mục
+    # kinh nghiệm. Cùng lỗi với `^work\b` trượt "WORKING EXPERIENCE".
     ("work", re.compile(
-        r"^(work(ing)?|experience|employment|professional|career|internships?"
+        r"^(work(ing)?|experiences?|employment|professional|career|internships?"
         r"|kinh nghiệm( làm việc)?|quá trình công tác|thực tập)\b", re.I)),
     ("projects", re.compile(r"^(projects?|portfolio|dự án|sản phẩm|đồ án)\b", re.I)),
     # Từ bổ nghĩa đứng trước `skills` là chuyện thường: "KEY SKILLS",
@@ -62,7 +62,7 @@ HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
     ("awards", re.compile(
         r"^(awards?|honou?rs?|achievements?|giải thưởng|thành tích|khen thưởng)\b", re.I)),
     ("activities", re.compile(
-        r"^(activities|volunteer|extracurricular|clubs?"
+        r"^(activit(y|ies)|volunteer|extracurricular|clubs?"
         r"|hoạt động|tình nguyện|câu lạc bộ|ngoại kho[áa])\b", re.I)),
 ]
 
@@ -88,7 +88,12 @@ OTHER_SECTION = re.compile(
     r"^(references?|referees?|interests?|hobbies|publications?|patents?"
     r"|memberships?|affiliations?|leadership|seminars?|workshops?|conferences?"
     r"|training|courses?|coursework|research|portfolio|declaration|reference"
-    r"|additional|miscellaneous|personal|contact|misc"
+    # `personal` PHẢI đi kèm danh từ chỉ mục. Từ khoá trần bắt luôn chức danh:
+    # "PERSONAL ASSISTANT" của CV-34 nằm ngay dưới tên ứng viên, bị coi là tiêu
+    # đề mục rồi nuốt 459 ký tự liên hệ và giới thiệu vào `unknown` — mục không
+    # có task parse nên mất trắng.
+    r"|additional|miscellaneous|contact|misc"
+    r"|personal\s+(information|details|data|particulars|profile)"
     r"|người tham chiếu|sở thích|xuất bản|nghiên cứu|liên hệ|cam kết"
     r"|khoá học|khóa học|đào tạo|thông tin (thêm|khác|cá nhân)|người giới thiệu)\b",
     re.I,
