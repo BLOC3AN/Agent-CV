@@ -37,7 +37,9 @@ HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
     ("introduce", re.compile(
         r"^((professional|career|personal|executive)\s+)?"
         r"(summary|profile|objectives?|about( me)?|introduction)\b"
-        r"|^(giới thiệu|mục tiêu( nghề nghiệp)?|tóm tắt|sơ lược|bản thân)\b", re.I)),
+        r"|^(giới thiệu|mục tiêu( nghề nghiệp)?|tóm tắt|sơ lược|bản thân"
+        # "ĐỊNH HƯỚNG PHÁT TRIỂN" — cùng nghĩa với mục tiêu nghề nghiệp.
+        r"|định hướng( phát triển)?)\b", re.I)),
     ("education", re.compile(
         r"^(education|academic|qualifications?"
         r"|học vấn|trình độ( học vấn)?|quá trình học tập|bằng cấp)\b", re.I)),
@@ -55,15 +57,20 @@ HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
         r"^((key|soft|core|hard|main|technical|professional|other|additional)\s+)?"
         r"skills?\b"
         r"|^(technical|technologies|competenc|expertise)\b"
-        r"|^(kỹ năng|công nghệ|chuyên môn)\b", re.I)),
+        r"|^(kỹ năng|kỹ thuật|công nghệ|chuyên môn|điểm mạnh|thế mạnh)\b", re.I)),
     ("certifications", re.compile(
         r"^(certifications?|certificates?|licen[cs]es?|chứng chỉ|chứng nhận)\b", re.I)),
     ("languages", re.compile(r"^(languages?|ngoại ngữ|ngôn ngữ)\b", re.I)),
     ("awards", re.compile(
         r"^(awards?|honou?rs?|achievements?|giải thưởng|thành tích|khen thưởng)\b", re.I)),
+    # `năng lực` chỉ nhận khi ĐI KÈM `hoạt động` ("NĂNG LỰC & HOẠT ĐỘNG" của
+    # CV-32). Không thêm `năng lực` trần: HEADINGS duyệt theo thứ tự và skills
+    # đứng trước, nên một tiêu đề "NĂNG LỰC CHUYÊN MÔN" đáng lẽ là skills sẽ bị
+    # kéo nhầm sang activities. Chỉ có bằng chứng cho dạng ghép.
     ("activities", re.compile(
         r"^(activit(y|ies)|volunteer|extracurricular|clubs?"
-        r"|hoạt động|tình nguyện|câu lạc bộ|ngoại kho[áa])\b", re.I)),
+        r"|(năng lực\s*(&|và)?\s*)?hoạt động|tình nguyện|câu lạc bộ"
+        r"|ngoại kho[áa])\b", re.I)),
 ]
 
 # Tập ký tự đầu dòng rộng có chủ đích: CV-04 dùng ● (U+25CF), không phải •

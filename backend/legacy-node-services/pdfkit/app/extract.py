@@ -211,6 +211,33 @@ def _poppler(path: str) -> str:
         return ""
 
 
+# Dòng bị ngắt GIỮA một địa chỉ email: có '@' và kết thúc bằng dấu chấm.
+# Khung chứa email trong CV thiết kế thường hẹp nên PDF xuống dòng ngay sau
+# dấu chấm của tên miền.
+WRAPPED_EMAIL = re.compile(r"(?m)^(?P<head>[^\s@]*@[^\s@]*\.)[ \t]*\n[ \t]*(?=\S)")
+
+
+def join_wrapped_email(text: str) -> str:
+    """
+    Nối lại địa chỉ email bị PDF xuống dòng giữa chừng.
+
+    HỒI QUY CV-32: khung chứa email hẹp nên tên miền bị cắt làm đôi —
+
+        pvnha2@gmail.
+        com
+
+    Text layer có đủ chữ, nhưng regex email của worker (main.go:188) khớp 0 kết
+    quả, và CV vào hệ thống không có email.
+
+    KHÔNG nối thô cả text. `text.replace("\\n", "")` làm regex bắt ra
+    `tảng.pvnha2@gmail.com` — dính luôn chữ cuối của dòng phía trên, tạo ra một
+    địa chỉ sai mà vẫn hợp lệ về hình thức. Điều kiện ở đây hẹp có chủ đích:
+    dòng phải CHỨA '@' và KẾT THÚC bằng dấu chấm. Dòng văn xuôi kết thúc bằng
+    dấu chấm không có '@' nên không bị đụng tới.
+    """
+    return WRAPPED_EMAIL.sub(lambda m: m.group("head"), text)
+
+
 def _norm(s: str) -> str:
     # Bỏ ký tự rộng-không: CV xuất từ DOCX (CV-04) chèn U+200B sau mỗi dấu đầu
     # dòng và sau tên công ty. Chúng vô hình nhưng làm lệch mọi so khớp chuỗi ở
@@ -400,7 +427,9 @@ def extract_pdf(path: str) -> ExtractResult:
         stripped, runners_removed = strip_page_runners(
             pop_pages if use_poppler else mu_pages
         )
-        text = _norm(stripped)
+        # Nối email bị ngắt dòng SAU khi bỏ header/footer lặp lại: bước đó có
+        # thể xoá dòng nằm giữa hai nửa địa chỉ.
+        text = join_wrapped_email(_norm(stripped))
 
         blocks: list[PageBlock] = []
         if not use_poppler:

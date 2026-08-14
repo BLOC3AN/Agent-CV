@@ -8,6 +8,7 @@ không fail: CI công cộng sẽ không có dữ liệu chứa PII.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.extract import (  # noqa: E402
     _has_type3,
+    join_wrapped_email,
     extract_pdf,
     render_pages,
     strip_page_runners,
@@ -478,6 +480,72 @@ class TestThuTuKhoiMotCot:
         assert merged.get("education", "").strip(), {
             k: len(v) for k, v in merged.items()
         }
+
+
+class TestTieuDeTiengViet:
+    """
+    HỒI QUY CV-32 (CV designer, 9 mục nhìn thấy được trên trang): bốn tiêu đề
+    tiếng Việt không có trong HEADINGS, nên nội dung của chúng dồn vào mục đang
+    mở. Mục `work` phình lên 2653 ký tự vì gánh cả năng lực, hoạt động và điểm
+    mạnh — nhìn trên giao diện thì tưởng mất thông tin, thực ra là gộp nhầm.
+
+    Bảng đã có `kỹ năng`, `công nghệ`, `chuyên môn` nhưng thiếu bốn cái dưới.
+    """
+
+    @pytest.mark.parametrize("line,kind", [
+        ("KỸ THUẬT", "skills"),
+        ("Kỹ thuật", "skills"),
+        ("ĐIỂM MẠNH", "skills"),
+        ("NĂNG LỰC & HOẠT ĐỘNG", "activities"),
+        ("NĂNG LỰC VÀ HOẠT ĐỘNG", "activities"),
+        ("HOẠT ĐỘNG", "activities"),
+        ("ĐỊNH HƯỚNG PHÁT TRIỂN", "introduce"),
+        ("ĐỊNH HƯỚNG", "introduce"),
+    ])
+    def test_tieu_de_tieng_viet(self, line, kind):
+        assert heading_kind(line) == kind
+
+
+class TestEmailNgatDong:
+    """
+    HỒI QUY CV-32: địa chỉ email bị xuống dòng NGAY GIỮA tên miền vì khung chứa
+    nó hẹp:
+
+        pvnha2@gmail.
+        com
+
+    Text layer có đủ chữ, nhưng regex email của worker (main.go:188) khớp 0 kết
+    quả nên CV vào hệ thống không có email.
+
+    Không nối thô cả text: `text.replace('\\n','')` làm regex bắt ra
+    `tảng.pvnha2@gmail.com` — dính luôn chữ cuối của dòng phía trên. Luật phải
+    hẹp: chỉ nối khi dòng CHỨA '@' và KẾT THÚC bằng dấu chấm.
+    """
+
+    def test_noi_lai_email_bi_ngat_dong(self):
+        text = "PHAM VO NGAN HA\npvnha2@gmail.\ncom\n0795 281 270"
+        assert "pvnha2@gmail.com" in join_wrapped_email(text)
+
+    def test_khong_dinh_chu_cuoi_dong_truoc(self):
+        text = "thiết kế giữa các nền tảng.\npvnha2@gmail.\ncom"
+        out = join_wrapped_email(text)
+        assert "pvnha2@gmail.com" in out
+        assert "tảng.pvnha2" not in out
+
+    def test_khong_dong_vao_dong_khong_lien_quan(self):
+        """Dòng kết thúc bằng dấu chấm nhưng KHÔNG có '@' thì để yên."""
+        text = "Tôi là designer.\nTốt nghiệp Văn Lang."
+        assert join_wrapped_email(text) == text
+
+    def test_email_da_tron_ven_thi_giu_nguyen(self):
+        text = "lien he: a.b@example.com\nHÀ NỘI"
+        assert join_wrapped_email(text) == text
+
+    def test_cv32_lay_duoc_email(self):
+        r = extract_pdf(str(cv("CV-32")))
+        assert re.search(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", r.text), (
+            "không tìm được email nào trong text đã trích"
+        )
 
 
 class TestChucDanhVsMucCaNhan:
