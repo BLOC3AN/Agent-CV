@@ -114,12 +114,23 @@ func TestChatSystemPromptUsesSectionPointers(t *testing.T) {
 // vô thưởng vô phạt rồi vẫn không đủ dữ kiện để đề xuất. Năm trục dưới đây là
 // thang đo lấy từ cẩm nang CVPro Mastery — phổ quát cho mọi ngành, nên chúng
 // nằm trong prompt chứ không phải trong KB theo ngành.
+//
+// THỨ TỰ là thứ tự của tài liệu (bước 1-4, rồi bước 8), không phải thứ tự do ta
+// thấy hợp lý. Tài liệu đã qua kiểm duyệt nghề nghiệp; xếp lại theo cảm tính là
+// đánh đổi thứ đó lấy trực giác của người viết mã.
 func TestChatSystemPromptGivesAxesForClarifyingQuestions(t *testing.T) {
 	prompt := chatSystemPrompt("vi")
-	for _, axis := range []string{"Evidence", "Strength", "Value", "Direction", "Working style"} {
-		if !strings.Contains(prompt, axis) {
+	axes := []string{"Strengths", "Working style", "Career direction", "Candidate branding", "Evidence"}
+	previous := -1
+	for _, axis := range axes {
+		at := strings.Index(prompt, axis)
+		if at == -1 {
 			t.Fatalf("prompt thiếu trục hỏi %q:\n%s", axis, prompt)
 		}
+		if at < previous {
+			t.Fatalf("trục %q đứng sai chỗ — thứ tự phải theo tài liệu: %v", axis, axes)
+		}
+		previous = at
 	}
 	// Hỏi lại thứ hồ sơ đã trả lời là cách nhanh nhất làm người dùng bỏ khung chat.
 	if !strings.Contains(prompt, "already answers") {
