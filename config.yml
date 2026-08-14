@@ -136,29 +136,10 @@ providers:
   # CLOUD — provider được bật cho lựa chọn thủ công trong chat.
   # Các task nền vẫn giữ routing local; không tự động chuyển cloud.
   # --------------------------------------------------------------------------
-  anthropic:
-    enabled: false
-    api_key_env: ANTHROPIC_API_KEY
-    models:
-      deep:
-        model_id: "claude-opus-5"        # $5 / $25 per MTok — reasoning sâu nhất
-        context: 1000000
-        thinking: adaptive
-        effort: high
-      write:
-        model_id: "claude-sonnet-5"      # $3 / $15 (ưu đãi $2/$10 đến 2026-08-31)
-        context: 1000000
-        thinking: adaptive
-        effort: medium
-      cheap:
-        model_id: "claude-haiku-4-5"     # $1 / $5
-        context: 200000
-    features:
-      prompt_caching: true               # đặt breakpoint sau Profile+JD, trước KB+câu hỏi
-      structured_output: true            # output_config.format — dùng thay mọi regex bóc JSON
-      streaming: true
-    guardrails:
-      never_send_raw_pii: true           # phải qua redact_pii (local) trước
+  # Giai đoạn này chạy MỘT model local + HAI provider API. Khối anthropic cũ đã
+  # được gỡ: callChatModel chỉ nhận local | openai | deepseek, nên nó là cấu
+  # hình chết — mô tả một provider mã nguồn không gọi tới được, kèm cả cờ
+  # prompt_caching chưa từng có chỗ nào thực thi.
 
   openai:
     enabled: true
