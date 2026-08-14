@@ -110,6 +110,23 @@ func TestChatSystemPromptUsesSectionPointers(t *testing.T) {
 	}
 }
 
+// "Hỏi tối đa 3 câu" một mình thì không dẫn model đi đâu cả: nó hỏi được ba câu
+// vô thưởng vô phạt rồi vẫn không đủ dữ kiện để đề xuất. Năm trục dưới đây là
+// thang đo lấy từ cẩm nang CVPro Mastery — phổ quát cho mọi ngành, nên chúng
+// nằm trong prompt chứ không phải trong KB theo ngành.
+func TestChatSystemPromptGivesAxesForClarifyingQuestions(t *testing.T) {
+	prompt := chatSystemPrompt("vi")
+	for _, axis := range []string{"Evidence", "Strength", "Value", "Direction", "Working style"} {
+		if !strings.Contains(prompt, axis) {
+			t.Fatalf("prompt thiếu trục hỏi %q:\n%s", axis, prompt)
+		}
+	}
+	// Hỏi lại thứ hồ sơ đã trả lời là cách nhanh nhất làm người dùng bỏ khung chat.
+	if !strings.Contains(prompt, "already answers") {
+		t.Fatal("prompt phải cấm hỏi lại thứ hồ sơ đã có")
+	}
+}
+
 func TestChatSystemPromptV2SupportsClarifyWithoutInventingFacts(t *testing.T) {
 	if !strings.Contains(chatSystemPrompt("vi"), `"kind":"clarify"`) {
 		t.Fatal("v2 prompt must support clarify responses")
