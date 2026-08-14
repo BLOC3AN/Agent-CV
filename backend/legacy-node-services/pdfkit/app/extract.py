@@ -208,6 +208,35 @@ def _columns(page: fitz.Page) -> int:
     return 1
 
 
+def _page_text_sorted(page: fitz.Page) -> str:
+    """
+    Đọc trang MỘT cột theo thứ tự vị trí thay vì thứ tự content stream.
+
+    `get_text()` trả theo thứ tự khối xuất hiện trong content stream của PDF,
+    và với nhiều file thứ tự đó bị xáo. CV-34 trang 1: 47 dòng, 11 lần y giảm,
+    mở đầu bằng
+
+        y=563  x=457-563  'Sep 2024 - Feb 2025'
+        y=470  x=460-564  'Sep 2022 - Oct 2023'
+        y=462  x= 39-171  '7 SENSES CANDLES & OIL'
+
+    Ngày căn phải bị tách khỏi chỗ làm của nó và dồn lên đầu tài liệu, nên hai
+    chỗ làm đầu không có mốc thời gian và parseWork bỏ qua chúng.
+
+    Trang đó KHÔNG phải hai cột: ngày căn phải ở x≈457 còn thân bài kéo tới
+    x≈564, không có máng nào nên `_column_split` trả None.
+
+    LỊCH SỬ: đã thử một lần và bị rút lại vì làm CV-33 mất mục kinh nghiệm —
+    khi đó `_columns` chia trái/phải theo đường giữa trang nên CV-33 (hai cột ở
+    x≈35 và x≈193) bị coi là một cột, và sắp theo y đặt EXPERIENCES ngay cạnh
+    SKILLS làm mục work rỗng. Sau khi `_column_split` tìm máng từ dữ liệu,
+    CV-33 được nhận đúng là hai cột và lý do đó không còn. Test
+    `test_cv33_van_giu_muc_kinh_nghiem` khoá lại điều này.
+    """
+    lines = _text_lines(page)
+    return "\n".join(text for _, _, _, text in sorted(lines, key=lambda i: (i[2], i[0])))
+
+
 def _page_text_by_column(page: fitz.Page) -> tuple[str, str]:
     """
     Tách trang hai cột thành (mạch chính, cột phụ), mỗi phần đọc theo y tăng dần.
@@ -242,7 +271,7 @@ def _page_text_by_column(page: fitz.Page) -> tuple[str, str]:
         # giữa trang theo khối như bản trước — thô hơn, nhưng vẫn hơn hẳn việc
         # để nguyên thứ tự content stream (xem _columns_by_block).
         if not _columns_by_block(page):
-            return page.get_text(), ""
+            return _page_text_sorted(page), ""
         split = width * 0.5
         items = [
             (b[0], b[2], b[1], b[4].strip())
@@ -493,7 +522,7 @@ def extract_pdf(path: str) -> ExtractResult:
                 if side.strip():
                     sidebars.append(side)
             else:
-                mu_pages.append(p.get_text())
+                mu_pages.append(_page_text_sorted(p))
         if sidebars:
             mu_pages.append("\n".join(sidebars))
         mu = "\n".join(mu_pages)

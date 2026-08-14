@@ -769,3 +769,41 @@ class TestRender:
 
     def test_gioi_han_so_trang(self):
         assert len(render_pages(str(cv("CV-06")), dpi=72, max_pages=1)) == 1
+
+
+class TestThuTuDongTrangMotCot:
+    """
+    Trang MỘT cột cũng bị PyMuPDF trả dòng sai thứ tự.
+
+    CV-34 trang 1: 47 dòng, 11 lần y giảm. Content stream mở đầu bằng
+
+        y=563  x=457-563  'Sep 2024 - Feb 2025'
+        y=470  x=460-564  'Sep 2022 - Oct 2023'
+        y=462  x= 39-171  '7 SENSES CANDLES & OIL'
+
+    Ngày căn phải bị tách khỏi chỗ làm của nó và dồn lên đầu tài liệu. Hai chỗ
+    làm đầu (POTATO, 7 SENSES CANDLES & OIL) vì thế không có mốc thời gian nào,
+    và parseWork bỏ qua chúng — người dùng chỉ thấy APOLLO trên giao diện.
+
+    Trang này KHÔNG phải hai cột: ngày căn phải ở x≈457 còn thân bài kéo dài
+    tới x≈564, nên không có máng phân cách và `_column_split` trả None. Việc
+    sắp theo y phải áp dụng cho cả trang một cột.
+
+    LỊCH SỬ: thay đổi này đã thử một lần và bị rút lại vì làm CV-33 mất mục
+    kinh nghiệm. Nguyên nhân khi đó là `_columns` chia trái/phải theo đường
+    giữa trang nên CV-33 (hai cột ở x≈35 và x≈193) bị coi là một cột. Sau khi
+    `_column_split` tìm máng từ dữ liệu, CV-33 được nhận đúng là hai cột và lý
+    do rút lại không còn.
+    """
+
+    def test_cv34_giu_du_bon_cho_lam(self):
+        r = extract_pdf(str(cv("CV-34")))
+        work = merge_by_kind(segment_cv(r.text)).get("work", "")
+        for org in ["POTATO", "7 SENSES", "ISMART", "APOLLO"]:
+            assert org in work, f"mất chỗ làm {org}"
+
+    def test_cv33_van_giu_muc_kinh_nghiem(self):
+        """Chốt chặn cho đúng ca đã khiến thay đổi này bị rút lại lần trước."""
+        r = extract_pdf(str(cv("CV-33")))
+        merged = merge_by_kind(segment_cv(r.text))
+        assert len(merged.get("work", "")) > 500
