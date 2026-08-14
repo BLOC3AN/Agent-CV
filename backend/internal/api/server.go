@@ -1866,16 +1866,21 @@ func chatUserPrompt(profileRaw []byte, history []map[string]string, answers []ma
 	})
 }
 
-// chatSystemPrompt dựng system prompt cho một ngôn ngữ trả lời cụ thể.
+// chatSystemPrompt dựng system prompt với ngôn ngữ dự phòng cho câu trả lời.
 //
-// Bản trước bảo mô hình "trả lời cùng ngôn ngữ với hồ sơ", nên một CV tiếng
-// Việt luôn nhận câu trả lời tiếng Việt — kể cả khi người dùng đã chuyển giao
-// diện sang tiếng Anh. Chỉ client biết lựa chọn đó, nên nó phải gửi lên.
+// Model bám theo ngôn ngữ người dùng đang gõ; language ở đây chỉ là phương án
+// dự phòng khi không xác định được điều đó — tin nhắn quá ngắn, hay chỉ là một
+// đường dẫn. Bản trước để client quyết tuyệt đối, nên người dùng gõ tiếng Anh
+// trong giao diện tiếng Việt vẫn nhận trả lời tiếng Việt.
 //
 // Ngôn ngữ lạ hoặc rỗng lùi về tiếng Việt: client cũ không gửi trường này, và
 // im lặng giữ nguyên hành vi cũ vẫn hơn là trả lời bằng thứ tiếng bất ngờ.
+//
+// Tên ngôn ngữ viết bằng tiếng Anh vì cả prompt viết bằng tiếng Anh — trộn một
+// nhãn tiếng Việt vào giữa là đưa cho model đúng thứ nhập nhằng mà nó phải
+// phân giải.
 func chatSystemPrompt(language string) string {
-	replyIn := "tiếng Việt"
+	replyIn := "Vietnamese"
 	if language == "en" {
 		replyIn = "English"
 	}

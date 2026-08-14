@@ -485,22 +485,43 @@ func TestAuthSessionReportsAnonymousWithoutCookie(t *testing.T) {
 	}
 }
 
-// Mô hình trước đây được bảo "trả lời cùng ngôn ngữ với hồ sơ", nên nó luôn
-// đáp tiếng Việt với một CV tiếng Việt — kể cả khi người dùng đã chuyển giao
-// diện sang tiếng Anh. Ngôn ngữ trả lời phải theo LỰA CHỌN CỦA NGƯỜI DÙNG,
-// và chỉ client mới biết lựa chọn đó.
-func TestChatSystemPromptFollowsRequestedLanguage(t *testing.T) {
+// Người dùng gõ tiếng gì thì được đáp lại bằng tiếng đó. Bản trước để client
+// quyết tuyệt đối, nên gõ tiếng Anh trong giao diện tiếng Việt vẫn nhận trả lời
+// tiếng Việt.
+func TestChatSystemPromptFollowsTheUserMessageLanguage(t *testing.T) {
+	prompt := chatSystemPrompt("vi")
+	if !strings.Contains(prompt, "same language as the user's latest message") {
+		t.Fatalf("prompt phải bảo model bám theo ngôn ngữ người dùng gõ:\n%s", prompt)
+	}
+}
+
+// Ngôn ngữ dự phòng dùng khi không đoán được người dùng đang gõ tiếng gì — tin
+// nhắn quá ngắn, hoặc chỉ là một đường dẫn. Client là nơi duy nhất biết giao
+// diện đang ở ngôn ngữ nào, nên nó phải gửi lên.
+func TestChatSystemPromptFallsBackToRequestedLanguage(t *testing.T) {
 	en := chatSystemPrompt("en")
-	if !strings.Contains(en, "English") {
-		t.Fatalf("prompt tiếng Anh phải yêu cầu trả lời bằng tiếng Anh:\n%s", en)
+	if !strings.Contains(en, "reply in English") {
+		t.Fatalf("client chọn tiếng Anh thì dự phòng phải là tiếng Anh:\n%s", en)
 	}
 	vi := chatSystemPrompt("vi")
-	if !strings.Contains(vi, "tiếng Việt") {
-		t.Fatalf("prompt tiếng Việt phải yêu cầu trả lời bằng tiếng Việt:\n%s", vi)
+	if !strings.Contains(vi, "reply in Vietnamese") {
+		t.Fatalf("client chọn tiếng Việt thì dự phòng phải là tiếng Việt:\n%s", vi)
 	}
 	// Ngôn ngữ lạ hoặc rỗng lùi về tiếng Việt — giữ nguyên hành vi của client cũ.
 	if chatSystemPrompt("") != vi || chatSystemPrompt("de") != vi {
 		t.Fatal("ngôn ngữ lạ phải lùi về tiếng Việt")
+	}
+}
+
+// Cả prompt viết bằng tiếng Anh. Một nhãn tiếng Việt sót lại giữa các luật là
+// đưa cho model đúng thứ nhập nhằng mà nó phải phân giải, và nó rất dễ sót vì
+// mã nguồn quanh đây bình luận bằng tiếng Việt.
+func TestChatPromptsAreWrittenInEnglish(t *testing.T) {
+	whole := chatSystemPrompt("vi") + chatUserPrompt([]byte(`{}`), nil, nil, "gộp kỹ năng", "xin chào")
+	for _, vietnamese := range []string{"tiếng Việt", "hồ sơ", "Quy tắc", "GỢI Ý", "Đường dẫn"} {
+		if strings.Contains(whole, vietnamese) {
+			t.Fatalf("prompt còn sót tiếng Việt: %q", vietnamese)
+		}
 	}
 }
 
