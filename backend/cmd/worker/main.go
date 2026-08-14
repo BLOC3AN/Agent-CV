@@ -14,8 +14,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/hr-agent/backend/internal/pii"
@@ -188,8 +190,8 @@ func parseCV(ctx context.Context, db *sql.DB, j *job) error {
 	if email := firstMatch(seg.Text, `(?i)[\w.+-]+@[\w-]+(?:\.[\w-]+)+`); email != "" {
 		introFields["email"] = email
 	}
-	if phone := firstMatch(seg.Text, `(?:\+|00)?[0-9][0-9 ()-]{7,}[0-9]`); phone != "" {
-		introFields["phone"] = strings.TrimSpace(phone)
+	if phone := firstPhone(seg.Text); phone != "" {
+		introFields["phone"] = phone
 	}
 	if introduce := sectionText(seg.Merged["introduce"]); introduce != "" {
 		introFields["introduce"] = introduce
@@ -949,15 +951,95 @@ func toFloat(v any) float64 {
 	}
 	return 0
 }
-func firstLine(s string) string {
-	for _, x := range strings.Split(s, "\n") {
-		x = strings.TrimSpace(x)
-		lower := strings.ToLower(x)
-		if len(x) >= 2 && len(x) <= 100 && !strings.Contains(lower, "đầu trang") && !strings.Contains(lower, "summary") && !strings.Contains(lower, "experience") && !strings.Contains(lower, "education") && !strings.Contains(lower, "skills") && !strings.Contains(x, "|") && !strings.Contains(x, "@") {
-			return x
+
+// Chuỗi ứng viên cho số điện thoại. Cố ý RỘNG: việc loại bỏ do đếm chữ số và
+// xét tiền tố ở firstPhone đảm nhiệm, không siết ở đây. Có cả dấu chấm vì
+// "0978.830.871" là lối viết phổ biến — regex cũ thiếu nó nên bỏ sót hẳn.
+var phoneCandidate = regexp.MustCompile(`\(?\+?\d[\d .()-]{7,}\d`)
+
+// firstPhone lấy số điện thoại đầu tiên trông đáng tin trong text.
+//
+// Regex cũ `(?:\+|00)?[0-9][0-9 ()-]{7,}[0-9]` bắt mọi chuỗi 9+ ký tự gồm
+// số/khoảng trắng/ngoặc/gạch, nên nó điền vào ô điện thoại những thứ như:
+//
+//	CV-31  2518815045    mã số sinh viên
+//	CV-32  "2025 - 12"   một khoảng năm
+//
+// Hai điều kiện phân biệt được: SỐ CHỮ SỐ trong khoảng 9-13, và TIỀN TỐ là
+// '+', '0' hoặc mã quốc gia 84. Mã sinh viên đủ 10 chữ số nhưng mở đầu bằng
+// '2' nên trượt; khoảng năm "2022 - 2025" chỉ có 8 chữ số nên cũng trượt.
+func firstPhone(s string) string {
+	for _, raw := range phoneCandidate.FindAllString(s, -1) {
+		raw = strings.TrimSpace(raw)
+		digits := nonDigit.ReplaceAllString(raw, "")
+		if len(digits) < 9 || len(digits) > 13 {
+			continue
+		}
+		// TrimLeft cho dạng "(+84) 0795…": dấu ngoặc mở nằm trước dấu cộng.
+		if strings.HasPrefix(strings.TrimLeft(raw, "("), "+") || strings.HasPrefix(digits, "0") || strings.HasPrefix(digits, "84") {
+			return raw
 		}
 	}
 	return ""
+}
+
+var nonDigit = regexp.MustCompile(`\D`)
+
+// Tên mục hay bị nhầm thành họ tên vì nó đứng ở đầu CV.
+var notAName = []string{
+	"đầu trang", "summary", "experience", "education", "skills", "profile",
+	"objective", "contact", "personal information", "personal details",
+	"giới thiệu", "mục tiêu", "thông tin cá nhân", "hồ sơ",
+}
+
+// firstLine lấy dòng trông giống HỌ TÊN người nhất.
+//
+// Luật cũ là "dòng đầu tiên không chứa vài từ khoá mục". Nó chặn summary,
+// experience, education, skills — nhưng KHÔNG chặn `profile`, và CV-31 mở đầu
+// đúng bằng chữ "Profile" nên ô họ tên của người dùng hiện ra chữ đó.
+//
+// Mở rộng danh sách chặn thôi thì chưa đủ: dòng ngay sau của CV-31 là
+// "Student ID: 2518815045". Nên thêm ràng buộc HÌNH DẠNG — tên người có 2-5
+// từ, không chữ số, không dấu hai chấm/gạch/@, và mọi từ viết hoa chữ đầu
+// (chốt chặn này loại "- Communicate well with").
+//
+// GIỚI HẠN đã biết: luật nào cũng chỉ đúng khi tên nằm gần đầu text. Trên
+// CV-33 tên ở dòng 114/128 và CV-34 ở dòng 19/56 vì thứ tự đọc bị xáo — cùng
+// gốc rễ với TestThuTuKhoiMotCot (đang xfail bên pdfkit), không phải lỗi ở đây.
+func firstLine(s string) string {
+	for _, x := range strings.Split(s, "\n") {
+		x = strings.TrimSpace(x)
+		if len(x) < 4 || len(x) > 60 {
+			continue
+		}
+		lower := strings.ToLower(x)
+		if slices.ContainsFunc(notAName, func(k string) bool { return strings.Contains(lower, k) }) {
+			continue
+		}
+		if strings.ContainsAny(x, ":|@/•-–—0123456789") {
+			continue
+		}
+		words := strings.Fields(x)
+		if len(words) < 2 || len(words) > 5 {
+			continue
+		}
+		if slices.ContainsFunc(words, func(w string) bool { return !startsUpper(w) }) {
+			continue
+		}
+		return x
+	}
+	return ""
+}
+
+// startsUpper báo chữ cái ĐẦU TIÊN của từ có viết hoa không (bỏ qua ký tự
+// không phải chữ ở đầu).
+func startsUpper(word string) bool {
+	for _, r := range word {
+		if unicode.IsLetter(r) {
+			return unicode.IsUpper(r)
+		}
+	}
+	return false
 }
 func detectLanguage(s string) string {
 	lower := strings.ToLower(s)

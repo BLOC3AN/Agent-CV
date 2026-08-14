@@ -340,7 +340,7 @@ func TestWorkDateNhanDangNgayVietVaSo(t *testing.T) {
 	khongDuocKhop := []string{
 		"Nguyen 2026 Campaign",                      // CV-31, tên chiến dịch
 		"Top 1 Marketing Research Competition 2024", // CV-34, giải thưởng
-		"VN | 2022",                                 // năm lẻ, không phải khoảng
+		"VN | 2022", // năm lẻ, không phải khoảng
 		"International Business GPA 3.45/4.0",
 		"Hòa Sắc 2022,  VLU - Thành viên",
 		"Đại học Văn Lang",
@@ -370,5 +370,69 @@ func TestParseWorkVoiNgayDinhDangViet(t *testing.T) {
 	}
 	if first["role"] != "Marketing Designer" {
 		t.Errorf("role sai: %v", first["role"])
+	}
+}
+
+// firstLine điền ô "Họ tên" của CV. Luật cũ là "dòng đầu tiên không chứa vài
+// từ khoá mục", và nó chặn summary/experience/education/skills nhưng KHÔNG
+// chặn `profile` — CV-31 mở đầu bằng đúng chữ "Profile" nên ô họ tên hiện ra
+// chữ đó, trong khi tên thật nằm mãi dòng 12.
+//
+// Nới rộng danh sách chặn là chưa đủ: dòng kế tiếp của CV-31 là
+// "Student ID: 2518815045". Nên thêm ràng buộc HÌNH DẠNG — tên người có 2-5
+// từ, không chữ số, không dấu hai chấm/gạch/@, và mọi từ viết hoa chữ đầu.
+func TestFirstLineLayTenNguoiKhongPhaiTieuDeMuc(t *testing.T) {
+	cases := []struct {
+		text string
+		want string
+		why  string
+	}{
+		{"Profile\nStudent ID: 2518815045\nDate of birth: 12/06/2007\nNGUYỄN TRƯƠNG HOÀNG MAI", "NGUYỄN TRƯƠNG HOÀNG MAI", "CV-31: 'Profile' là tiêu đề mục"},
+		{"SANG HOANG\nBRANCH DIRECTOR", "SANG HOANG", "tên ở ngay dòng đầu"},
+		{"Sơn Trịnh\nBackend Developer", "Sơn Trịnh", "tên viết thường có dấu"},
+		{"PERSONAL INFORMATION\nLE THANH HAI", "LE THANH HAI", "mục thông tin cá nhân không phải tên"},
+		{"- Communicate well with\nQuan Pham", "Quan Pham", "mảnh gạch đầu dòng có từ viết thường"},
+		{"Nguyen Van A | nguyen@example.com", "", "dòng liên hệ không phải tên"},
+	}
+	for _, c := range cases {
+		if got := firstLine(c.text); got != c.want {
+			t.Errorf("%s\n  firstLine(%q)\n  = %q, cần %q", c.why, c.text, got, c.want)
+		}
+	}
+}
+
+// firstPhone điền ô "Điện thoại". Regex cũ `[0-9][0-9 ()-]{7,}[0-9]` bắt mọi
+// chuỗi 9+ ký tự gồm số/khoảng trắng/ngoặc/gạch, nên nó lấy nhầm:
+//
+//	CV-31  2518815045   mã số sinh viên
+//	CV-32  "2025 - 12"  một khoảng năm
+//
+// Số chữ số và tiền tố mới là thứ phân biệt được: điện thoại có 9-13 chữ số
+// và bắt đầu bằng '+', '0', hoặc mã quốc gia 84.
+func TestFirstPhoneKhongLayMaSoVaKhoangNam(t *testing.T) {
+	phaiLay := map[string]string{
+		"Lien he: 0902 426 628":     "0902 426 628",
+		"(+84) 0795 281 270":        "(+84) 0795 281 270",
+		"SDT 0978.830.871":          "0978.830.871",
+		"phone +84 815599465 · HCM": "+84 815599465",
+		"tel 0964525151":            "0964525151",
+	}
+	for in, want := range phaiLay {
+		if got := firstPhone(in); got != want {
+			t.Errorf("firstPhone(%q) = %q, cần %q", in, got, want)
+		}
+	}
+
+	khongDuocLay := []string{
+		"Student ID: 2518815045",    // CV-31, mã sinh viên
+		"HCM, VN | 2022 - 2025",     // CV-32, khoảng năm
+		"Date of birth: 12/06/2007", // ngày sinh
+		"GPA 3.45/4.0",              // điểm
+		"Top 1 Marketing Research Competition 2024",
+	}
+	for _, in := range khongDuocLay {
+		if got := firstPhone(in); got != "" {
+			t.Errorf("firstPhone(%q) = %q, KHÔNG được lấy gì", in, got)
+		}
 	}
 }
