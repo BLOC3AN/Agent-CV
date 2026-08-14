@@ -496,9 +496,66 @@ var workDate = regexp.MustCompile(`(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)
 	`|\b(?:\d{1,2}\s*[/.]\s*)?(?:19|20)\d{2}\s*(?:[–—-]|to|đ[eế]n)\s*` +
 	`(?:(?:\d{1,2}\s*[/.]\s*)?(?:19|20)\d{2}|present|current|now|ongoing|hi[eệ]n\s*t[aạ]i|hi[eệ]n\s*nay|đ[eế]n\s*nay|nay)\b`)
 
+// Tiêu đề mục kinh nghiệm. Phải nhận cả tiếng Việt: luật cũ chỉ so bằng với
+// "experience" nên "WORK EXPERIENCE" và "KINH NGHIỆM" lọt vào ô tên công ty của
+// chỗ làm đầu tiên (đo được trên CV-04, CV-10, CV-30, CV-35).
+var workSectionHeading = regexp.MustCompile(`(?i)^(work(ing)?\s+)?(experiences?|employment)$` +
+	`|^professional\s+(experiences?|background)$` +
+	`|^kinh nghiệm(\s+làm việc)?$|^quá trình công tác$`)
+
+// Dấu hiệu một dòng là TÊN TỔ CHỨC. Cố ý chặt: ngắn, không kết thúc bằng dấu
+// chấm (loại câu văn), và có từ khoá tổ chức. Nới ra thì câu "…and Wholesale
+// Banking." của CV-30 bị nhận là tên công ty.
+var orgKeyword = regexp.MustCompile(`(?i)\b(ltd|jsc|inc|corp|corporation|company|co|group|holdings?` +
+	`|bank|university|college|school|institute|academy|agency|studio|labs?` +
+	`|công ty|cty|tnhh|cổ phần|tập đoàn|trường|đại học)\b`)
+
+// Dấu phân cách giữa tên tổ chức và chức danh khi cả hai nằm CHUNG một dòng.
+var orgRoleSeparator = regexp.MustCompile(`\s+[-–—|]\s+`)
+
+func looksLikeOrg(line string) bool {
+	return len(line) <= 60 && !strings.HasSuffix(line, ".") && orgKeyword.MatchString(line)
+}
+
+// looksLikeFragment nhận mảnh địa danh hoặc mẩu câu bị ngắt — thứ hay nằm ngay
+// trên dòng ngày ở bố cục dạng C ("HCM,"). Gặp nó thì phải lùi về tìm đầu mục ở
+// ĐẦU đoạn thay vì lấy dòng sát ngày.
+func looksLikeFragment(line string) bool {
+	return len(line) <= 6 || strings.HasSuffix(line, ",") || strings.HasSuffix(line, ".")
+}
+
+// roleFromDateLine lấy phần chữ còn lại của dòng ngày sau khi bỏ khoảng thời
+// gian — ở bố cục dạng B chức danh nằm chung dòng với ngày.
+func roleFromDateLine(line string) string {
+	rest := strings.TrimSpace(workDate.ReplaceAllString(line, ""))
+	rest = strings.Trim(rest, " |-–—•,;:")
+	rest = strings.TrimSpace(rest)
+	// "VN |" của CV-32 còn lại đúng "VN"; "HCM, VN | …" còn lại "HCM, VN".
+	// Cả hai là địa danh, không phải chức danh. Dấu phẩy là dấu hiệu mạnh
+	// nhất — chức danh hiếm khi có phẩy, địa danh thì gần như luôn có.
+	if len(rest) < 8 || len(strings.Fields(rest)) < 2 || strings.Contains(rest, ",") {
+		return ""
+	}
+	return rest
+}
+
+// parseWork cắt mục kinh nghiệm thành từng chỗ làm, lấy dòng-có-ngày làm mốc.
+//
+// Luật cũ lấy hai dòng CUỐI trước ngày làm (org, role). Đo trên CV thật thì chỉ
+// một trong bốn bố cục đúng — vì chỉ ở bố cục đó đoạn giữa hai mốc dài đúng hai
+// dòng:
+//
+//	A  CV-06   ORG / ROLE / NGÀY / •bullets
+//	B  CV-30   ORG / ROLE|NGÀY / bullets KHÔNG ký hiệu
+//	C  CV-32   "ORG - ROLE" / -bullets / địa danh / NGÀY
+//	D  CV-35   ROLE / NGÀY / phòng ban / địa danh / ORG / •bullets
+//
+// Đầu mục nằm ở ĐẦU đoạn với A, C, D nhưng ở CUỐI đoạn với B — vì bullets của B
+// không có ký hiệu nên đầu đoạn là văn xuôi. Phân biệt bằng dòng sát ngày: ở C
+// đó là mảnh địa danh ("HCM,"), ở A/B/D là đầu mục thật.
 func parseWork(raw string) []any {
 	lines := cleanLines(raw)
-	if len(lines) > 0 && strings.EqualFold(lines[0], "experience") {
+	if len(lines) > 0 && workSectionHeading.MatchString(lines[0]) {
 		lines = lines[1:]
 	}
 	var dates []int
@@ -507,20 +564,111 @@ func parseWork(raw string) []any {
 			dates = append(dates, i)
 		}
 	}
+
 	result := []any{}
 	for n, date := range dates {
 		start := 0
 		if n > 0 {
 			start = dates[n-1] + 1
 		}
-		before := nonBulletLines(lines[start:date])
-		if len(before) < 2 {
+		// Đầu mục nằm ở đâu trong đoạn tuỳ vào việc NGÀY đứng đầu hay cuối một
+		// chỗ làm — và điều đó đọc được từ chỗ gạch đầu dòng xuất hiện.
+		//
+		//   đoạn MỞ ĐẦU bằng gạch đầu dòng  → đó là phần mô tả của chỗ làm
+		//     TRƯỚC (ngày đứng đầu mỗi chỗ làm, bố cục A/D). Đầu mục là các
+		//     dòng sau gạch đầu dòng CUỐI CÙNG.
+		//   đoạn mở đầu bằng dòng thường    → đầu mục đứng trước phần mô tả
+		//     (ngày đứng cuối mỗi chỗ làm, bố cục C). Lấy các dòng trước gạch
+		//     đầu dòng ĐẦU TIÊN.
+		//   đoạn KHÔNG có gạch đầu dòng nào → phần mô tả là văn xuôi trần,
+		//     không tách được (bố cục B); ở đó đầu mục nằm sát dòng ngày.
+		//
+		// Phải cắt theo vị trí gạch đầu dòng chứ không lọc từng dòng: gạch đầu
+		// dòng của CV-32 xuống dòng nhiều lần và các dòng nối tiếp không mang
+		// ký hiệu, nên lọc từng dòng sẽ để lọt thân bài vào vùng đầu mục.
+		region := lines[start:date]
+		firstBullet, lastBullet := -1, -1
+		for i, line := range region {
+			if isBulletLine(line) {
+				if firstBullet < 0 {
+					firstBullet = i
+				}
+				lastBullet = i
+			}
+		}
+		var span []string
+		// layDauDoan: lấy hai dòng ĐẦU của vùng thay vì hai dòng cuối.
+		//
+		// Chỉ đúng khi vùng là phần TRƯỚC gạch đầu dòng (bố cục C) — ở đó dòng
+		// đầu chính là đầu mục. Khi vùng là phần SAU gạch đầu dòng cuối cùng
+		// thì phải lấy hai dòng cuối: gạch đầu dòng của CV-06 xuống dòng nhiều
+		// lần, và các dòng nối tiếp nằm ngay sau ký hiệu cuối cùng nên đứng
+		// TRƯỚC đầu mục trong vùng đó.
+		layDauDoan := false
+		switch {
+		case firstBullet < 0:
+			span = nonBulletLines(region)
+		case firstBullet == 0:
+			span = nonBulletLines(region[lastBullet+1:])
+		default:
+			span, layDauDoan = nonBulletLines(region[:firstBullet]), true
+		}
+		// Bỏ mảnh địa danh / mẩu câu ở CUỐI đoạn. Bố cục dạng C chèn "HCM,"
+		// giữa phần mô tả và dòng ngày; giữ lại thì nó thành chức danh.
+		for len(span) > 1 && looksLikeFragment(span[len(span)-1]) {
+			span = span[:len(span)-1]
+		}
+		if len(span) == 0 {
 			continue
 		}
+		head := span[max(0, len(span)-2):]
+		if layDauDoan {
+			head = span[:min(2, len(span))]
+		}
+
 		end := len(lines)
 		if n+1 < len(dates) {
 			end = dates[n+1]
 		}
+
+		// Tên tổ chức có thể nằm SAU ngày (bố cục D). Chỉ soi vài dòng đầu:
+		// đi xa hơn sẽ vớ phải văn xuôi của phần mô tả công việc.
+		orgAfter := ""
+		for _, line := range nonBulletLines(lines[date+1 : min(end, date+6)]) {
+			if looksLikeOrg(line) {
+				orgAfter = line
+				break
+			}
+		}
+
+		org, role := head[0], ""
+		switch {
+		case len(head) >= 2:
+			role = head[len(head)-1]
+			org = head[len(head)-2]
+		default:
+			if parts := orgRoleSeparator.Split(head[0], 2); len(parts) == 2 {
+				org, role = strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+			}
+		}
+		if fromDate := roleFromDateLine(lines[date]); fromDate != "" {
+			// Chức danh trên dòng ngày là tín hiệu mạnh nhất; khi đó dòng đầu
+			// mục là tên tổ chức chứ không phải chức danh.
+			org, role = head[len(head)-1], fromDate
+		}
+		if orgAfter != "" {
+			// Tên tổ chức tìm được sau ngày thắng mọi suy đoán từ đầu mục —
+			// và khi đó KHÔNG tách "ORG - ROLE" nữa, cả dòng đầu mục là chức
+			// danh ("Offering – Technical Sales Support").
+			org = orgAfter
+			if role == "" || strings.Contains(head[0], role) {
+				role = head[0]
+			}
+		}
+		if org == "" && role == "" {
+			continue
+		}
+
 		bodyEnd := end
 		if n+1 < len(dates) {
 			trailing := nonBulletLines(lines[date+1 : end])
@@ -529,9 +677,21 @@ func parseWork(raw string) []any {
 			}
 		}
 		highlights := groupBullets(lines[date+1 : bodyEnd])
-		result = append(result, map[string]any{"org": before[len(before)-2], "role": before[len(before)-1], "startDate": lines[date], "highlights": highlights})
+		result = append(result, map[string]any{
+			"org": org, "role": role, "startDate": lines[date], "highlights": highlights,
+		})
 	}
 	return result
+}
+
+// isBulletLine báo dòng có mở đầu bằng ký hiệu gạch đầu dòng không.
+func isBulletLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	r := []rune(trimmed)[0]
+	return strings.ContainsRune(bulletMarkers, r)
 }
 
 func nonBulletLines(lines []string) []string {

@@ -436,3 +436,61 @@ func TestFirstPhoneKhongLayMaSoVaKhoangNam(t *testing.T) {
 		}
 	}
 }
+
+// parseWork phải bóc đúng org/role trên BỐN bố cục đã đo được từ CV thật.
+// Luật cũ lấy hai dòng CUỐI trước ngày (`before[-2]`, `before[-1]`), và chỉ
+// dạng A đúng vì ở đó đoạn dài đúng hai dòng.
+func TestParseWorkBonBoCuc(t *testing.T) {
+	cases := []struct {
+		ten       string
+		raw       string
+		org, role string
+	}{
+		{
+			// CV-06 — ORG / ROLE / NGÀY / •bullets
+			ten: "A: org rồi role rồi ngày",
+			raw: "EXPERIENCE\niMESPRO\nAI Engineer\nDecember, 2025 – Current\n" +
+				"• Thiết kế kiến trúc microservice\n• Tối ưu mô hình biên\n",
+			org: "iMESPRO", role: "AI Engineer",
+		},
+		{
+			// CV-30 — ORG / ROLE|NGÀY / bullets KHÔNG có ký hiệu
+			ten: "B: chức danh nằm chung dòng với ngày",
+			raw: "WORKING EXPERIENCE\nSELF EMPLOYED (GLG | ALPHASIGHTS)\n" +
+				"Expert Network Consultant | 04/2025 - Present\n" +
+				"Act as an independent subject-matter expert advising global\n" +
+				"clients on Priority, SME, and Wholesale Banking.\n",
+			org: "SELF EMPLOYED (GLG | ALPHASIGHTS)", role: "Expert Network Consultant",
+		},
+		{
+			// CV-32 — "ORG - ROLE" một dòng, bullets, rồi địa danh, rồi NGÀY
+			ten: "C: đầu mục ở đầu đoạn, ngày ở cuối",
+			raw: "KINH NGHIỆM\nCT TNHH Giáo Dục Quốc Tế TDP - Marketing Designer Intern\n" +
+				"- Thiết kế ấn phẩm\n- Dàn trang sự kiện\nHCM,\nVN | 7.2025 - 12.2025\n",
+			org: "CT TNHH Giáo Dục Quốc Tế TDP", role: "Marketing Designer Intern",
+		},
+		{
+			// CV-35 — ROLE / NGÀY / phòng ban / địa danh / ORG / •bullets
+			ten: "D: tên công ty nằm SAU ngày",
+			raw: "WORK EXPERIENCE\nOffering – Technical Sales Support\n06/2024 – Present\n" +
+				"Electrification & Automation Business Unit\nHo Chi Minh City\n" +
+				"(Distribution Systems – Switchgear)\nSIEMENS Ltd Vietnam\n" +
+				"• Chuẩn bị cấu hình kỹ thuật\n",
+			org: "SIEMENS Ltd Vietnam", role: "Offering – Technical Sales Support",
+		},
+	}
+	for _, c := range cases {
+		got := parseWork(c.raw)
+		if len(got) != 1 {
+			t.Errorf("%s: cần 1 chỗ làm, được %d", c.ten, len(got))
+			continue
+		}
+		m, _ := got[0].(map[string]any)
+		if m["org"] != c.org {
+			t.Errorf("%s: org = %q, cần %q", c.ten, m["org"], c.org)
+		}
+		if m["role"] != c.role {
+			t.Errorf("%s: role = %q, cần %q", c.ten, m["role"], c.role)
+		}
+	}
+}
