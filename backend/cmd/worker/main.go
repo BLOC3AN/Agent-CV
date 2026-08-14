@@ -904,11 +904,24 @@ func runGapAdvice(ctx context.Context, profile, jd string, gaps []map[string]any
 			known[id] = true
 		}
 	}
+	// gapId đã được đối chiếu với gap thật từ trước; kbRefs thì chưa. Prompt
+	// gap_advice không gửi KB cho model, nên mọi id nó trả về đều do nó nghĩ ra,
+	// và một lời khuyên mang nguồn giả còn tệ hơn lời khuyên không nguồn.
+	citable := citableKBRefs()
+	droppedRefs := 0
 	out := make([]gapAdvice, 0, len(response.Advices))
 	for _, a := range response.Advices {
-		if known[a.GapID] && strings.TrimSpace(a.Advice) != "" {
-			out = append(out, a)
+		if !known[a.GapID] || strings.TrimSpace(a.Advice) == "" {
+			continue
 		}
+		var dropped int
+		a.KBRefs, dropped = filterKBRefs(a.KBRefs, citable)
+		droppedRefs += dropped
+		out = append(out, a)
+	}
+	if droppedRefs > 0 {
+		// Im lặng bỏ thì không ai biết model đang bịa nguồn ở mức nào.
+		log.Printf("gap advice dropped %d fabricated kbRefs (citable=%d)", droppedRefs, len(citable))
 	}
 	return out, true
 }
