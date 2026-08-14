@@ -30,19 +30,32 @@ SectionKind = Literal[
 # Thứ tự quan trọng: khớp cụ thể trước. Song ngữ Việt/Anh trong cùng một bảng
 # vì CV thị trường VN hay trộn hai ngôn ngữ ngay trong một file.
 HEADINGS: list[tuple[SectionKind, re.Pattern[str]]] = [
+    # `professional summary` phải nằm ở ĐÂY chứ không phải mục work: mục work
+    # có từ khoá `professional`, mà HEADINGS duyệt theo thứ tự nên introduce
+    # phải bắt trước. Ngược lại `professional experience` không khớp mẫu này
+    # (không có "summary") nên vẫn rơi đúng về work.
     ("introduce", re.compile(
-        r"^(summary|profile|objective|about( me)?|introduction"
-        r"|giới thiệu|mục tiêu( nghề nghiệp)?|tóm tắt|sơ lược|bản thân)\b", re.I)),
+        r"^((professional|career|personal|executive)\s+)?"
+        r"(summary|profile|objective|about( me)?|introduction)\b"
+        r"|^(giới thiệu|mục tiêu( nghề nghiệp)?|tóm tắt|sơ lược|bản thân)\b", re.I)),
     ("education", re.compile(
         r"^(education|academic|qualifications?"
         r"|học vấn|trình độ( học vấn)?|quá trình học tập|bằng cấp)\b", re.I)),
+    # `work(ing)?`: "WORKING EXPERIENCE" trượt `^work\b` vì sau "work" là chữ
+    # cái, không phải ranh giới từ — tiêu đề kinh nghiệm của CV kiểu này chưa
+    # bao giờ được nhận diện.
     ("work", re.compile(
-        r"^(work|experience|employment|professional|career|internships?"
+        r"^(work(ing)?|experience|employment|professional|career|internships?"
         r"|kinh nghiệm( làm việc)?|quá trình công tác|thực tập)\b", re.I)),
     ("projects", re.compile(r"^(projects?|portfolio|dự án|sản phẩm|đồ án)\b", re.I)),
+    # Từ bổ nghĩa đứng trước `skills` là chuyện thường: "KEY SKILLS",
+    # "SOFT SKILLS", "CORE SKILLS". `^skills?\b` trượt hết, và mục kỹ năng bị
+    # nuốt vào mục ngay phía trên nó.
     ("skills", re.compile(
-        r"^(skills?|technical|technologies|competenc|expertise"
-        r"|kỹ năng|công nghệ|chuyên môn)\b", re.I)),
+        r"^((key|soft|core|hard|main|technical|professional|other|additional)\s+)?"
+        r"skills?\b"
+        r"|^(technical|technologies|competenc|expertise)\b"
+        r"|^(kỹ năng|công nghệ|chuyên môn)\b", re.I)),
     ("certifications", re.compile(
         r"^(certifications?|certificates?|licen[cs]es?|chứng chỉ|chứng nhận)\b", re.I)),
     ("languages", re.compile(r"^(languages?|ngoại ngữ|ngôn ngữ)\b", re.I)),
@@ -62,6 +75,11 @@ TRAILING_COLON = re.compile(r"[:：]\s*$")
 # Dòng bắt đầu bằng dấu đầu dòng — KHÔNG bao giờ là tiêu đề mục lạ (xem
 # heading_kind). Gạch ngang phải có khoảng trắng theo sau để không bắt "STK-ENG".
 BULLET_LINE = re.compile(rf"^\s*(?:[{re.escape(BULLETS)}]|[-–—]\s)")
+
+# Dòng liên hệ. Bắt email và URL để chúng không bị đọc thành tiêu đề mục: mọi
+# mẫu trong HEADINGS neo `^…\b`, mà dấu chấm là ranh giới từ, nên
+# `work.<tên>@gmail.com` hay `profile.example.com` khớp ngay từ khoá đầu.
+CONTACT_LINE = re.compile(r"[@]|^(https?://|www\.)", re.I)
 
 # Tên mục KHÁC — không parse được nhưng vẫn phải tách ra để không lẫn vào mục
 # trước. Danh sách tên mục là tập HỮU HẠN và ổn định; danh sách tên công ty thì
@@ -132,6 +150,11 @@ def heading_kind(line: str) -> SectionKind | None:
     if re.search(r"[.;,]$", t):
         return None
     if len(t.split()) > 5:
+        return None
+    # Dòng liên hệ KHÔNG bao giờ là tiêu đề mục. Các mẫu dưới neo `^…\b`, mà
+    # dấu chấm là ranh giới từ — nên `work.<tên>@gmail.com` khớp `work` và mở
+    # mục kinh nghiệm ngay dòng đầu CV, kéo cả phần giới thiệu vào đó.
+    if CONTACT_LINE.search(t):
         return None
 
     for kind, pattern in HEADINGS:

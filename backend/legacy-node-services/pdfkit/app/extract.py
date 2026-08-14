@@ -137,6 +137,65 @@ def _columns(page: fitz.Page) -> int:
     return 2 if (left >= 3 and right >= 3) else 1
 
 
+def _page_text_by_column(page: fitz.Page) -> tuple[str, str]:
+    """
+    Tách trang hai cột thành (mạch chính, cột phụ), mỗi phần đọc theo y tăng dần.
+
+    ── Vì sao phải sắp lại ──
+    `page.get_text()` trả khối theo thứ tự trong content stream của PDF, KHÔNG
+    theo vị trí. Đo trên CV-30 trang 1:
+
+        khối 3   x 410-574   y 317   FOREIGN TRADE UNIVERSITY (FTU)…
+        khối 4   x 410-486   y 292   EDUCATION
+
+    Tiêu đề `EDUCATION` nằm cao hơn nhưng bị trả về SAU nội dung của nó, nên mục
+    học vấn mở muộn và nuốt toàn bộ phần còn lại của CV.
+
+    ── Vì sao TRẢ RIÊNG cột phụ thay vì nối ngay sau cột chính ──
+    Sidebar thường chỉ có ở trang đầu, còn mục kinh nghiệm ở cột chính chạy tiếp
+    sang các trang sau (CV-30: columns = 2/1/1). Nối "trang 1 chính + trang 1
+    phụ" rồi mới tới trang 2 sẽ chèn sidebar vào GIỮA mạch kinh nghiệm — mục
+    cuối của sidebar (SOFT SKILLS) nuốt 4943 ký tự của hai trang sau. Gọi hàm
+    dồn cột phụ xuống cuối tài liệu để mạch chính liền một dải.
+
+    ── Cách phân loại ──
+    Khối trải quá 60% khổ trang VÀ vắt qua đường giữa là khối toàn trang (tên,
+    dòng liên hệ, đoạn tóm tắt) — luôn thuộc mạch chính. Còn lại chia trái/phải
+    theo đường giữa; bên nào trải hẹp hơn là cột phụ. Đo bề rộng thay vì mặc
+    định "phải là phụ" vì sidebar nằm bên trái cũng phổ biến không kém.
+    """
+    width = page.rect.width
+    split = width * 0.5
+    blocks = [b for b in page.get_text("blocks") if b[6] == 0 and b[4].strip()]
+
+    full: list[tuple] = []
+    left: list[tuple] = []
+    right: list[tuple] = []
+    for b in blocks:
+        x0, x1 = b[0], b[2]
+        if (x1 - x0) > width * 0.6 and x0 < split < x1:
+            full.append(b)
+        elif x0 < split:
+            left.append(b)
+        else:
+            right.append(b)
+
+    def extent(bs: list[tuple]) -> float:
+        return max(b[2] for b in bs) - min(b[0] for b in bs) if bs else 0.0
+
+    if not left or not right:
+        main, side = full + left + right, []
+    elif extent(right) < extent(left):
+        main, side = full + left, right
+    else:
+        main, side = full + right, left
+
+    def render(bs: list[tuple]) -> str:
+        return "\n".join(b[4].strip() for b in sorted(bs, key=lambda b: (b[1], b[0])))
+
+    return render(main), render(side)
+
+
 def _poppler(path: str) -> str:
     """pdftotext -layout: giữ được bố cục theo cột tốt hơn chế độ mặc định."""
     try:
@@ -262,11 +321,29 @@ def strip_page_runners(pages: list[str], zone: int = RUNNER_ZONE) -> tuple[str, 
 def extract_pdf(path: str) -> ExtractResult:
     doc = fitz.open(path)
     try:
-        mu_pages = [p.get_text() for p in doc]
-        mu = "\n".join(mu_pages)
         fonts = _fonts(doc)
         pages = doc.page_count
         columns = max((_columns(p) for p in doc), default=1)
+        # Trang một cột giữ nguyên `get_text()`: thứ tự content stream trùng
+        # thứ tự đọc, và đường cũ đã được các CV hiện có kiểm chứng. Chỉ trang
+        # hai cột mới cần sắp lại — xem _page_text_by_column().
+        #
+        # Cột phụ của MỌI trang gom lại rồi nối vào cuối, thành một "trang" ảo.
+        # Nhờ vậy mạch chính chạy liền từ trang 1 tới trang cuối và mục kinh
+        # nghiệm không bị sidebar cắt ngang.
+        mu_pages = []
+        sidebars: list[str] = []
+        for p in doc:
+            if _columns(p) >= 2:
+                main, side = _page_text_by_column(p)
+                mu_pages.append(main)
+                if side.strip():
+                    sidebars.append(side)
+            else:
+                mu_pages.append(p.get_text())
+        if sidebars:
+            mu_pages.append("\n".join(sidebars))
+        mu = "\n".join(mu_pages)
 
         pop = _poppler(path)
         # pdftotext ngắt trang bằng form feed — dùng để nhận ranh giới trang

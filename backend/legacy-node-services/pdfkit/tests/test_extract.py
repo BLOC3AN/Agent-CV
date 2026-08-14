@@ -23,7 +23,11 @@ from app.extract import (  # noqa: E402
 )
 from app.segment import CvSection, heading_kind, merge_by_kind, reclassify, segment_cv  # noqa: E402
 
-CV_DIR = Path(__file__).resolve().parents[3] / "eval" / "cv"
+# `legacy-eval`, KHÔNG phải `eval`. Đường cũ trỏ `backend/eval/cv` — thư mục
+# không tồn tại — nên MỌI test chạy trên CV thật đều skip lặng lẽ và bộ test
+# trông như đang xanh. Dữ liệu thật nằm ở `backend/legacy-eval/cv/`; hằng số
+# này không đổi theo khi thư mục được đổi tên.
+CV_DIR = Path(__file__).resolve().parents[3] / "legacy-eval" / "cv"
 
 
 def cv(name: str) -> Path:
@@ -316,10 +320,127 @@ class TestReclassify:
         assert "English" in merged["languages"]
 
     def test_moi_cv_it_deu_co_muc_ky_nang(self):
-        for name in ["CV-01", "CV-06", "CV-07", "CV-10"]:
+        for name in ["CV-01", "CV-06", "CV-07", "CV-10", "CV-30"]:
             r = extract_pdf(str(cv(name)))
             merged = merge_by_kind(segment_cv(r.text))
             assert "skills" in merged, f"{name}: không tách được mục kỹ năng"
+
+
+# ── CV bố cục hai cột ───────────────────────────────────────────────────────
+
+
+class TestCvHaiCot:
+    """
+    HỒI QUY CV-30: CV hai cột, tiêu đề mục bị đọc SAU nội dung của chính nó.
+
+    `extract_pdf` NHẬN RA bố cục (columns=2, quality="suspect") nhưng vẫn xuất
+    text theo thứ tự tự nhiên của PyMuPDF, tức đan xen hai cột. Đo trên CV-30:
+
+        dòng 13  FOREIGN TRADE UNIVERSITY (FTU),
+        dòng 16  Administration (2009 - 2012)
+        dòng 17  EDUCATION            ← tiêu đề nằm SAU nội dung của nó
+        dòng 48  WORKING EXPERIENCE
+
+    Hệ quả: mục `education` mở ở dòng 17 rồi nuốt 7330 trên 8540 ký tự còn lại.
+    Toạ độ khối đã có sẵn trong ExtractResult.blocks — thiếu là bước sắp xếp.
+    """
+
+    def test_tieu_de_muc_dung_truoc_noi_dung_cua_no(self):
+        r = extract_pdf(str(cv("CV-30")))
+        lines = [l.strip() for l in r.text.split("\n")]
+        assert "EDUCATION" in lines
+        i_tieu_de = lines.index("EDUCATION")
+        i_truong = next(i for i, l in enumerate(lines) if "UNIVERSITY" in l.upper())
+        assert i_tieu_de < i_truong, (
+            f"EDUCATION ở dòng {i_tieu_de} nhưng tên trường ở dòng {i_truong}"
+        )
+
+    def test_hoc_van_khong_nuot_phan_con_lai(self):
+        """
+        Lỗi gốc: `EDUCATION` bị đọc sau nội dung của nó nên mở muộn rồi nuốt
+        7330 trên 8551 ký tự (86%) của cả CV.
+
+        Không dùng luật "không mục nào quá X%": CV này 12 năm kinh nghiệm với 6
+        chỗ làm, mục `work` chiếm 78% là ĐÚNG. Ngưỡng chung sẽ báo động giả trên
+        chính kết quả tốt. Chốt thẳng vào mục đã hỏng.
+        """
+        r = extract_pdf(str(cv("CV-30")))
+        merged = merge_by_kind(segment_cv(r.text))
+        tong = sum(len(v) for v in merged.values())
+        assert tong > 0
+        ti_le = len(merged.get("education", "")) / tong
+        assert ti_le < 0.2, {k: len(v) for k, v in merged.items()}
+
+    def test_tach_duoc_ca_hoc_van_lan_kinh_nghiem(self):
+        r = extract_pdf(str(cv("CV-30")))
+        merged = merge_by_kind(segment_cv(r.text))
+        assert merged.get("education", "").strip(), "mất mục học vấn"
+        assert merged.get("work", "").strip(), "mất mục kinh nghiệm"
+        assert "UNIVERSITY" in merged["education"].upper()
+
+    def test_cot_phu_khong_cat_ngang_mach_kinh_nghiem(self):
+        """
+        Cột phụ CHỈ có ở trang 1 (columns: 2/1/1); mục kinh nghiệm ở cột chính
+        chạy tiếp sang trang 2-3. Đọc "trang 1 trái rồi trang 1 phải" chèn cả
+        sidebar vào giữa mạch đó, nên mục cuối của sidebar (SOFT SKILLS) nuốt
+        4943 ký tự kinh nghiệm của hai trang sau.
+
+        CV này có 6 chỗ làm — mục kinh nghiệm phải dài hơn danh sách kỹ năng.
+        """
+        r = extract_pdf(str(cv("CV-30")))
+        merged = merge_by_kind(segment_cv(r.text))
+        assert len(merged["work"]) > len(merged.get("skills", "")), {
+            k: len(v) for k, v in merged.items()
+        }
+
+
+# ── Tiêu đề mục vs. dòng liên hệ ────────────────────────────────────────────
+
+
+class TestTieuDeVsEmail:
+    """
+    Regex tiêu đề neo `^…\\b`, mà dấu chấm là ranh giới từ. Nên một địa chỉ
+    email bắt đầu bằng từ khoá mục sẽ mở nhầm mục đó ngay dòng liên hệ đầu CV.
+
+    HỒI QUY CV-30: dòng `work.<tên>@gmail.com` mở mục `work` ở dòng 1, kéo cả
+    phần giới thiệu vào mục kinh nghiệm.
+    """
+
+    @pytest.mark.parametrize("line", [
+        "work.nguyen@example.com",
+        "career.trang@example.com",
+        "profile.hai@example.com",
+        "skills@example.com",
+    ])
+    def test_email_khong_phai_tieu_de(self, line):
+        assert heading_kind(line) is None
+
+
+class TestBienTheTieuDe:
+    def test_working_experience_la_muc_kinh_nghiem(self):
+        """`^work\\b` trượt trên "WORKING" vì sau `work` là chữ cái."""
+        assert heading_kind("WORKING EXPERIENCE") == "work"
+
+    def test_professional_summary_la_gioi_thieu(self):
+        """Khớp `professional` của mục work, dù đây là phần tóm tắt bản thân."""
+        assert heading_kind("PROFESSIONAL SUMMARY") == "introduce"
+
+    def test_professional_experience_van_la_kinh_nghiem(self):
+        """Chốt chặn: sửa cho SUMMARY không được kéo theo EXPERIENCE."""
+        assert heading_kind("PROFESSIONAL EXPERIENCE") == "work"
+
+    @pytest.mark.parametrize("line", [
+        "KEY SKILLS",
+        "SOFT SKILLS",
+        "TECHNICAL SKILLS",
+        "CORE SKILLS",
+    ])
+    def test_ky_nang_co_tu_bo_nghia_dung_truoc(self, line):
+        """
+        `^skills?\\b` trượt khi tiêu đề có từ bổ nghĩa: CV-30 dùng "KEY SKILLS"
+        và "SOFT SKILLS" ở cột phải, cả hai bị nuốt vào mục học vấn phía trên.
+        """
+        assert heading_kind(line) == "skills"
 
 
 # ── Render ──────────────────────────────────────────────────────────────────
